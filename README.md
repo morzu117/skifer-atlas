@@ -43,5 +43,5 @@ cd app && npm install && npm run tauri dev
 
 ```bash
 scripts/build-sidecar.sh          # empaquette le serveur Python en binaire autonome
-cd app && npm run tauri build     # produit le .dmg / .msi / .AppImage
+cd app && npm run tauri:build    # produit le .dmg / .msi / .AppImage (config release avec le sidecar)
 ```
