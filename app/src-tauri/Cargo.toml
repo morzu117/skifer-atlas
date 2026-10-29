@@ -1,0 +1,19 @@
+[package]
+name = "skifer-atlas"
+version = "0.0.1"
+description = "Skifer Atlas — définitions canoniques et déclinaisons des KPI"
+edition = "2021"
+
+[lib]
+name = "skifer_atlas_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
