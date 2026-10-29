@@ -6,3 +6,4 @@
 - Le serveur Python n'écoute que sur 127.0.0.1 et exige le token de session passé par Tauri (`ATLAS_PORT`, `ATLAS_TOKEN`). Ne jamais l'exposer ni retirer le contrôle du token.
 - Les tokens d'accès aux plateformes ne sont jamais écrits dans le dépôt ni sur un serveur : coffre local par utilisateur.
 - Imports dynamiques côté Python : penser à PyInstaller (voir `scripts/build-sidecar.sh`).
+- Design : `docs/design/style-guide.md` (règles, composants, spec par écran), `docs/design/tokens.css` (copie identique dans `app/src/tokens.css`), maquettes HTML dans `docs/design/screens/`. Toute nouvelle couleur ou taille passe par les tokens.

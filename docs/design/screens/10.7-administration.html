@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Administration de l'espace</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F3F7F6;color:#14302F;font-family:Inter,system-ui,sans-serif}
+a{color:#1C4F4D}a:hover{color:#2E8C83}
+</style>
+</head>
+<body>
+
+
+<div style="min-height: 820px; display: flex; flex-wrap: wrap; background: #F3F7F6; font-family: Inter, system-ui, sans-serif; color: #14302F;">
+
+  <aside style="flex: 0 0 232px; background: #1C4F4D; color: #E3F5F0; display: flex; flex-direction: column; padding: 20px 14px; gap: 22px; box-sizing: border-box;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 6px;">
+      <img src="../../../assets/logo.png" alt="" style="width: 34px; height: 34px; object-fit: contain;">
+      <div style="display: flex; flex-direction: column;"><span style="font-size: 15px; font-weight: 700; line-height: 1.1;">Skifer</span><span style="font-size: 12px; color: #9FE1CF;">Annuaire</span></div>
+    </div>
+    <a href="10.0-accueil-espaces.html" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 8px; background: #163F3F; border: 1px solid #2E8C83; color: #E3F5F0; text-decoration: none; min-height: 44px; box-sizing: border-box;">
+      <div style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #9FE1CF;">Espace</span><span style="font-size: 14px; font-weight: 600;">Groupe Nordis</span></div>
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l3-3 3 3M5 10l3 3 3-3"/></svg>
+    </a>
+    <nav style="display: flex; flex-direction: column; gap: 4px; font-size: 14px;">
+      <a href="10.1-catalogue.html" style="display: flex; align-items: center; padding: 10px 12px; border-radius: 8px; color: #E3F5F0; text-decoration: none;">Catalogue</a>
+      <a href="10.4-propositions.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #E3F5F0; text-decoration: none;"><span>Propositions</span><span style="font-size: 11px; font-weight: 700; background: #C2641E; color: #FFFFFF; border-radius: 999px; padding: 2px 8px;">5</span></a>
+      <a href="10.5-comparaison.html" style="display: flex; align-items: center; padding: 10px 12px; border-radius: 8px; color: #E3F5F0; text-decoration: none;">Comparaison</a>
+      <a href="10.6-connexions.html" style="display: flex; align-items: center; padding: 10px 12px; border-radius: 8px; color: #E3F5F0; text-decoration: none;">Connexions</a>
+      <a href="10.7-administration.html" style="display: flex; align-items: center; padding: 10px 12px; border-radius: 8px; background: #2E8C83; color: #FFFFFF; text-decoration: none; font-weight: 600;">Administration</a>
+    </nav>
+    <div style="margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 8px 6px; font-size: 13px;">
+      <span style="width: 30px; height: 30px; border-radius: 50%; background: #9FE1CF; color: #14302F; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px;">JH</span>
+      <div style="display: flex; flex-direction: column;"><span style="font-weight: 600;">Julien H.</span><span style="font-size: 11px; color: #9FE1CF;">Référent d'annuaire</span></div>
+    </div>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px; padding: 28px 32px; box-sizing: border-box;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 700;">Administration — Groupe Nordis</h1>
+      <span style="font-size: 14px; color: #5B7470;">Réservée au référent d'annuaire. Les tokens d'accès ne sont jamais gérés ici.</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px;">
+
+      <section style="display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #FFFFFF; border: 1px solid #D6E3E0; border-radius: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #5B7470; font-weight: 600;">Domaines métier</span>
+          <button style="min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #1C4F4D; background: #FFFFFF; color: #1C4F4D; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;">+ Domaine</button>
+        </div>
+        <div style="display: flex; flex-direction: column; font-size: 13px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #E6EEEC;"><span style="font-weight: 600;">Finance</span><span style="color: #5B7470;">Référente Claire M. · 2 validateurs · 18 KPI</span></div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #E6EEEC;"><span style="font-weight: 600;">Ventes</span><span style="color: #5B7470;">Référent Marc D. · 2 validateurs · 14 KPI</span></div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #E6EEEC;"><span style="font-weight: 600;">Supply</span><span style="color: #5B7470;">Référente Inès T. · 1 validateur · 7 KPI</span></div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #E6EEEC;"><span style="font-weight: 600;">Marketing</span><span style="color: #C2641E; font-weight: 600;">Aucun référent · 3 KPI</span></div>
+        </div>
+        <span style="font-size: 12px; color: #5B7470;">Le canonique reste unique dans l'espace : un domaine organise, il ne cloisonne pas.</span>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #FFFFFF; border: 1px solid #D6E3E0; border-radius: 12px;">
+        <span style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #5B7470; font-weight: 600;">Validateurs requis</span>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #5B7470;">Canonique (min 1)
+            <input type="number" min="1" value="2" style="min-height: 40px; padding: 0 10px; border: 1px solid #D6E3E0; border-radius: 8px; font-family: inherit; font-size: 16px; font-weight: 600; color: #14302F;">
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #5B7470;">Déclinaisons (min 1)
+            <input type="number" min="1" value="1" style="min-height: 40px; padding: 0 10px; border: 1px solid #D6E3E0; border-radius: 8px; font-family: inherit; font-size: 16px; font-weight: 600; color: #14302F;">
+          </label>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
+          <span style="color: #5B7470;">Surcharges par domaine</span>
+          <div style="display: flex; justify-content: space-between; padding: 8px 10px; border-radius: 8px; background: #F3F7F6; border: 1px solid #D6E3E0;"><span style="font-weight: 600;">Supply</span><span>canonique 1 · déclinaisons 1</span></div>
+        </div>
+        <span style="font-size: 12px; color: #5B7470;">Une surcharge hors des points déclarés exige toujours le nombre canonique.</span>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #FFFFFF; border: 1px solid #D6E3E0; border-radius: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #5B7470; font-weight: 600;">Utilisateurs et rôles</span>
+          <button style="min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #1C4F4D; background: #FFFFFF; color: #1C4F4D; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;">+ Inviter</button>
+        </div>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 420px;">
+            <thead><tr style="text-align: left; color: #5B7470; font-size: 11px; text-transform: uppercase;"><th style="padding: 8px 6px; border-bottom: 1px solid #D6E3E0; font-weight: 600;">Nom</th><th style="padding: 8px 6px; border-bottom: 1px solid #D6E3E0; font-weight: 600;">Entité</th><th style="padding: 8px 6px; border-bottom: 1px solid #D6E3E0; font-weight: 600;">Rôle</th><th style="padding: 8px 6px; border-bottom: 1px solid #D6E3E0; font-weight: 600;">Domaines</th></tr></thead>
+            <tbody>
+              <tr><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC; font-weight: 600;">Claire M.</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Groupe</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Référente</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Finance</td></tr>
+              <tr><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC; font-weight: 600;">Marc D.</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Groupe</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Validateur</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Ventes, Finance</td></tr>
+              <tr><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC; font-weight: 600;">Anna K.</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Nordis Deutschland</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Contributrice</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Finance</td></tr>
+              <tr><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC; font-weight: 600;">Sofía R.</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Nordis España</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Contributrice</td><td style="padding: 8px 6px; border-bottom: 1px solid #E6EEEC;">Finance, Ventes</td></tr>
+              <tr><td style="padding: 8px 6px; font-weight: 600;">Léa B.</td><td style="padding: 8px 6px;">Nordis France</td><td style="padding: 8px 6px;">Validatrice</td><td style="padding: 8px 6px;">Ventes</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; background: #FFFFFF; border: 1px solid #D6E3E0; border-radius: 12px;">
+          <span style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #5B7470; font-weight: 600;">Dépôt Git de l'espace</span>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #5B7470;">URL
+            <input type="text" value="git@github.com:nordis/skifer-annuaire.git" style="min-height: 40px; padding: 0 10px; border: 1px solid #D6E3E0; border-radius: 8px; font-family: monospace; font-size: 13px; color: #14302F;">
+          </label>
+          <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #5B7470;">Branche principale</span><span style="font-family: monospace; font-weight: 600;">main</span></div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #5B7470;">Dernière synchronisation</span><span style="color: #2E8C83; font-weight: 600;">il y a 4 min · index reconstruit</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; background: #FFFFFF; border: 1px solid #D6E3E0; border-radius: 12px;">
+          <span style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #5B7470; font-weight: 600;">Plateformes autorisées</span>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; min-height: 24px;"><span style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1C4F4D;">Databricks</span><span style="color: #5B7470;">OAuth · token personnel</span></label>
+            <label style="display: flex; align-items: center; justify-content: space-between; min-height: 24px;"><span style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1C4F4D;">Snowflake</span><span style="color: #5B7470;">SSO · paire de clés</span></label>
+            <label style="display: flex; align-items: center; justify-content: space-between; min-height: 24px;"><span style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1C4F4D;">BigQuery</span><span style="color: #5B7470;">OAuth Google</span></label>
+            <label style="display: flex; align-items: center; justify-content: space-between; min-height: 24px;"><span style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #1C4F4D;">Microsoft Fabric</span><span style="color: #5B7470;">Entra ID</span></label>
+            <label style="display: flex; align-items: center; justify-content: space-between; min-height: 24px;"><span style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #1C4F4D;">Amazon Redshift</span><span style="color: #5B7470;">IAM</span></label>
+          </div>
+          <span style="font-size: 12px; color: #5B7470;">Les tokens restent dans le coffre personnel de chaque utilisateur.</span>
+        </div>
+      </section>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 8px;">
+      <button style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid #D6E3E0; background: #FFFFFF; color: #14302F; font-weight: 600; font-size: 14px; font-family: inherit; cursor: pointer;">Annuler</button>
+      <button style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 0; background: #1C4F4D; color: #FFFFFF; font-weight: 600; font-size: 14px; font-family: inherit; cursor: pointer;">Enregistrer les paramètres</button>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

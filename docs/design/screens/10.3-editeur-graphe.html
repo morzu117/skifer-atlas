@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Éditeur de graphe — Revenu net v5 (brouillon)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#F3F7F6;color:#14302F;font-family:Inter,system-ui,sans-serif}
+a{color:#1C4F4D}a:hover{color:#2E8C83}
+</style>
+</head>
+<body>
+
+
+<div style="min-height: 820px; display: flex; flex-direction: column; background: #F3F7F6; font-family: Inter, system-ui, sans-serif; color: #14302F; font-size: 13px;">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; background: #1C4F4D; color: #E3F5F0; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+      <a href="10.2-fiche-kpi.html" style="display: inline-flex; align-items: center; gap: 6px; color: #9FE1CF; text-decoration: none; font-size: 13px; min-height: 40px;">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>Revenu net
+      </a>
+      <span style="color: #2E8C83;">/</span>
+      <span style="font-size: 14px; font-weight: 600;">v5 · brouillon</span>
+      <span style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #163F3F; border: 1px solid #2E8C83; font-family: 'JetBrains Mono', monospace;">schema 1.3 · 7 nœuds · 7 arêtes</span>
+      <span style="font-size: 12px; color: #9FE1CF;">Enregistré il y a 2 min (local)</span>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <button style="display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border-radius: 6px; border: 1px solid #9FE1CF; background: transparent; color: #E3F5F0; font-weight: 600; font-size: 12px; font-family: inherit; cursor: pointer;">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>Éditer en YAML
+      </button>
+      <a href="10.4-propositions.html" style="display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 6px; background: #9FE1CF; color: #14302F; font-weight: 600; font-size: 12px; text-decoration: none;">Soumettre la proposition</a>
+    </div>
+  </header>
+
+  <div style="display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: #FFFFFF; border-bottom: 1px solid #D6E3E0; flex-wrap: wrap;">
+    <button aria-label="Sélection" title="Sélection" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid #1C4F4D; background: #E3F5F0; color: #1C4F4D; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 3l16 7-7 2-2 7z"/></svg></button>
+    <button aria-label="Déplacer la vue" title="Déplacer la vue" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #5B7470; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-5.9-2.5L3.2 16.1a2 2 0 0 1 2.8-2.8L7 14"/></svg></button>
+    <button aria-label="Ajouter une arête" title="Ajouter une arête" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #5B7470; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><path d="M7 12h10"/></svg></button>
+    <span style="width: 1px; height: 22px; background: #D6E3E0; margin: 0 6px;"></span>
+    <button style="min-height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #5B7470; cursor: pointer; font-family: inherit; font-size: 12px;">Annuler</button>
+    <button style="min-height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #5B7470; cursor: pointer; font-family: inherit; font-size: 12px;">Rétablir</button>
+    <span style="width: 1px; height: 22px; background: #D6E3E0; margin: 0 6px;"></span>
+    <button style="min-height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #5B7470; cursor: pointer; font-family: inherit; font-size: 12px;">Disposition automatique</button>
+    <button style="min-height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #5B7470; cursor: pointer; font-family: inherit; font-size: 12px;">Aligner</button>
+    <span style="width: 1px; height: 22px; background: #D6E3E0; margin: 0 6px;"></span>
+    <button style="min-height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #5B7470; cursor: pointer; font-family: inherit; font-size: 12px;">Valider le graphe</button>
+    <button style="min-height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #5B7470; cursor: pointer; font-family: inherit; font-size: 12px;">Aperçu SQL (Databricks)</button>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 4px;">
+      <button aria-label="Zoom arrière" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; color: #14302F; cursor: pointer; font-family: inherit; font-size: 16px;">−</button>
+      <span style="min-width: 48px; text-align: center; font-size: 12px; font-family: 'JetBrains Mono', monospace;">100 %</span>
+      <button aria-label="Zoom avant" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; color: #14302F; cursor: pointer; font-family: inherit; font-size: 16px;">+</button>
+      <button style="min-height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; color: #14302F; cursor: pointer; font-family: inherit; font-size: 12px;">Ajuster</button>
+    </div>
+  </div>
+
+  <div style="flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+    <aside style="flex: 0 0 196px; background: #FFFFFF; border-right: 1px solid #D6E3E0; display: flex; flex-direction: column; box-sizing: border-box;">
+      <label style="display: flex; align-items: center; gap: 6px; margin: 10px 10px 6px; padding: 0 8px; min-height: 32px; border: 1px solid #D6E3E0; border-radius: 6px;">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B7470" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Rechercher un nœud</span>
+        <input type="search" placeholder="Nœud…" style="flex: 1; border: 0; outline: 0; font-size: 12px; font-family: inherit; min-width: 0;">
+      </label>
+      <span style="padding: 6px 14px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #5B7470; font-weight: 600;">Entrées</span>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #5B7470;"></span>Source</div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #2E8C83;"></span>Référence à un KPI</div>
+      <span style="padding: 10px 14px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #5B7470; font-weight: 600;">Lignes</span>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #6B8E8A;"></span>Filtre</div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #6B8E8A;"></span>Dédoublonnage</div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #6B8E8A;"></span>Calcul de colonne</div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #6B8E8A;"></span>Opération temporelle</div>
+      <span style="padding: 10px 14px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #5B7470; font-weight: 600;">Combinaison</span>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #C2641E;"></span>Jointure</div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #C2641E;"></span>Union</div>
+      <span style="padding: 10px 14px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #5B7470; font-weight: 600;">Résultat</span>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #1C4F4D;"></span>Agrégation</div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: grab;"><span style="width: 14px; height: 14px; border-radius: 3px; background: #1C4F4D;"></span>Opération entre métriques</div>
+    </aside>
+
+    <section style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column;">
+      <div style="position: relative; flex: 1 1 auto; min-height: 400px; background-color: #F3F7F6; background-image: linear-gradient(#E6EEEC 1px, transparent 1px), linear-gradient(90deg, #E6EEEC 1px, transparent 1px); background-size: 24px 24px; overflow: auto;">
+
+        <div style="position: absolute; left: 36px; top: 40px; width: 184px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; box-shadow: 0 1px 2px rgba(20,48,47,0.08);">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #E6EEEC; background: #5B7470; color: #FFFFFF; border-radius: 6px 6px 0 0;"><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Source</span><span style="margin-left: auto; font-size: 10px; font-family: 'JetBrains Mono', monospace; opacity: 0.8;">n01</span></div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px;">fact_facturation</span><span style="font-size: 11px; color: #5B7470;">Databricks · gold.finance · 14 col.</span><span style="font-size: 11px; color: #5B7470;">date_facture : UTC, timestamp</span></div>
+          <span aria-hidden="true" style="position: absolute; right: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+        </div>
+
+        <div style="position: absolute; left: 36px; top: 232px; width: 184px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; box-shadow: 0 1px 2px rgba(20,48,47,0.08);">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #E6EEEC; background: #5B7470; color: #FFFFFF; border-radius: 6px 6px 0 0;"><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Source</span><span style="margin-left: auto; font-size: 10px; font-family: 'JetBrains Mono', monospace; opacity: 0.8;">n02</span></div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px;">ref_taxes_pays</span><span style="font-size: 11px; color: #5B7470;">Databricks · gold.finance · 3 col.</span><span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #C2641E; font-weight: 600;"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>Propriétaire manquant</span></div>
+          <span aria-hidden="true" style="position: absolute; right: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+        </div>
+
+        <div aria-hidden="true" style="position: absolute; left: 226px; top: 84px; width: 50px; height: 2px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 270px; top: 80px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 7px solid #5B7470;"></div>
+
+        <div style="position: absolute; left: 276px; top: 40px; width: 184px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; box-shadow: 0 1px 2px rgba(20,48,47,0.08);">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #E6EEEC; background: #6B8E8A; color: #FFFFFF; border-radius: 6px 6px 0 0;"><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Filtre</span><span style="margin-left: auto; font-size: 10px; font-family: 'JetBrains Mono', monospace; opacity: 0.8;">n03</span></div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px;">statut = 'validée'</span><span style="font-size: 11px; color: #5B7470;">nulls : exclus</span></div>
+          <span aria-hidden="true" style="position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+          <span aria-hidden="true" style="position: absolute; right: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+        </div>
+
+        <div aria-hidden="true" style="position: absolute; left: 466px; top: 84px; width: 50px; height: 2px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 226px; top: 276px; width: 262px; height: 2px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 488px; top: 100px; width: 2px; height: 178px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 488px; top: 100px; width: 28px; height: 2px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 510px; top: 80px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 7px solid #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 510px; top: 96px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 7px solid #5B7470;"></div>
+        <span style="position: absolute; left: 470px; top: 60px; font-size: 10px; color: #5B7470; background: #F3F7F6; padding: 0 3px; font-family: 'JetBrains Mono', monospace;">gauche</span>
+        <span style="position: absolute; left: 470px; top: 108px; font-size: 10px; color: #5B7470; background: #F3F7F6; padding: 0 3px; font-family: 'JetBrains Mono', monospace;">droite</span>
+
+        <div style="position: absolute; left: 516px; top: 40px; width: 200px; border-radius: 6px; border: 2px solid #2E8C83; background: #FFFFFF; box-shadow: 0 0 0 3px #E3F5F0, 0 1px 2px rgba(20,48,47,0.08);">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #E6EEEC; background: #C2641E; color: #FFFFFF; border-radius: 4px 4px 0 0;"><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Jointure</span><span style="font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #FFFFFF; color: #C2641E; font-weight: 700;">VARIATION</span><span style="margin-left: auto; font-size: 10px; font-family: 'JetBrains Mono', monospace; opacity: 0.8;">n04</span></div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px;">left · pays_code = pays</span><span style="font-size: 11px; color: #5B7470;">cardinalité N:1 · contrôle requis</span></div>
+          <span aria-hidden="true" style="position: absolute; left: -8px; top: 36px; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+          <span aria-hidden="true" style="position: absolute; left: -8px; top: 52px; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+          <span aria-hidden="true" style="position: absolute; right: -8px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+        </div>
+
+        <div aria-hidden="true" style="position: absolute; left: 722px; top: 84px; width: 50px; height: 2px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 766px; top: 80px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 7px solid #5B7470;"></div>
+
+        <div style="position: absolute; left: 772px; top: 40px; width: 184px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; box-shadow: 0 1px 2px rgba(20,48,47,0.08);">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #E6EEEC; background: #6B8E8A; color: #FFFFFF; border-radius: 6px 6px 0 0;"><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Calcul de colonne</span><span style="margin-left: auto; font-size: 10px; font-family: 'JetBrains Mono', monospace; opacity: 0.8;">n05</span></div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px;">montant_ht</span><span style="font-size: 11px; color: #5B7470; font-family: 'JetBrains Mono', monospace;">= ttc − taxes − avoirs</span></div>
+          <span aria-hidden="true" style="position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+          <span aria-hidden="true" style="position: absolute; right: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+        </div>
+
+        <div aria-hidden="true" style="position: absolute; left: 962px; top: 84px; width: 20px; height: 2px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 980px; top: 84px; width: 2px; height: 148px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 962px; top: 232px; width: 20px; height: 2px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 956px; top: 227px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-right: 7px solid #5B7470;"></div>
+
+        <div style="position: absolute; left: 772px; top: 190px; width: 184px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; box-shadow: 0 1px 2px rgba(20,48,47,0.08);">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #E6EEEC; background: #6B8E8A; color: #FFFFFF; border-radius: 6px 6px 0 0;"><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Temporel</span><span style="font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #FFFFFF; color: #C2641E; font-weight: 700;">VARIATION</span><span style="margin-left: auto; font-size: 10px; font-family: 'JetBrains Mono', monospace; opacity: 0.8;">n06</span></div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px;">mois_fiscal(date_facture)</span><span style="font-size: 11px; color: #5B7470;">calendrier fiscal · Europe/Paris</span></div>
+          <span aria-hidden="true" style="position: absolute; right: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+          <span aria-hidden="true" style="position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+        </div>
+
+        <div aria-hidden="true" style="position: absolute; left: 764px; top: 234px; width: 2px; height: 100px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 764px; top: 334px; width: 28px; height: 2px; background: #5B7470;"></div>
+        <div aria-hidden="true" style="position: absolute; left: 786px; top: 330px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 7px solid #5B7470;"></div>
+
+        <div style="position: absolute; left: 792px; top: 300px; width: 200px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; box-shadow: 0 1px 2px rgba(20,48,47,0.08);">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #E6EEEC; background: #1C4F4D; color: #FFFFFF; border-radius: 6px 6px 0 0;"><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Agrégation · résultat</span><span style="margin-left: auto; font-size: 10px; font-family: 'JetBrains Mono', monospace; opacity: 0.8;">n07</span></div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px;">SUM(montant_ht)</span><span style="font-size: 11px; color: #5B7470;">par mois_fiscal, entité</span></div>
+          <span aria-hidden="true" style="position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; border: 2px solid #5B7470; box-sizing: border-box;"></span>
+        </div>
+
+        <div style="position: absolute; right: 16px; bottom: 16px; width: 150px; height: 70px; border-radius: 6px; background: #FFFFFF; border: 1px solid #D6E3E0; opacity: 0.9;">
+          <span aria-hidden="true" style="position: absolute; left: 10px; top: 14px; width: 16px; height: 8px; background: #5B7470; border-radius: 1px;"></span>
+          <span aria-hidden="true" style="position: absolute; left: 10px; top: 40px; width: 16px; height: 8px; background: #5B7470; border-radius: 1px;"></span>
+          <span aria-hidden="true" style="position: absolute; left: 36px; top: 14px; width: 16px; height: 8px; background: #6B8E8A; border-radius: 1px;"></span>
+          <span aria-hidden="true" style="position: absolute; left: 62px; top: 14px; width: 18px; height: 8px; background: #C2641E; border-radius: 1px;"></span>
+          <span aria-hidden="true" style="position: absolute; left: 90px; top: 14px; width: 16px; height: 8px; background: #6B8E8A; border-radius: 1px;"></span>
+          <span aria-hidden="true" style="position: absolute; left: 90px; top: 30px; width: 16px; height: 8px; background: #6B8E8A; border-radius: 1px;"></span>
+          <span aria-hidden="true" style="position: absolute; left: 92px; top: 46px; width: 18px; height: 8px; background: #1C4F4D; border-radius: 1px;"></span>
+          <span aria-hidden="true" style="position: absolute; left: 2px; top: 2px; width: 120px; height: 62px; border: 1px solid #2E8C83; border-radius: 4px; box-sizing: border-box;"></span>
+        </div>
+      </div>
+
+      <div style="flex: 0 0 auto; border-top: 1px solid #D6E3E0; background: #FFFFFF; display: flex; flex-direction: column;">
+        <div style="display: flex; align-items: center; gap: 2px; padding: 0 12px; border-bottom: 1px solid #E6EEEC;">
+          <a href="#problemes" style="padding: 9px 12px; font-size: 12px; font-weight: 600; color: #1C4F4D; border-bottom: 2px solid #1C4F4D; text-decoration: none; margin-bottom: -1px;">Problèmes <span style="font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: #FFF7F0; color: #C2641E; border: 1px solid #C2641E;">1</span></a>
+          <a href="#colonnes" style="padding: 9px 12px; font-size: 12px; color: #5B7470; text-decoration: none;">Colonnes en sortie de n04</a>
+          <a href="#sql" style="padding: 9px 12px; font-size: 12px; color: #5B7470; text-decoration: none;">SQL compilé</a>
+          <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 12px; font-size: 12px;">
+            <span style="display: inline-flex; align-items: center; gap: 5px; color: #2E8C83; font-weight: 600;"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Schéma valide</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px; color: #2E8C83; font-weight: 600;"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Sans cycle</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px; color: #2E8C83; font-weight: 600;"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Compilable Databricks, Snowflake</span>
+          </span>
+        </div>
+        <div id="problemes" style="display: flex; flex-direction: column; font-size: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #E6EEEC;">
+            <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #FFF7F0; color: #C2641E; border: 1px solid #C2641E;">AVERT.</span>
+            <span style="font-family: 'JetBrains Mono', monospace; color: #5B7470;">n02</span>
+            <span>La source <strong>ref_taxes_pays</strong> n'a pas de propriétaire déclaré. Requis avant soumission.</span>
+            <a href="#n02" style="margin-left: auto; font-weight: 600; text-decoration: none; white-space: nowrap;">Aller au nœud</a>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; color: #5B7470;">
+            <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #E3F5F0; color: #1C4F4D;">INFO</span>
+            <span style="font-family: 'JetBrains Mono', monospace;">n04, n06</span>
+            <span>2 points de variation déclarés : surchargeables par les entités avec validation légère.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside style="flex: 0 0 296px; background: #FFFFFF; border-left: 1px solid #D6E3E0; display: flex; flex-direction: column; box-sizing: border-box;">
+      <div style="display: flex; align-items: center; gap: 2px; padding: 0 10px; border-bottom: 1px solid #E6EEEC;">
+        <a href="#proprietes" style="padding: 10px 10px; font-size: 12px; font-weight: 600; color: #1C4F4D; border-bottom: 2px solid #1C4F4D; text-decoration: none; margin-bottom: -1px;">Propriétés</a>
+        <a href="#entrees" style="padding: 10px 10px; font-size: 12px; color: #5B7470; text-decoration: none;">Entrées</a>
+        <a href="#yaml" style="padding: 10px 10px; font-size: 12px; color: #5B7470; text-decoration: none;">YAML du nœud</a>
+      </div>
+      <div id="proprietes" style="display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow-y: auto;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #C2641E;"></span>
+          <span style="font-weight: 600; font-size: 13px;">Jointure</span>
+          <span style="margin-left: auto; font-size: 11px; color: #5B7470; font-family: 'JetBrains Mono', monospace;">n04</span>
+        </div>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #5B7470;">Libellé
+          <input type="text" value="taxes par pays" style="min-height: 32px; padding: 0 8px; border: 1px solid #D6E3E0; border-radius: 6px; font-family: inherit; font-size: 12px; color: #14302F;">
+        </label>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #5B7470;">Type
+            <select style="min-height: 32px; padding: 0 6px; border: 1px solid #D6E3E0; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 12px; color: #14302F;"><option>Left</option><option>Inner</option><option>Full</option></select>
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #5B7470;">Cardinalité <span style="color: #B13B3B;">requis</span>
+            <select style="min-height: 32px; padding: 0 6px; border: 1px solid #D6E3E0; border-radius: 6px; background: #FFFFFF; font-family: inherit; font-size: 12px; color: #14302F;"><option>N:1</option><option>1:1</option><option>1:N</option></select>
+          </label>
+        </div>
+        <fieldset style="border: 1px solid #D6E3E0; border-radius: 6px; padding: 8px 10px; margin: 0; display: flex; flex-direction: column; gap: 6px;">
+          <legend style="font-size: 11px; color: #5B7470; padding: 0 4px;">Clés de jointure</legend>
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); gap: 4px; align-items: center; font-size: 11px; color: #5B7470;"><span>gauche (n03)</span><span></span><span>droite (n02)</span></div>
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); gap: 4px; align-items: center;">
+            <select aria-label="Colonne gauche" style="min-height: 30px; padding: 0 4px; border: 1px solid #D6E3E0; border-radius: 6px; background: #FFFFFF; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #14302F; min-width: 0;"><option>pays_code</option><option>entite_id</option></select>
+            <span style="text-align: center; color: #5B7470;">=</span>
+            <select aria-label="Colonne droite" style="min-height: 30px; padding: 0 4px; border: 1px solid #D6E3E0; border-radius: 6px; background: #FFFFFF; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #14302F; min-width: 0;"><option>pays</option><option>taux</option></select>
+          </div>
+          <button style="align-self: flex-start; min-height: 28px; padding: 0 8px; border-radius: 6px; border: 1px dashed #D6E3E0; background: transparent; color: #1C4F4D; font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer;">+ Ajouter une clé</button>
+        </fieldset>
+        <fieldset style="border: 1px solid #D6E3E0; border-radius: 6px; padding: 8px 10px; margin: 0; display: flex; flex-direction: column; gap: 6px; background: #F3F7F6;">
+          <legend style="font-size: 11px; color: #5B7470; padding: 0 4px; background: #FFFFFF;">Contrôle de cardinalité</legend>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; min-height: 24px;"><input type="radio" name="card" checked style="width: 16px; height: 16px; accent-color: #1C4F4D;">Requis : échec si la jointure multiplie des lignes</label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; min-height: 24px;"><input type="radio" name="card" style="width: 16px; height: 16px; accent-color: #C2641E;">Bypass (visible dans le graphe et en comparaison)</label>
+        </fieldset>
+        <label style="display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 8px 10px; border-radius: 6px; border: 1px solid #C2641E; background: #FFF7F0;">
+          <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 600; color: #C2641E;">Point de variation</span><span style="font-size: 11px; color: #5B7470;">Les entités peuvent surcharger la source droite (n02).</span></span>
+          <input type="checkbox" checked style="width: 16px; height: 16px; accent-color: #C2641E;">
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #5B7470;">Note (pourquoi ce nœud)
+          <textarea rows="2" style="padding: 6px 8px; border: 1px solid #D6E3E0; border-radius: 6px; font-family: inherit; font-size: 12px; resize: vertical;">Taux de taxe par pays de facturation. Chaque pays surcharge n02 avec sa table locale.</textarea>
+        </label>
+        <div style="display: flex; gap: 6px; margin-top: 4px;">
+          <button style="flex: 1; min-height: 32px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; color: #14302F; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;">Dupliquer</button>
+          <button style="flex: 1; min-height: 32px; border-radius: 6px; border: 1px solid #D6E3E0; background: #FFFFFF; color: #B13B3B; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;">Supprimer</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+</body>
+</html>
