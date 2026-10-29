@@ -1,0 +1,6 @@
+# Toolchain du dépôt, activé automatiquement par mise dans ce dossier.
+[tools]
+rust = "stable"
+node = "22"
+python = "3.12"
+uv = "latest"
