@@ -1,0 +1,74 @@
+/* Skifer Atlas — design tokens (source de vérité : docs/design/style-guide.md)
+   Importer ce fichier tel quel dans l'application ; ne pas redéfinir les couleurs ailleurs. */
+
+:root {
+  /* Couleurs de marque (tirées du logo) */
+  --atlas-deep: #163f3f;       /* sélecteur d'espace, fonds profonds */
+  --atlas-brand: #1c4f4d;      /* barre latérale, boutons primaires, textes de marque */
+  --atlas-mid: #2e8c83;        /* élément de navigation actif, succès, sélection */
+  --atlas-mint: #9fe1cf;       /* accents sur fond sombre, avatars */
+  --atlas-pale: #e3f5f0;       /* fonds de badges, ligne sélectionnée, cellule « OK » */
+
+  /* Neutres */
+  --atlas-ink: #14302f;        /* texte principal */
+  --atlas-muted: #5b7470;      /* texte secondaire, libellés (4.5:1 sur blanc) */
+  --atlas-line: #d6e3e0;       /* bordures */
+  --atlas-line-soft: #e6eeec;  /* séparateurs de lignes de tableau */
+  --atlas-ground: #f3f7f6;     /* fond d'application */
+  --atlas-panel: #ffffff;      /* cartes, panneaux, tableaux */
+
+  /* Sémantique des écarts (couleurs qui diffèrent aussi en luminosité) */
+  --atlas-ok: #2e8c83;         /* convergé, dans la tolérance, connecté */
+  --atlas-warn: #c2641e;       /* à examiner, point de variation, hors points déclarés, token expiré */
+  --atlas-warn-bg: #fff7f0;
+  --atlas-warn-cell: #ffe3cc;  /* cellule de matrice « partiellement validée » */
+  --atlas-bad: #b13b3b;        /* divergence critique, hors tolérance, actions destructives */
+  --atlas-bad-bg: #fdf2f2;
+  --atlas-bad-cell: #f6c9c9;   /* cellule de matrice « hors tolérance » */
+
+  /* Familles de nœuds (en-têtes dans l'éditeur) */
+  --atlas-node-source: #5b7470;
+  --atlas-node-rows: #6b8e8a;      /* filtre, dédoublonnage, calcul, temporel */
+  --atlas-node-combine: #c2641e;   /* jointure, union */
+  --atlas-node-result: #1c4f4d;    /* agrégation, opération entre métriques */
+  --atlas-node-ref: #2e8c83;       /* référence à un KPI */
+
+  /* Typographie */
+  --atlas-font: Inter, system-ui, -apple-system, sans-serif;
+  --atlas-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --atlas-text-xs: 11px;
+  --atlas-text-sm: 12px;
+  --atlas-text-md: 13px;
+  --atlas-text-base: 14px;
+  --atlas-text-lg: 16px;
+  --atlas-text-xl: 20px;
+  --atlas-text-2xl: 24px;
+  --atlas-text-3xl: 28px;
+
+  /* Espacement (base 4) */
+  --atlas-space-1: 4px;
+  --atlas-space-2: 8px;
+  --atlas-space-3: 12px;
+  --atlas-space-4: 16px;
+  --atlas-space-5: 20px;
+  --atlas-space-6: 24px;
+  --atlas-space-7: 28px;
+  --atlas-space-8: 32px;
+
+  /* Rayons */
+  --atlas-radius-sm: 6px;      /* nœuds, champs compacts, boutons de barre d'outils */
+  --atlas-radius-md: 8px;      /* boutons, champs, sélecteur d'espace */
+  --atlas-radius-lg: 12px;     /* cartes, panneaux, tableaux */
+  --atlas-radius-pill: 999px;  /* badges */
+
+  /* Dimensions structurantes */
+  --atlas-sidebar-w: 232px;
+  --atlas-palette-w: 196px;
+  --atlas-props-w: 296px;
+  --atlas-control-h: 44px;     /* cible tactile minimale des boutons d'action */
+  --atlas-control-h-sm: 40px;  /* champs de formulaire */
+  --atlas-control-h-xs: 32px;  /* barre d'outils de l'éditeur, filtres compacts */
+  --atlas-node-w: 184px;
+  --atlas-grid: 24px;          /* trame du canevas */
+  --atlas-shadow-node: 0 1px 2px rgba(20, 48, 47, 0.08);
+}
