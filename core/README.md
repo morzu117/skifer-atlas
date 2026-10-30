@@ -70,6 +70,19 @@ curl -H "$H" -X POST $API/acme/documents/revenu-net/implementations/acme-fr/data
 curl -H "$H" $API/acme/documents/revenu-net/draft                     # YAML courant, version incrémentée
 ```
 
+Éditeur de graphe (plan 0013). Le document circule en JSON, le YAML n'est rendu que par le serveur, dans l'ordre canonique ; brouillons et positions sont dans le dossier de l'espace (`.atlas/drafts/`, `.atlas/layout/`), hors dépôt :
+
+```sh
+J='Content-Type: application/json'; ED=$API/acme/editor
+curl -H "$H" $ED/documents/revenu-net                                 # copie en v5, brouillon et positions, vocabulaire fermé, calendriers, domaines
+curl -H "$H" -H "$J" -d '{"document":{…},"node_id":"n03"}' $ED/check  # problèmes, état (schéma, cycle, compilable), colonnes par nœud, SQL du nœud, YAML
+curl -H "$H" -H "$J" -d '{"text":"label: [ouvert"}' $ED/parse          # YAML → document, ou le problème et sa ligne
+curl -H "$H" -H "$J" -d '{"kind":"kpi","id":"marge-nette","label":"Marge nette","domain":"finance","owner":"claire.m"}' $ED/documents  # 409 document_exists si l'id est pris
+curl -H "$H" -X PUT -H "$J" -d '{"document":{…},"positions":{},"highest":7,"base_version":4}' $ED/documents/revenu-net/draft
+curl -H "$H" -X DELETE $ED/documents/revenu-net/draft
+curl -H "$H" -H "$J" -d '{"document":{…}}' $ED/preview                 # nature de la proposition, validations requises, diff à la version courante
+```
+
 Propositions et gouvernance (plan 0006). `document_yaml` est le document entier ; `base_version` est la version courante du document, `null` pour un nouveau :
 
 ```sh

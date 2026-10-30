@@ -93,6 +93,25 @@ export function WorkspaceShell({
   const active = view === "fiche" || view === "editeur" ? "catalogue" : view;
   const current = NAV.find((item) => item.view === view) ?? NAV[0];
 
+  // L'éditeur occupe tout l'écran, sans barre latérale (guide 3.1) : retour vers la fiche.
+  if (view === "editeur") {
+    return (
+      <div className="editor-shell">
+        {load.kind === "loading" && (
+          <p className="muted editor-loading" role="status">
+            Chargement de l'espace…
+          </p>
+        )}
+        {load.kind === "error" && (
+          <Banner tone="bad" title={load.error.title}>
+            {load.error.text}
+          </Banner>
+        )}
+        {ws && <Editor ws={ws} params={params} heading={heading} />}
+      </div>
+    );
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -152,8 +171,7 @@ export function WorkspaceShell({
         )}
         {ws && view === "catalogue" && <Catalogue ws={ws} params={params} heading={heading} />}
         {ws && view === "fiche" && doc && <Fiche ws={ws} id={doc} params={params} heading={heading} />}
-        {ws && view === "editeur" && <Editor ws={ws} params={params} heading={heading} />}
-        {ws && view !== "catalogue" && view !== "fiche" && view !== "editeur" && (
+        {ws && view !== "catalogue" && view !== "fiche" && (
           <>
             <div className="main-head">
               <h1 ref={heading} tabIndex={-1}>

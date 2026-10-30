@@ -129,10 +129,8 @@ test("« Proposer une modification » ouvre une copie en v5, en brouillon (crit�
   await page.goto(FICHE);
   await page.getByRole("link", { name: "Proposer une modification" }).click();
   await expect(page).toHaveURL(/#\/w\/groupe-nordis\/editeur\?from=revenu-net$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Nouvelle version de Revenu net" })).toBeVisible();
-  await expect(page.getByText("Brouillon", { exact: true })).toBeVisible();
-  await expect(page.getByText("v5 · copie de la v4")).toBeVisible();
-  await expect(page.locator("pre.code")).toContainText("id: revenu-net\n  version: 5\n");
+  await expect(page.getByRole("heading", { level: 1, name: "Revenu net : v5 · brouillon" })).toBeVisible();
+  await expect(page.getByText("schéma 1 · 7 nœuds · 6 arêtes")).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });
 

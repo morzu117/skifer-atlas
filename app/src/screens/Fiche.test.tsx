@@ -7,7 +7,6 @@ import { positions } from "../components/GraphView";
 import { useRoute } from "../router";
 import { fakeServer, workspace } from "../test/fakeServer";
 import { mockReactFlow } from "../test/reactFlow";
-import { Editor } from "./Editor";
 import { Fiche } from "./Fiche";
 
 const DOC = "/api/workspaces/groupe-nordis/documents/revenu-net";
@@ -138,11 +137,10 @@ function sheetServer(sheet: DocumentSheet = SHEET) {
   });
 }
 
-function Harness({ ws, editor = false }: { ws: Workspace; editor?: boolean }) {
+function Harness({ ws }: { ws: Workspace }) {
   const route = useRoute();
   const heading = useRef<HTMLHeadingElement>(null);
   if (route.name !== "workspace") return null;
-  if (editor) return <Editor ws={ws} params={route.params} heading={heading} />;
   return <Fiche ws={ws} id={route.doc ?? ""} params={route.params} heading={heading} />;
 }
 
@@ -295,17 +293,5 @@ describe("fiche", () => {
     fakeServer(() => undefined);
     fiche();
     expect(await screen.findByRole("heading", { level: 1, name: "Fiche introuvable" })).toBeInTheDocument();
-  });
-});
-
-describe("éditeur", () => {
-  it("« Proposer une modification » : copie en brouillon, version incrémentée (critère 5)", async () => {
-    window.location.hash = "#/w/groupe-nordis/editeur?from=revenu-net";
-    sheetServer();
-    render(<Harness ws={workspace()} editor />);
-    expect(await screen.findByRole("heading", { level: 1, name: "Nouvelle version de Revenu net" })).toBeInTheDocument();
-    expect(screen.getByText("Brouillon")).toBeInTheDocument();
-    expect(screen.getByText("v5 · copie de la v4")).toBeInTheDocument();
-    expect(screen.getByText(/version: 5/)).toBeInTheDocument();
   });
 });

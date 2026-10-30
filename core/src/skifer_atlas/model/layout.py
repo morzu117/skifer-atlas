@@ -26,7 +26,7 @@ TYPE_LABELS = {
     "join": "Jointure", "union": "Union", "aggregate": "Agrégation",
     "metric_op": "Opération entre métriques",
 }
-_OPERATORS = {
+OPERATOR_LABELS = {
     "equals": "=", "not_equals": "≠", "greater_than": ">", "less_than": "<",
     "greater_than_equal": "≥", "less_than_equal": "≤", "in": "dans", "not_in": "hors de",
     "between": "entre", "not_between": "hors de", "is_null": "est nul",
@@ -43,7 +43,7 @@ def condition_text(condition: Any) -> str:
     if not isinstance(condition, str):
         return condition.expr
     column, operator, *value = condition.split(":", 2)
-    return " ".join([column, _OPERATORS.get(operator, operator.replace("_", " ")),
+    return " ".join([column, OPERATOR_LABELS.get(operator, operator.replace("_", " ")),
                      *(v.replace(",", ", ") for v in value)])
 
 

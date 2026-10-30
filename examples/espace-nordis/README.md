@@ -50,6 +50,7 @@ Ce qu'on doit voir :
 - **Diff de v3 à v4** : trois écarts. n04 (le mois fiscal passe sur la date comptable) est à examiner ; l'ajout de n06 et n07 est critique.
 - **Implémentation** : `POST …/implementations/nordis-fr/databricks/extract` extrait le SQL de l'entité française et le compare au canonique.
 - **Brouillon** : `…/draft` rend la v4 avec `version: 5`, base de « Proposer une modification ».
+- **Éditeur** (plan 0013) : `…/editor/documents/revenu-net` ouvre la copie en v5 (`highest: 7`, le prochain nœud sera n08) ; `…/editor/check` la déclare « Schéma valide · Sans cycle · Compilable Databricks, Snowflake ». Retirer `nulls` de n02 donne une erreur sur n02 et bloque la soumission. Sur `revenu-net--nordis-fr`, remplacer n02, hors des points déclarés n03 et n04, donne un avertissement et une proposition de nature `undeclared` (validation canonique).
 
 ## Proposer, valider, fusionner (plan 0006)
 

@@ -104,4 +104,15 @@
 
   /* Ajouts du plan 0012 (fiche) */
   --atlas-node-read-w: 150px;      /* nœud en lecture (guide 4) */
+
+  /* Ajouts du plan 0013 (éditeur) */
+  --atlas-node-join-w: 200px;      /* nœud de jointure : deux ports d'entrée nommés */
+  --atlas-node-band: 4px;          /* bandeau de famille en tête de nœud (ADR 0017) */
+  --atlas-port: 12px;              /* ports du canevas */
+  --atlas-halo: 3px;               /* halo --atlas-pale du nœud sélectionné */
+  --atlas-swatch: 14px;            /* carré de couleur de la palette */
+  --atlas-minimap-w: 150px;
+  --atlas-minimap-h: 70px;
+  --atlas-bottom-h: 220px;         /* panneau bas : problèmes, colonnes, SQL */
+  --atlas-canvas-min-h: 320px;
 }

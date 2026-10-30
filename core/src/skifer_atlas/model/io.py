@@ -7,6 +7,7 @@ dupliquées. Écriture déterministe : ordre des clés du modèle, indentation 2
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -94,7 +95,7 @@ def load_document(source: Path | str) -> Any:
 
 # --- Écriture ---------------------------------------------------------------------------
 
-_SCALARS = (str, int, float, bool, type(None))
+_SCALARS = (str, int, float, bool, date, type(None))
 
 
 class _CanonicalDumper(yaml.SafeDumper):
@@ -125,6 +126,7 @@ def _represent_dict(dumper: yaml.SafeDumper, data: dict) -> yaml.Node:
         and all(isinstance(value, _SCALARS) for value in data.values())
         and not {"id", "type"} <= data.keys()
         and "owner" not in data
+        and "justification" not in data
     )
     return dumper.represent_mapping("tag:yaml.org,2002:map", data, flow_style=flat)
 
@@ -152,5 +154,15 @@ def dump_data(data: Any) -> str:
     )
 
 
+def _plain(value: Any) -> Any:
+    """Les tuples du modèle (mesures, clés) deviennent des listes ; les dates restent des
+    dates, écrites sans guillemets comme dans le fichier d'origine."""
+    if isinstance(value, dict):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return value
+
+
 def dump_document(document: Any) -> str:
-    return dump_data(document.model_dump(mode="json", by_alias=True, exclude_none=True))
+    return dump_data(_plain(document.model_dump(by_alias=True, exclude_none=True)))
