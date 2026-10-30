@@ -70,6 +70,123 @@ export type DocumentSummary = {
   } | null;
 };
 
+export type Dependency = {
+  id: string;
+  kind: string; // kpi_ref | concept
+  version: number | null;
+  document_kind: string | null;
+  label: string | null;
+  status: string | null;
+  domain: string | null;
+  domain_label: string | null;
+  found?: boolean;
+};
+
+export type VariantRow = {
+  id: string;
+  entity: string;
+  mode: "override" | "from_scratch";
+  version: number | null;
+  override_count: number;
+  undeclared_count: number;
+  justification: string | null;
+};
+
+export type Implementation = { entity: string; platform: string; path: string; sql: string; extractable: boolean };
+
+export type Scope = {
+  id: string;
+  period?: { from?: string; to?: string; calendar_period?: string };
+  granularity?: string[];
+};
+
+/** Fiche d'un document (plan 0012) : l'aperçu du catalogue, plus ce que lisent les onglets. */
+export type DocumentSheet = Omit<DocumentSummary, "variants"> & {
+  validated_at: string | null;
+  validators_required: number | null;
+  version_count: number;
+  has_graph: boolean;
+  semantics: { key: string; value: string; variation: boolean }[];
+  entity: { key?: string[]; attributes?: { name: string; type: string }[] } | null;
+  variants: VariantRow[];
+  dependencies: { references: Dependency[]; referenced_by: Dependency[]; impact: number };
+  implementations: Implementation[];
+  scopes: Scope[];
+  tolerance: { percent?: number } | null;
+  workspace_tolerance: { percent: number } | null;
+};
+
+export type GraphNode = {
+  id: string;
+  type: string;
+  type_label: string;
+  family: "source" | "ref" | "rows" | "combine" | "result";
+  title: string;
+  detail: string;
+  variation: boolean;
+  output: boolean;
+  layer: number;
+  rank: number;
+};
+
+export type GraphLayout = {
+  output: string;
+  nodes: GraphNode[];
+  edges: { id: string; source: string; target: string; side: "left" | "right" | null }[];
+  overrides: string[];
+};
+
+export type Version = { version: number; commit: string; date: string; author: string; message: string };
+
+export type Difference = {
+  kind: "modified" | "added" | "removed" | "reordered";
+  node_ref: { base: string | null; other: string | null } | null;
+  node_type: string;
+  changes: { field: string; before: unknown; after: unknown }[];
+  classification: string;
+  severity: "info" | "warn" | "critical";
+  message: string;
+};
+
+/** Rapport de diff du plan 0003. */
+export type DiffReport = {
+  identical: boolean;
+  relation: string;
+  base: { id: string; version: number; fingerprint: string };
+  other: { id: string; version: number; fingerprint: string };
+  differences: Difference[];
+  summary: { by_classification: Record<string, number>; by_severity: Record<string, number> };
+};
+
+export type Residue = { code: string; message: string; blocking?: boolean; line?: number };
+
+export type ExtractResult = {
+  file: string;
+  residues: Residue[];
+  statements: {
+    id: string;
+    line: number;
+    status: string;
+    roundtrip: { status: string; differs?: string[] };
+    residues: Residue[];
+    draft: string;
+    diff: DiffReport | null;
+  }[];
+};
+
+export type Draft = { id: string; kind: string; label: string; base_version: number; version: number; content: string };
+
+export type ComparisonRun = {
+  id: number;
+  kpi_version: number;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  tolerance_pct: number;
+  scope: { id?: string } | null;
+  results: { variant_id: string; entity: string; validation_pct: number | null; max_gap_pct: number | null }[];
+};
+
 /** Erreur métier du serveur : `{"detail": {"code", "message", "issues"?}}`. */
 export class ApiError extends Error {
   constructor(
@@ -152,6 +269,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 const ws = (id: string) => `/api/workspaces/${encodeURIComponent(id)}`;
+const doc = (id: string, documentId: string) => `${ws(id)}/documents/${encodeURIComponent(documentId)}`;
 
 export const api = {
   health: () => request<{ status: string; version: string }>("/health"),
@@ -169,6 +287,19 @@ export const api = {
   },
   facets: (id: string) => request<Facets>(`${ws(id)}/catalog/facets`),
   indexState: (id: string) => request<{ fresh: boolean }>(`${ws(id)}/index`),
-  summary: (id: string, documentId: string) =>
-    request<DocumentSummary>(`${ws(id)}/documents/${encodeURIComponent(documentId)}/summary`),
+  summary: (id: string, documentId: string) => request<DocumentSummary>(`${doc(id, documentId)}/summary`),
+  sheet: (id: string, documentId: string) => request<DocumentSheet>(`${doc(id, documentId)}/sheet`),
+  layout: (id: string, documentId: string, version?: number) =>
+    request<GraphLayout>(`${doc(id, documentId)}/layout${version ? `?version=${version}` : ""}`),
+  versions: (id: string, documentId: string) => request<Version[]>(`${doc(id, documentId)}/versions`),
+  versionDiff: (id: string, documentId: string, base: number, other: number) =>
+    request<DiffReport>(`${doc(id, documentId)}/diff?base=${base}&other=${other}`),
+  extract: (id: string, documentId: string, entity: string, platform: string) =>
+    request<ExtractResult>(
+      `${doc(id, documentId)}/implementations/${encodeURIComponent(entity)}/${encodeURIComponent(platform)}/extract`,
+      { method: "POST" },
+    ),
+  draft: (id: string, documentId: string) => request<Draft>(`${doc(id, documentId)}/draft`),
+  comparisons: (id: string, kpiId: string, limit: number) =>
+    request<ComparisonRun[]>(`${ws(id)}/comparisons?kpi=${encodeURIComponent(kpiId)}&limit=${limit}`),
 };

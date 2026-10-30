@@ -101,4 +101,7 @@
   --atlas-table-min-w: 560px;      /* en dessous, le tableau défile dans son conteneur */
   --atlas-preview-basis: 300px;    /* aperçu : flex 1 1 300px */
   --atlas-preview-w: 340px;        /* largeur maximale de l'aperçu */
+
+  /* Ajouts du plan 0012 (fiche) */
+  --atlas-node-read-w: 150px;      /* nœud en lecture (guide 4) */
 }

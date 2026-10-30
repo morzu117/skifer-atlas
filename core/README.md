@@ -63,6 +63,11 @@ curl -H "$H" $API/acme/documents/revenu-net                           # ligne d'
 curl -H "$H" $API/acme/documents/revenu-net/versions                  # tags doc/<id>/v<n>
 curl -H "$H" $API/acme/documents/revenu-net/versions/3                # contenu exact au tag
 curl -H "$H" $API/acme/documents/revenu-net/dependencies              # references, referenced_by, impact
+curl -H "$H" $API/acme/documents/revenu-net/sheet                     # fiche (plan 0012) : aperçu, validation, sémantique, déclinaisons, implémentations, scopes
+curl -H "$H" "$API/acme/documents/revenu-net/layout?version=3"         # graphe disposé (couche, rang) et texte des cartes ; sans version : la courante
+curl -H "$H" "$API/acme/documents/revenu-net/diff?base=3&other=4"      # écarts entre deux versions (plan 0003)
+curl -H "$H" -X POST $API/acme/documents/revenu-net/implementations/acme-fr/databricks/extract  # SQL extrait et diff au canonique
+curl -H "$H" $API/acme/documents/revenu-net/draft                     # YAML courant, version incrémentée
 ```
 
 Propositions et gouvernance (plan 0006). `document_yaml` est le document entier ; `base_version` est la version courante du document, `null` pour un nouveau :

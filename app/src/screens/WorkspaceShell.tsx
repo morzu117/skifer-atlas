@@ -7,6 +7,8 @@ import { initials } from "../format";
 import { explain, type Explained } from "../messages";
 import { href, navigate, type NavView, type Params, type View } from "../router";
 import { Catalogue } from "./Catalogue";
+import { Editor } from "./Editor";
+import { Fiche } from "./Fiche";
 
 type Item = { view: NavView; label: string; plan: string };
 
@@ -20,12 +22,6 @@ const NAV: Item[] = [
 
 type Load = { kind: "loading" } | { kind: "ready"; ws: Workspace } | { kind: "error"; error: Explained }
   | { kind: "offline" }; // le bandeau global du serveur injoignable suffit
-
-// Écrans hors navigation, encore à venir : ils restent sous l'élément Catalogue.
-const PAGES: Record<"fiche" | "editeur", { label: string; plan: string }> = {
-  fiche: { label: "Fiche", plan: "0012" },
-  editeur: { label: "Nouveau concept ou KPI", plan: "0013" },
-};
 
 // Coque d'un espace (guide 3.1) : barre latérale, sélecteur, navigation selon le rôle.
 export function WorkspaceShell({
@@ -93,8 +89,9 @@ export function WorkspaceShell({
   }, [ws, view, doc]);
 
   const items = NAV.filter((item) => item.view !== "administration" || referent);
+  // La fiche et l'éditeur, hors navigation, restent sous l'élément Catalogue.
   const active = view === "fiche" || view === "editeur" ? "catalogue" : view;
-  const current = view === "fiche" || view === "editeur" ? PAGES[view] : (NAV.find((item) => item.view === view) ?? NAV[0]);
+  const current = NAV.find((item) => item.view === view) ?? NAV[0];
 
   return (
     <div className="shell">
@@ -154,7 +151,9 @@ export function WorkspaceShell({
           </Banner>
         )}
         {ws && view === "catalogue" && <Catalogue ws={ws} params={params} heading={heading} />}
-        {ws && view !== "catalogue" && (
+        {ws && view === "fiche" && doc && <Fiche ws={ws} id={doc} params={params} heading={heading} />}
+        {ws && view === "editeur" && <Editor ws={ws} params={params} heading={heading} />}
+        {ws && view !== "catalogue" && view !== "fiche" && view !== "editeur" && (
           <>
             <div className="main-head">
               <h1 ref={heading} tabIndex={-1}>
@@ -162,17 +161,12 @@ export function WorkspaceShell({
               </h1>
             </div>
             <div className="placeholder">
-              Cet écran arrive avec le plan {current.plan}.{" "}
-              {view === "fiche" && (
+              Cet écran arrive avec le plan {current.plan}. L'espace <strong>{ws.name}</strong> est ouvert : la
+              navigation et le sélecteur d'espace sont en place.
+              {view === "comparaison" && params.kpi && (
                 <>
-                  Document : <span className="mono">{doc}</span>.{" "}
-                  <a href={href.view(ws.id)}>Retour au catalogue</a>
-                </>
-              )}
-              {view === "editeur" && <>Le domaine du document se choisira à la création.</>}
-              {view !== "fiche" && view !== "editeur" && (
-                <>
-                  L'espace <strong>{ws.name}</strong> est ouvert : la navigation et le sélecteur d'espace sont en place.
+                  {" "}
+                  KPI présélectionné : <span className="mono">{params.kpi}</span>.
                 </>
               )}
             </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ago, convergence, initials, percent, plural, slugify, WORKSPACE_ID } from "./format";
+import { ago, convergence, initials, longDate, percent, plural, slugify, tolerance, WORKSPACE_ID } from "./format";
 import { href, parse } from "./router";
 
 describe("formats", () => {
@@ -52,6 +52,18 @@ describe("catalogue", () => {
   });
 });
 
+describe("fiche", () => {
+  it("date de version, telle qu'écrite dans le commit", () => {
+    expect(longDate("2026-10-12T09:00:00+02:00")).toBe("12 oct. 2026");
+    expect(longDate("2026-01-01T00:30:00+14:00")).toBe("1 janv. 2026");
+  });
+
+  it("tolérance", () => {
+    expect(tolerance(1.5)).toBe("1,5 %");
+    expect(tolerance(1)).toBe("1 %");
+  });
+});
+
 describe("routes", () => {
   const ws = { name: "workspace", ws: "groupe-nordis", params: {} };
   it.each([
@@ -64,6 +76,10 @@ describe("routes", () => {
     ["#/w/groupe-nordis/fiche/revenu-net", { ...ws, view: "fiche", doc: "revenu-net" }],
     ["#/w/groupe-nordis/fiche", { ...ws, view: "catalogue" }],
     ["#/w/groupe-nordis/editeur", { ...ws, view: "editeur" }],
+    ["#/w/groupe-nordis/fiche/revenu-net?tab=versions&base=3&other=4", {
+      ...ws, view: "fiche", doc: "revenu-net", params: { tab: "versions", base: "3", other: "4" },
+    }],
+    ["#/w/groupe-nordis/editeur?from=revenu-net", { ...ws, view: "editeur", params: { from: "revenu-net" } }],
   ])("%s", (hash, route) => {
     expect(parse(hash)).toEqual(route);
   });
@@ -73,5 +89,7 @@ describe("routes", () => {
       "#/w/groupe-nordis/catalogue?domain=finance",
     );
     expect(href.view("groupe-nordis")).toBe("#/w/groupe-nordis/catalogue");
+    expect(href.document("groupe-nordis", "revenu-net", { tab: "" })).toBe("#/w/groupe-nordis/fiche/revenu-net");
+    expect(href.editor("groupe-nordis", { from: "revenu-net" })).toBe("#/w/groupe-nordis/editeur?from=revenu-net");
   });
 });

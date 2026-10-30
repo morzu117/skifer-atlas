@@ -1,4 +1,4 @@
-# Démonstration : l'espace Groupe Nordis (plans 0005 à 0009)
+# Démonstration : l'espace Groupe Nordis (plans 0005 à 0012)
 
 Le dépôt d'un espace Atlas, tel qu'on le clone : sept documents canoniques et trois variantes, sur le modèle des maquettes.
 
@@ -15,14 +15,18 @@ Revenu net s'appuie sur les concepts Commande et Date de référence ; Marge bru
 
 ## Rejoindre l'espace depuis l'API
 
-On fait de ce dossier un dépôt nu « distant », puis on le rejoint. Depuis la racine du dépôt Skifer Atlas :
+`examples/depot-nordis.sh` fait de ce dossier un dépôt nu « distant », que l'on rejoint ensuite. Le dépôt garde l'historique de Revenu net :
+
+- v1 (Claire M., 15 janvier 2026) : chiffre d'affaires hors taxes ;
+- v2 (Claire M., 9 mars) : déduction des avoirs ;
+- v3 (Marc D., 2 juin) : points de variation déclarés ;
+- v4 (Claire M., 12 octobre) : mois fiscal sur la date comptable.
+
+Les trois premières versions sont dans [`../historique-nordis/`](../historique-nordis/). Chaque commit porte le tag `doc/revenu-net/v<n>`, et Commande le tag `doc/commande/v5`. Depuis la racine du dépôt Skifer Atlas :
 
 ```sh
 DEMO=$(mktemp -d)
-cp -R examples/espace-nordis "$DEMO/travail" && cd "$DEMO/travail"
-git init -q -b main && git add -A && git commit -qm "Espace Groupe Nordis"
-git tag doc/revenu-net/v4 && git tag doc/commande/v5
-git clone -q --bare . "$DEMO/distant.git" && cd -
+examples/depot-nordis.sh "$DEMO"            # $DEMO/travail et $DEMO/distant.git
 
 cd core
 export ATLAS_TOKEN=demo ATLAS_DATA_DIR="$DEMO/donnees"
@@ -32,6 +36,8 @@ H="Authorization: Bearer demo"; API=http://127.0.0.1:8765/api/workspaces
 curl -H "$H" -H 'Content-Type: application/json' -d "{\"remote_url\":\"$DEMO/distant.git\"}" $API/join
 curl -H "$H" "$API/groupe-nordis/catalog?q=ca%20net"
 curl -H "$H" $API/groupe-nordis/documents/revenu-net/dependencies
+curl -H "$H" $API/groupe-nordis/documents/revenu-net/sheet
+curl -H "$H" "$API/groupe-nordis/documents/revenu-net/diff?base=3&other=4"
 ```
 
 Ce qu'on doit voir :
@@ -39,7 +45,11 @@ Ce qu'on doit voir :
 - **Adhésion** : l'espace `groupe-nordis`, compte `julien.h`, rôle `referent` (référent d'espace dans `governance.yaml`), domaines finance, ventes, supply et marketing.
 - **Recherche** : « ca net » trouve Revenu net par son synonyme « CA net ». Sans filtre, le catalogue liste les sept concepts et KPI ; Revenu net a trois variantes, `convergence: never_compared` tant qu'aucune comparaison chiffrée n'existe (plan 0009). Après une comparaison de nordis-de et nordis-fr, `divergences:1` : nordis-de, une surcharge, s'écarte. Un écart de nordis-es, from scratch, donnerait `candidates:1` (ADR 0015).
 - **Dépendances de Revenu net** : Commande et Date de référence en références, Marge brute et Panier moyen en « référencé par », `impact: 2`.
-- **Versions** : `…/documents/revenu-net/versions` liste le tag v4, `…/versions/4` rend le fichier tel qu'il était à ce tag.
+- **Versions** : `…/documents/revenu-net/versions` liste les tags v1 à v4, `…/versions/3` rend le fichier tel qu'il était à ce tag.
+- **Fiche** (plan 0012) : `…/sheet` donne la v4 validée le 2026-10-12, deux validateurs requis, trois déclinaisons et quatre versions. `…/layout` place n01 à n07 en couches, avec n03 et n04 en points de variation.
+- **Diff de v3 à v4** : trois écarts. n04 (le mois fiscal passe sur la date comptable) est à examiner ; l'ajout de n06 et n07 est critique.
+- **Implémentation** : `POST …/implementations/nordis-fr/databricks/extract` extrait le SQL de l'entité française et le compare au canonique.
+- **Brouillon** : `…/draft` rend la v4 avec `version: 5`, base de « Proposer une modification ».
 
 ## Proposer, valider, fusionner (plan 0006)
 
