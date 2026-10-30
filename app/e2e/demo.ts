@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,21 +9,14 @@ import type { APIRequestContext, Page } from "@playwright/test";
 // Outils communs aux tests de bout en bout : dépôt de démonstration, accessibilité.
 
 export const API = "http://127.0.0.1:8799";
-const EXAMPLE = fileURLToPath(new URL("../../examples/espace-nordis", import.meta.url));
+const SCRIPT = fileURLToPath(new URL("../../examples/depot-nordis.sh", import.meta.url));
 
-/** Le dépôt de démonstration, en dépôt nu « distant » (examples/espace-nordis/README.md). */
+/** Le dépôt de démonstration et l'historique de Revenu net, en dépôt nu « distant »
+ * (examples/depot-nordis.sh). */
 export function demoRemote(): string {
   const root = mkdtempSync(join(tmpdir(), "atlas-demo-"));
-  const work = join(root, "travail");
-  cpSync(EXAMPLE, work, { recursive: true });
-  const git = (cwd: string, ...args: string[]) =>
-    execFileSync("git", ["-c", "user.name=Démo", "-c", "user.email=demo@exemple.invalid", ...args], { cwd });
-  git(work, "init", "-q", "-b", "main");
-  git(work, "add", "-A");
-  git(work, "commit", "-qm", "Espace Groupe Nordis");
-  const bare = join(root, "distant.git");
-  git(root, "clone", "-q", "--bare", work, bare);
-  return bare;
+  execFileSync("bash", [SCRIPT, root]);
+  return join(root, "distant.git");
 }
 
 /** Groupe Nordis au registre du serveur, rejoint ici s'il ne l'est pas déjà. */

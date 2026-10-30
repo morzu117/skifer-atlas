@@ -49,7 +49,7 @@ npx playwright install chromium webkit   # une fois ; WebKit est le moteur de Ta
 npm run e2e                       # Playwright : l'app Vite contre un serveur Python sur un dossier temporaire
 ```
 
-`npm run e2e` lance lui-même Vite (port 1420) et le serveur (port 8799, `ATLAS_DEV_NO_TOKEN=1`, `ATLAS_VAULT=memory`, comparaisons locales via `ATLAS_COMPARE_DATA`) ; les deux ports doivent être libres. Couleurs et tailles passent par `app/src/tokens.css`, copie exacte de `docs/design/tokens.css` : un test refuse toute valeur `#…` ou `…px` ailleurs dans `app/src`. Les routes et un exemple avec `curl` sont dans [`core/README.md`](core/README.md) ; un espace de démonstration est dans [`examples/espace-nordis/`](examples/espace-nordis/).
+`npm run e2e` lance lui-même Vite (port 1420) et le serveur (port 8799, `ATLAS_DEV_NO_TOKEN=1`, `ATLAS_VAULT=memory`, comparaisons locales via `ATLAS_COMPARE_DATA`) ; les deux ports doivent être libres. Couleurs et tailles passent par `app/src/tokens.css`, copie exacte de `docs/design/tokens.css` : un test refuse toute valeur `#…` ou `…px` ailleurs dans `app/src`. Les routes et un exemple avec `curl` sont dans [`core/README.md`](core/README.md) ; un espace de démonstration est dans [`examples/espace-nordis/`](examples/espace-nordis/), et `examples/depot-nordis.sh <dossier>` en fait un dépôt à rejoindre, avec l'historique de Revenu net (v1 à v4). Les tests de bout en bout s'en servent.
 
 ## Build d'une version installable
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 // Routage par hash, sans serveur : `#/` (accueil), `#/w/<espace>/<vue>?<paramètres>`,
-// `#/w/<espace>/fiche/<document>` et `#/w/<espace>/editeur`.
+// `#/w/<espace>/fiche/<document>?<paramètres>` et `#/w/<espace>/editeur?<paramètres>`.
 
 export const VIEWS = ["catalogue", "propositions", "comparaison", "connexions", "administration"] as const;
 export type NavView = (typeof VIEWS)[number];
@@ -34,9 +34,16 @@ export const href = {
   home: () => "#/",
   view: (ws: string, view: NavView = "catalogue", params?: Params) =>
     `#/w/${encodeURIComponent(ws)}/${view}${query(params)}`,
-  document: (ws: string, id: string) => `#/w/${encodeURIComponent(ws)}/fiche/${encodeURIComponent(id)}`,
-  editor: (ws: string) => `#/w/${encodeURIComponent(ws)}/editeur`,
+  document: (ws: string, id: string, params?: Params) =>
+    `#/w/${encodeURIComponent(ws)}/fiche/${encodeURIComponent(id)}${query(params)}`,
+  editor: (ws: string, params?: Params) => `#/w/${encodeURIComponent(ws)}/editeur${query(params)}`,
 };
+
+function hrefOf(route: Extract<Route, { name: "workspace" }>, params: Params): string {
+  if (route.view === "fiche" && route.doc) return href.document(route.ws, route.doc, params);
+  if (route.view === "editeur") return href.editor(route.ws, params);
+  return href.view(route.ws, route.view as NavView, params);
+}
 
 export function navigate(to: string) {
   window.location.hash = to;
@@ -51,8 +58,8 @@ export function replace(to: string) {
 /** Modifie des paramètres de la vue courante, lus au moment de l'appel. */
 export function setParams(change: Params, { push }: { push: boolean }) {
   const route = parse(window.location.hash);
-  if (route.name !== "workspace" || route.view === "fiche" || route.view === "editeur") return;
-  const to = href.view(route.ws, route.view, { ...route.params, ...change });
+  if (route.name !== "workspace") return;
+  const to = hrefOf(route, { ...route.params, ...change });
   if (to === window.location.hash) return;
   if (push) navigate(to);
   else replace(to);

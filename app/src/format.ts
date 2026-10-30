@@ -60,3 +60,16 @@ export function ago(timestamp: string, now: Date = new Date()): string {
   if (minutes < 60 * 24) return `il y a ${Math.floor(minutes / 60)} h`;
   return `il y a ${Math.floor(minutes / (60 * 24))} j`;
 }
+
+const MONTHS = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** Date du commit, telle qu'écrite : « 2026-10-12T09:00:00+02:00 » → « 12 oct. 2026 ». */
+export function longDate(iso: string): string {
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  return MONTHS.format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+/** 1.5 → « 1,5 % ». */
+export function tolerance(value: number): string {
+  return `${String(value).replace(".", ",")} %`;
+}
