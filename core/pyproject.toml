@@ -27,6 +27,7 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.6",
     "jsonschema>=4.23",
+    "hypothesis>=6.100",
 ]
 build = [
     "pyinstaller>=6.10",

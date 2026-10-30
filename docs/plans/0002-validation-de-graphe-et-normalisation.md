@@ -72,3 +72,20 @@ Analysées par SQLGlot en dialecte neutre. Liste blanche des fonctions dans `fun
 
 ## Estimation
 **M**. Incertitudes : inférence de types des expressions par SQLGlot ; règle exacte de « même flux » pour les filtres quand une branche est consommée deux fois.
+
+## Mise en œuvre (30 octobre 2026)
+- Modules : `graph.py` (contrôles structurels, `Library` des KPI connus), `columns.py` (propagation, `columns_at`), `functions.py` (liste blanche, inférence de types), `check.py` (`check_document`), `resolve.py`, `normalize.py`, `fingerprint.py`. Le dialecte neutre de SQLGlot sert aussi à la validation de schéma du plan 0001.
+- `Issue` porte désormais une gravité : `severity` vaut `error`, `warning` ou `info`. Les contrôles structurels et de colonnes ne s'appliquent qu'à un document déjà valide au sens du plan 0001 ; les colonnes ne sont propagées que si le graphe est un DAG sans entrée inconnue.
+- Codes ajoutés à la spécification : `concept_output_aggregated` (sortie agrégée d'un concept), `undeclared_override` (avertissement porté par chaque surcharge hors points de variation), `unknown_override_target`, `variant_of_mismatch`, `missing_canonical` (CLI : variante contrôlée sans son canonique dans `--with`).
+- `branch_not_merged` : seuls `join` et `union` ayant plusieurs entrées, deux branches ne peuvent se rejoindre que par eux. La règle signale donc un nœud dont une branche mène à `output` et une autre non ; la branche morte reçoit en plus `orphan_node`.
+- `reaggregation` n'est pas signalée quand le `group_by` est inclus dans celui de l'agrégation amont (regroupement plus grossier du même flux) ; il l'est toujours derrière un `kpi_ref`, dont on ne connaît pas le grain.
+- Colonne « datée » : colonne `date` de source, ou cible d'un `to_date` / `convert_timezone`. Une union garde ce caractère si toutes ses sources l'ont.
+- Liste blanche : on ajoute `IF` et `TRY_CAST`, équivalents de `CASE` et `CAST`. Les fonctions imbriquées dans une fenêtre ne sont signalées qu'une fois, par la fenêtre.
+- Inférence de types : `integer` < `decimal` < `double` ; une division rend `decimal`, ou `double` si un opérande l'est. Type inconnu (`None`) dès qu'un opérande l'est ; le type déclaré (`column_type`) l'emporte.
+- Normalisation `atlas1` :
+  - tout filtre devient un `filter_set`, même isolé ; une suite s'arrête au premier filtre consommé par plusieurs nœuds ;
+  - sortent de la forme : `id`, `label`, `note`, `owner`, `bypass_reason` ; les nœuds qui ne mènent pas à `output` sont ignorés ;
+  - le calendrier du KPI est recopié dans chaque `period`, car changer de calendrier change le résultat ;
+  - le départage de l'ordre topologique ajoute une signature de Merkle (type, contenu, signatures des entrées) au couple (type, contenu), pour départager sans ambiguïté deux nœuds de même contenu mais d'amonts différents.
+- Clés libres (`binding` d'une source, `from` d'une colonne d'union) : triées à la lecture, pour que l'écriture canonique ne dépende pas de l'ordre de saisie.
+- Fixture `revenu-net--nordis-es.yaml` corrigée : la source espagnole est un `timestamp` ; elle passe désormais par un `to_date` explicite avant le découpage en mois, et rattache le concept `facture` par un `binding`. Les contrôles du plan l'avaient refusée (`implicit_timezone_conversion`, `unbound_concept`).

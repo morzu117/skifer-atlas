@@ -32,6 +32,8 @@ from skifer.core.op_catalog import (
 )
 from sqlglot import exp
 
+from .functions import parse_sql
+
 NODE_ID_PATTERN = r"^n[0-9]{2,4}$"
 SLUG_PATTERN = r"^[a-z0-9][a-z0-9-]{1,63}$"
 COLUMN_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
@@ -81,17 +83,19 @@ def _check_timezone(value: str) -> str:
 Timezone = Annotated[str, AfterValidator(_check_timezone)]
 
 
+def _sorted_keys(value: dict) -> dict:
+    # Clés libres (binding, colonnes d'union) : triées pour que l'écriture soit canonique.
+    return dict(sorted(value.items()))
+
+
 def _parse_sql(text: str) -> exp.Expression:
     try:
-        tree = sqlglot.parse_one(text, read="databricks")
+        return parse_sql(text)
     except sqlglot.errors.SqlglotError as error:
         detail = str(error).splitlines()[0] if str(error) else type(error).__name__
         raise PydanticCustomError(
             "invalid_value", "Expression SQL illisible : {detail}", {"detail": detail}
         ) from None
-    if tree is None:
-        raise PydanticCustomError("invalid_value", "Expression SQL vide.")
-    return tree
 
 
 def _check_sql(text: str) -> str:
@@ -281,7 +285,7 @@ class Source(_Node):
     owner: NonEmptyStr
     columns: Annotated[list[SourceColumn], Field(min_length=1)]
     concept: Slug | None = None
-    binding: dict[ColumnName, ColumnName] | None = None
+    binding: Annotated[dict[ColumnName, ColumnName], AfterValidator(_sorted_keys)] | None = None
 
     @model_validator(mode="after")
     def _binding_needs_concept(self) -> Source:
@@ -328,7 +332,9 @@ class Join(_Node):
 
 class UnionColumn(_Model):
     name: ColumnName
-    source: Annotated[dict[NodeId, ColumnName], Field(alias="from", min_length=1)]
+    source: Annotated[
+        dict[NodeId, ColumnName], Field(alias="from", min_length=1), AfterValidator(_sorted_keys)
+    ]
 
 
 class UnionNode(_Node):
