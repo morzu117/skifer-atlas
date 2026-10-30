@@ -22,6 +22,8 @@ graph:
         - {name: estado, type: string}
         - {name: fecha, type: timestamp, timezone: Europe/Madrid, format: 'yyyy-MM-dd HH:mm:ss'}
         - {name: importe_neto, type: decimal}
+      concept: facture
+      binding: {factura_id: facture_id, sociedad: entite}
     - id: n02
       type: filter
       inputs: [n01]
@@ -29,15 +31,23 @@ graph:
       nulls: drop
     - id: n03
       type: temporal
+      label: Date locale
       inputs: [n02]
-      operation: period
+      operation: to_date
       column: fecha
+      target: fecha_local
+      timezone: Europe/Madrid
+    - id: n04
+      type: temporal
+      inputs: [n03]
+      operation: period
+      column: fecha_local
       target: mois_fiscal
       grain: month
-    - id: n04
+    - id: n05
       type: aggregate
-      inputs: [n03]
+      inputs: [n04]
       group_by: [mois_fiscal, sociedad]
       measures: [[importe_neto, revenu_net, sum]]
-  output: n04
-concepts: [commande, date-de-reference]
+  output: n05
+concepts: [facture]
