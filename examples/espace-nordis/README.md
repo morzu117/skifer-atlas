@@ -37,7 +37,7 @@ curl -H "$H" $API/groupe-nordis/documents/revenu-net/dependencies
 Ce qu'on doit voir :
 
 - **Adhésion** : l'espace `groupe-nordis`, compte `julien.h`, rôle `referent` (référent d'espace dans `governance.yaml`), domaines finance, ventes, supply et marketing.
-- **Recherche** : « ca net » trouve Revenu net par son synonyme « CA net ». Sans filtre, le catalogue liste les sept concepts et KPI ; Revenu net a trois variantes, `convergence: never_compared` tant qu'aucune comparaison chiffrée n'existe (plan 0009).
+- **Recherche** : « ca net » trouve Revenu net par son synonyme « CA net ». Sans filtre, le catalogue liste les sept concepts et KPI ; Revenu net a trois variantes, `convergence: never_compared` tant qu'aucune comparaison chiffrée n'existe (plan 0009). Après une comparaison de nordis-de et nordis-fr, `divergences:1` : nordis-de, une surcharge, s'écarte. Un écart de nordis-es, from scratch, donnerait `candidates:1` (ADR 0015).
 - **Dépendances de Revenu net** : Commande et Date de référence en références, Marge brute et Panier moyen en « référencé par », `impact: 2`.
 - **Versions** : `…/documents/revenu-net/versions` liste le tag v4, `…/versions/4` rend le fichier tel qu'il était à ce tag.
 

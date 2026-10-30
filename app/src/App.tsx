@@ -61,7 +61,14 @@ export default function App({ startup = STARTUP }: { startup?: Startup }) {
       {route.name === "home" ? (
         <Home key={server.generation} notice={notice} onDismissNotice={() => setNotice(null)} />
       ) : (
-        <WorkspaceShell key={server.generation} wsId={route.ws} view={route.view} onUnknown={unknownWorkspace} />
+        <WorkspaceShell
+          key={server.generation}
+          wsId={route.ws}
+          view={route.view}
+          params={route.params}
+          doc={route.doc}
+          onUnknown={unknownWorkspace}
+        />
       )}
     </>
   );

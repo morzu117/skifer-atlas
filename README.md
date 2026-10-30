@@ -45,11 +45,11 @@ Tests de l'interface, depuis `app/` :
 
 ```bash
 npm test                          # Vitest + Testing Library : composants, routes, tokens
-npx playwright install chromium   # une fois
+npx playwright install chromium webkit   # une fois ; WebKit est le moteur de Tauri sous macOS
 npm run e2e                       # Playwright : l'app Vite contre un serveur Python sur un dossier temporaire
 ```
 
-`npm run e2e` lance lui-même Vite (port 1420) et le serveur (port 8799, `ATLAS_DEV_NO_TOKEN=1`, `ATLAS_VAULT=memory`) ; les deux ports doivent être libres. Couleurs et tailles passent par `app/src/tokens.css`, copie exacte de `docs/design/tokens.css` : un test refuse toute valeur `#…` ou `…px` ailleurs dans `app/src`. Les routes et un exemple avec `curl` sont dans [`core/README.md`](core/README.md) ; un espace de démonstration est dans [`examples/espace-nordis/`](examples/espace-nordis/).
+`npm run e2e` lance lui-même Vite (port 1420) et le serveur (port 8799, `ATLAS_DEV_NO_TOKEN=1`, `ATLAS_VAULT=memory`, comparaisons locales via `ATLAS_COMPARE_DATA`) ; les deux ports doivent être libres. Couleurs et tailles passent par `app/src/tokens.css`, copie exacte de `docs/design/tokens.css` : un test refuse toute valeur `#…` ou `…px` ailleurs dans `app/src`. Les routes et un exemple avec `curl` sont dans [`core/README.md`](core/README.md) ; un espace de démonstration est dans [`examples/espace-nordis/`](examples/espace-nordis/).
 
 ## Build d'une version installable
 

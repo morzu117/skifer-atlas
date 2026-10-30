@@ -91,6 +91,9 @@ def test_compare_then_read_history_matrix_and_catalog(client, joined, local):
 
     catalog = {k["id"]: k for k in client.get(f"{WS}/catalog").json()}
     assert catalog["revenu-net"]["convergence"] == "divergences:1"
+    last = client.get(f"{WS}/documents/revenu-net/summary").json()["last_comparison"]
+    assert (last["id"], last["status"], last["stale"]) == (1, "done", False)
+    assert 93.75 < last["validation_pct"] < 100  # cellules de DE et FR confondues
 
 
 def test_needs_auth_before_any_execution(client, joined):

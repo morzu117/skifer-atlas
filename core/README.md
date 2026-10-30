@@ -56,6 +56,9 @@ curl -H "$H" -H 'Content-Type: application/json' -d '{"id":"acme","name":"Acme",
 curl -H "$H" -H 'Content-Type: application/json' -d '{"remote_url":"/chemin/vers/depot.git"}' $API/join
 curl -H "$H" -X POST $API/acme/sync                                   # fetch + avance rapide, 409 sync_conflict si divergence
 curl -H "$H" "$API/acme/catalog?q=ca%20net&domain=finance&kind=kpi"   # aussi owner=, status=
+curl -H "$H" $API/acme/catalog/facets                                 # valeurs des filtres, avec libellés (plan 0011)
+curl -H "$H" $API/acme/index                                          # {fresh} : false si la prochaine lecture reconstruit
+curl -H "$H" $API/acme/documents/revenu-net/summary                   # aperçu : variation, déclinaisons, référencé par, dernière comparaison
 curl -H "$H" $API/acme/documents/revenu-net                           # ligne d'index, diagnostics, YAML
 curl -H "$H" $API/acme/documents/revenu-net/versions                  # tags doc/<id>/v<n>
 curl -H "$H" $API/acme/documents/revenu-net/versions/3                # contenu exact au tag
@@ -113,4 +116,4 @@ curl -H "$H" "$API/acme/comparisons?kpi=revenu-net&limit=20"          # historiq
 curl -H "$H" "$API/acme/comparisons/matrix?domain=finance"            # dernier résultat par KPI × déclinaison
 ```
 
-Tolérance : celle de la requête, sinon celle du KPI, sinon `tolerance.percent` de `governance.yaml`, sinon 1 %. Statuts : `running`, `done`, `partial`, `failed`, `cancelled`, et `interrupted` pour une comparaison restée en cours après l'arrêt du serveur. La colonne Convergence du catalogue en découle : `never_compared`, `converged` ou `divergences:n`.
+Tolérance : celle de la requête, sinon celle du KPI, sinon `tolerance.percent` de `governance.yaml`, sinon 1 %. Statuts : `running`, `done`, `partial`, `failed`, `cancelled`, et `interrupted` pour une comparaison restée en cours après l'arrêt du serveur. La colonne Convergence du catalogue en découle : `never_compared`, `converged`, `divergences:n` (écart sur une surcharge) ou `candidates:n` (écart sur une déclinaison from scratch seulement, ADR 0015).

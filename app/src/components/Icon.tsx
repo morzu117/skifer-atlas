@@ -39,6 +39,13 @@ const PATHS = {
     </>
   ),
   switcher: <path d="M7 9l5-5 5 5M7 15l5 5 5-5" />,
+  chevron: <path d="M6 9l6 6 6-6" />,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </>
+  ),
   lock: (
     <>
       <rect x="3" y="11" width="18" height="10" rx="2" />

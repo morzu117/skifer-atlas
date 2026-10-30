@@ -94,4 +94,11 @@
   --atlas-icon-sm: 16px;           /* boutons */
   --atlas-icon-banner: 20px;       /* bandeaux d'alerte */
   --atlas-dot: 10px;               /* pastilles d'état */
+
+  /* Ajouts du plan 0011 (catalogue) */
+  --atlas-search-basis: 320px;     /* champ de recherche : flex 1 1 320px */
+  --atlas-table-basis: 520px;      /* tableau maître : flex 999 1 520px */
+  --atlas-table-min-w: 560px;      /* en dessous, le tableau défile dans son conteneur */
+  --atlas-preview-basis: 300px;    /* aperçu : flex 1 1 300px */
+  --atlas-preview-w: 340px;        /* largeur maximale de l'aperçu */
 }

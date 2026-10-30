@@ -24,6 +24,52 @@ export type Workspace = {
 
 export type NewWorkspace = { id: string; name: string; sector: string; entities: string[] };
 
+/** `converged`, `candidates:n`, `divergences:n`, `never_compared` ; null pour un concept. */
+export type Convergence = string | null;
+
+export type CatalogRow = {
+  id: string;
+  kind: "concept" | "kpi";
+  label: string;
+  domain: string | null;
+  owner: string | null;
+  version: number | null;
+  status: string;
+  description: string | null;
+  synonyms: string[];
+  variant_count: number;
+  convergence: Convergence;
+};
+
+export type CatalogFilters = { q: string; domain: string; owner: string; status: string; kind: string };
+
+export type Facet = { value: string; label: string };
+export type Facets = { domain: Facet[]; owner: Facet[]; status: string[]; kind: string[] };
+
+export type DocumentSummary = {
+  id: string;
+  kind: string;
+  label: string;
+  domain: string | null;
+  domain_label: string | null;
+  owner: string | null;
+  owner_name: string | null;
+  version: number | null;
+  status: string;
+  description: string | null;
+  synonyms: string[];
+  variation_points: { node_id: string; label: string | null }[];
+  variants: { id: string; entity: string; mode: string }[];
+  referenced_by: { id: string; label: string; kind: string }[];
+  last_comparison: {
+    id: number;
+    finished_at: string | null;
+    kpi_version: number;
+    validation_pct: number | null;
+    stale: boolean;
+  } | null;
+};
+
 /** Erreur métier du serveur : `{"detail": {"code", "message", "issues"?}}`. */
 export class ApiError extends Error {
   constructor(
@@ -117,4 +163,12 @@ export const api = {
     request<Workspace>(`${ws(id)}/remote`, post({ remote_url: remoteUrl })),
   proposalsForMe: (id: string) =>
     request<{ id: number }[]>(`${ws(id)}/proposals?status=open&for_me=true`),
+  catalog: (id: string, filters: CatalogFilters) => {
+    const search = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== "")).toString();
+    return request<CatalogRow[]>(`${ws(id)}/catalog${search ? `?${search}` : ""}`);
+  },
+  facets: (id: string) => request<Facets>(`${ws(id)}/catalog/facets`),
+  indexState: (id: string) => request<{ fresh: boolean }>(`${ws(id)}/index`),
+  summary: (id: string, documentId: string) =>
+    request<DocumentSummary>(`${ws(id)}/documents/${encodeURIComponent(documentId)}/summary`),
 };
