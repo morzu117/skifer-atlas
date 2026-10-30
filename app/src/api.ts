@@ -255,6 +255,72 @@ export type Proposal = {
   approvals?: { obtained: number; required: number };
 };
 
+/** Nature d'une proposition (plan 0006) : elle fixe le nombre de validations requises. */
+export type Nature = "new_version" | "declared_point" | "undeclared" | "from_scratch" | "governance" | "access_points";
+
+export type ProposalStatus = "open" | "merged" | "closed" | "all";
+
+/** Élément de la file (plan 0014). Le décompte n'existe que pour une proposition ouverte. */
+export type ProposalItem = {
+  id: number;
+  title: string;
+  branch: string;
+  author: string;
+  state: "open" | "merged" | "closed";
+  created_at: string;
+  document_id: string;
+  document_kind: string;
+  kpi_id: string | null;
+  entity: string | null;
+  nature: Nature;
+  domain: string | null;
+  base_version: number | null;
+  version: number | null;
+  approvals?: { obtained: number; required: number };
+  approvers?: string[];
+  changes_requested_by?: string[];
+  ready_to_merge?: boolean;
+  mention?: string | null;
+  explanation?: string;
+};
+
+export type ProposalQueue = {
+  account: string;
+  role: Role;
+  review_domains: string[];
+  domains: { id: string; label: string }[];
+  entities: string[];
+  members: Record<string, string>;
+  items: ProposalItem[];
+};
+
+export type ProposalComment = { account: string; body: string; created_at: string };
+
+export type ProposalReview = { account: string; state: string; submitted_at: string; body: string; outdated: boolean };
+
+export type ProposalDetail = ProposalItem & {
+  justification: string;
+  reviews: ProposalReview[];
+  comments: ProposalComment[];
+  viewer: {
+    account: string;
+    can_review: boolean;
+    review_reason: string | null;
+    can_merge: boolean;
+    merge_reason: string | null;
+  };
+};
+
+export type ProposalGraphs = {
+  base: (GraphLayout & { label: string }) | null;
+  proposed: (GraphLayout & { label: string }) | null;
+  report: DiffReport | null;
+  undeclared: { node: string; label: string | null }[];
+  recurring: { node: string; label: string | null; entities: string[] }[];
+};
+
+export type MergeResult = { id: number; commit: string; tag: string | null; version: number | null };
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -383,6 +449,15 @@ export const api = {
   deleteDraft: (id: string, documentId: string) =>
     request<null>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}/draft`, { method: "DELETE" }),
   preview: (id: string, document: unknown) => request<ProposalPreview>(`${ws(id)}/editor/preview`, post({ document })),
+  proposalQueue: (id: string, status: ProposalStatus) =>
+    request<ProposalQueue>(`${ws(id)}/proposals/queue?status=${status}`),
+  proposal: (id: string, number: number) => request<ProposalDetail>(`${ws(id)}/proposals/${number}`),
+  proposalGraphs: (id: string, number: number) => request<ProposalGraphs>(`${ws(id)}/proposals/${number}/graphs`),
+  review: (id: string, number: number, event: "approve" | "request_changes", body = "") =>
+    request<ProposalItem>(`${ws(id)}/proposals/${number}/reviews`, post({ event, body })),
+  comment: (id: string, number: number, body: string) =>
+    request<ProposalComment>(`${ws(id)}/proposals/${number}/comments`, post({ body })),
+  merge: (id: string, number: number) => request<MergeResult>(`${ws(id)}/proposals/${number}/merge`, post({})),
   createProposal: (id: string, body: { document_yaml: string; justification: string; base_version: number | null }) =>
     request<Proposal>(`${ws(id)}/proposals`, post(body)),
   comparisons: (id: string, kpiId: string, limit: number) =>

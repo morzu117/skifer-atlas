@@ -90,10 +90,12 @@ J='Content-Type: application/json'
 curl -H "$H" -H "$J" -d '{"document_yaml":"…","justification":"Remises incluses.","base_version":4}' $API/acme/proposals
 curl -H "$H" "$API/acme/proposals?domain=finance&status=open"         # aussi kpi=, author=, entity= ; status=merged|closed|all
 curl -H "$H" "$API/acme/proposals?for_me=true"                        # celles qui attendent ma revue (awaiting_me)
-curl -H "$H" $API/acme/proposals/1                                    # justification, diff, revues, commentaires, YAML
+curl -H "$H" $API/acme/proposals/1                                    # justification, diff, revues, commentaires, YAML, viewer (ce que je peux faire, et pourquoi pas)
 curl -H "$H" -H "$J" -d '{"body":"Et les avoirs ?"}' $API/acme/proposals/1/comments
-curl -H "$H" -H "$J" -d '{"event":"approve"}' $API/acme/proposals/1/reviews   # ou request_changes
+curl -H "$H" -H "$J" -d '{"event":"approve"}' $API/acme/proposals/1/reviews   # ou request_changes, avec un body non vide (422 comment_required)
 curl -H "$H" -X POST $API/acme/proposals/1/merge                      # 409 not_ready tant que le décompte n'y est pas
+curl -H "$H" "$API/acme/proposals/queue?status=open"                  # écran 10.4 : file, review_domains, domaines, entités, membres
+curl -H "$H" $API/acme/proposals/1/graphs                             # deux graphes disposés, diff 0003, surcharges hors points et récurrentes
 curl -H "$H" $API/acme/governance                                     # gouvernance, diagnostics, rôle, single_referent
 curl -H "$H" -H "$J" -d '{"governance":{…},"justification":"…"}' $API/acme/governance
 curl -H "$H" -H "$J" -d '{"remote_url":"/chemin/vers/depot.git"}' $API/acme/remote

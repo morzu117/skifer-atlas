@@ -44,6 +44,17 @@ export const STATUS_LABELS: Record<string, string> = {
   invalid: "Invalide",
 };
 
+/** Badge de nature d'une proposition (guide 10.4) : orange plein hors points déclarés,
+ * orange bordé pour une variante from scratch, pâle sinon. */
+export const NATURES: Record<string, { label: string; tone: string }> = {
+  new_version: { label: "Nouvelle version", tone: "badge-pale" },
+  declared_point: { label: "Point déclaré", tone: "badge-pale" },
+  undeclared: { label: "Hors points déclarés", tone: "badge-warn-solid" },
+  from_scratch: { label: "From scratch", tone: "badge-warn" },
+  governance: { label: "Gouvernance", tone: "badge-pale" },
+  access_points: { label: "Point d'accès", tone: "badge-pale" },
+};
+
 export const KIND_LABELS: Record<string, string> = { concept: "Concept", kpi: "KPI" };
 
 /** 93.75 → « 93 % » : arrondi vers le bas, 100 % n'est affiché que s'il est atteint. */

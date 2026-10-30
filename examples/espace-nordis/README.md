@@ -71,6 +71,29 @@ Ce qu'on doit voir :
 - **Fusion** : le tag `doc/revenu-net/v5` est posé, le commit porte `Atlas-Review: approved by claire.m, marc.d`, et la fiche de Revenu net passe en v5.
 - **Gouvernance** : `GET $API/groupe-nordis/governance` signale que Marketing n'a pas de référent. `julien.h` est le seul référent d'espace : sa proposition de gouvernance est prête sans revue (`merge_mode: no_other_eligible`, ADR 0008).
 
+## Écran des propositions (plan 0014)
+
+`examples/propositions-nordis.py` ouvre sur le dépôt les cinq propositions de la maquette 10.4, avec leurs revues et un commentaire. Chaque auteur et chaque validateur agit sous son compte, dans un dossier de données temporaire. À lancer avant de rejoindre l'espace, sur un dépôt neuf :
+
+```sh
+examples/depot-nordis.sh "$DEMO"
+uv run --project core python examples/propositions-nordis.py "$DEMO/distant.git"
+```
+
+Ce qu'on doit voir dans Propositions, en `claire.m` (référente Finance) :
+
+- **File** : « Mes domaines » par défaut, quatre propositions Finance :
+  - nordis-de v4 et nordis-fr v3, « Hors points déclarés », 0 / 2 (canonique requis) ;
+  - Revenu net v5, 1 / 2 ;
+  - nordis-es v2, « From scratch », 1 / 2.
+
+  « Tous les domaines » ajoute Taux de service v3, Supply, 1 / 1, prête à fusionner.
+- **nordis-de** :
+  - le bandeau orange nomme n02 et le fuseau horaire, et suggère un point de variation : nordis-de et nordis-fr surchargent tous deux n02 ;
+  - à droite, n02 est « modifié · Divergence critique » et n03 « surchargé · Normal » ;
+  - sous le diff, la liste des trois écarts, puis la justification d'Anna K. et le commentaire de Claire M.
+- **Boutons** : en `anna.k`, « Approuver » est grisé (l'auteure ne compte pas), et en `sami.b` aussi (Supply). Après les approbations de `claire.m` et `marc.d`, « Fusionner » remplace les boutons. La fusion pose `doc/revenu-net--nordis-de/v4`.
+
 ## Compiler et exécuter (plan 0007)
 
 Depuis `core/` :

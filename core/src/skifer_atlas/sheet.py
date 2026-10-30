@@ -128,7 +128,7 @@ def sheet(connection: duckdb.DuckDBPyConnection, repo: Path, document_id: str) -
 
 # --- graphes -----------------------------------------------------------------------------
 
-def _resolved(document: Any, analysis: Analysis, label: str) -> ResolvedGraph:
+def resolved_graph(document: Any, analysis: Analysis, label: str) -> ResolvedGraph:
     """Le document prêt à disposer ou à comparer : une variante est résolue sur son
     canonique ; un document sans graphe ou en erreur est refusé."""
     if document is None:
@@ -153,12 +153,12 @@ def _at(repo: Path, analysis: Analysis, document_id: str, version: int | None) -
     if entry is None:
         raise RepoError("not_found", f"Document « {document_id} » introuvable.")
     if version is None:
-        return _resolved(entry.document, analysis, f"« {document_id} »")
+        return resolved_graph(entry.document, analysis, f"« {document_id} »")
     if version not in {v.version for v in repo_versions.versions(repo, document_id)}:
         raise RepoError("not_found", f"Version {version} de « {document_id} » introuvable.")
     text = repo_versions.document_at(repo, document_id, version, entry.file.path)
     label = f"La version {version} de « {document_id} »"
-    return _resolved(validate_text(text).document, analysis, label)
+    return resolved_graph(validate_text(text).document, analysis, label)
 
 
 def graph_layout(repo: Path, document_id: str, version: int | None = None) -> dict:
@@ -195,7 +195,7 @@ def extract_implementation(repo: Path, kpi_id: str, entity: str, platform: str) 
         draft = extraction.draft
         document = validate_text(draft.text()).document
         try:
-            other = _resolved(document, analysis, "Le brouillon")
+            other = resolved_graph(document, analysis, "Le brouillon")
         except RepoError:
             report = None
         else:

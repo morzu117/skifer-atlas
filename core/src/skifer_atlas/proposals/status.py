@@ -83,6 +83,9 @@ def get_proposal(workspace_id: str, number: int) -> dict:
     if not found["atlas"]:
         raise RepoError("not_found", f"La pull request #{number} n'est pas une proposition "
                         "Atlas.")
+    from .view import viewer  # évite un import circulaire
+
+    found["viewer"] = viewer(context, found)
     return found
 
 
@@ -94,6 +97,9 @@ def comment(workspace_id: str, number: int, body: str) -> dict:
 def review(workspace_id: str, number: int, event: str, body: str) -> dict:
     """Approuver ou demander des changements. Tout compte peut le faire ; seuls les
     comptes habilités comptent dans le décompte."""
+    if event == "request_changes" and not body.strip():
+        raise RepoError("comment_required", "Une demande de changements s'accompagne d'un "
+                        "commentaire qui dit quoi changer.")
     context = open_context(workspace_id)
     pull = context.host.get_pull_request(number)
     if pull.state != "open":

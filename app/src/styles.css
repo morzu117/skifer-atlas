@@ -663,3 +663,76 @@ textarea.prop-input { resize: vertical; }
 /* YAML plein écran */
 .editor-yaml { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--atlas-panel); }
 .yaml-editor { flex: 1; min-height: 0; overflow: hidden; }
+
+/* Propositions (10.4) : file 380 px à gauche, détail à droite. */
+.proposals {
+  display: flex; flex-wrap: wrap; align-items: stretch; min-width: 0;
+  background: var(--atlas-ground); border: var(--atlas-border) solid var(--atlas-line); border-radius: var(--atlas-radius-lg);
+  overflow: hidden;
+}
+.queue {
+  flex: 1 1 var(--atlas-queue-basis); max-width: var(--atlas-queue-w); min-width: 0; display: flex; flex-direction: column;
+  background: var(--atlas-panel); border-right: var(--atlas-border) solid var(--atlas-line);
+}
+.queue-head { display: flex; flex-direction: column; gap: var(--atlas-space-3); padding: var(--atlas-space-6) var(--atlas-space-5) var(--atlas-space-3); }
+.queue-filters { display: flex; gap: var(--atlas-space-2); flex-wrap: wrap; }
+.select select.select-filter { height: var(--atlas-control-h-filter); font-size: var(--atlas-text-sm); }
+.queue-empty { padding: var(--atlas-space-4) var(--atlas-space-5); }
+.queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.queue-item {
+  display: flex; flex-direction: column; gap: var(--atlas-space-2); padding: var(--atlas-space-4) var(--atlas-space-5);
+  border-top: var(--atlas-border) solid var(--atlas-line-soft); border-left: var(--atlas-border-accent) solid transparent;
+  color: var(--atlas-ink); text-decoration: none;
+}
+.queue-item:hover { background: var(--atlas-ground); color: var(--atlas-ink); }
+.queue-item.is-selected { background: var(--atlas-pale); border-left-color: var(--atlas-brand); }
+.queue-item-head { display: flex; justify-content: space-between; align-items: center; gap: var(--atlas-space-2); flex-wrap: wrap; }
+.queue-item-title { font-weight: 600; font-size: var(--atlas-text-base); }
+.queue-item-meta { font-size: var(--atlas-text-sm); color: var(--atlas-muted); }
+.queue-item.is-selected .queue-item-meta { color: var(--atlas-ink); } /* le gris secondaire n'atteint pas 4.5:1 sur le fond pâle */
+.queue-item-count { font-size: var(--atlas-text-sm); font-weight: 600; color: var(--atlas-brand); }
+.badge-warn-solid { background: var(--atlas-warn); color: var(--atlas-panel); }
+.proposal { flex: 999 1 var(--atlas-detail-basis); min-width: 0; display: flex; flex-direction: column; gap: var(--atlas-space-4); padding: var(--atlas-space-6) var(--atlas-space-7); }
+.proposal-body { display: flex; flex-direction: column; gap: var(--atlas-space-4); min-width: 0; }
+.proposal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--atlas-space-3); flex-wrap: wrap; }
+.proposal-title { display: flex; flex-direction: column; gap: var(--atlas-space-2); font-size: var(--atlas-text-md); min-width: 0; }
+.proposal-title h2 { margin: 0; font-size: var(--atlas-text-xl); }
+.proposal-actions { display: flex; gap: var(--atlas-space-2); flex-wrap: wrap; }
+.proposal-status { font-size: var(--atlas-text-md); }
+.btn-warn-outline { background: var(--atlas-panel); color: var(--atlas-warn); border: var(--atlas-border) solid var(--atlas-warn); }
+.btn-warn-outline:hover { background: var(--atlas-warn-bg); }
+/* Infobulle d'un bouton désactivé : au survol et au focus, lue via aria-describedby. */
+.has-tip { position: relative; display: inline-flex; }
+.tip {
+  position: absolute; top: calc(100% + var(--atlas-space-1)); right: 0; z-index: 2; width: var(--atlas-tip-w);
+  padding: var(--atlas-space-2) var(--atlas-space-3); border-radius: var(--atlas-radius-md);
+  background: var(--atlas-ink); color: var(--atlas-panel); font-size: var(--atlas-text-sm); line-height: 1.4;
+  visibility: hidden;
+}
+.has-tip:hover .tip, .has-tip:focus-within .tip { visibility: visible; }
+.proposal-diff { display: flex; flex-direction: column; gap: var(--atlas-space-4); min-width: 0; }
+.diff-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--atlas-diff-col-min)), 1fr)); gap: var(--atlas-space-4); }
+.diff-column { min-width: 0; }
+.diff-column .graph { margin: 0; }
+.proposal-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--atlas-queue-basis)), 1fr)); gap: var(--atlas-space-4); }
+.proposal-card h3, .diff-column h3, .proposal-diff .diff h3 { margin: 0; }
+.changes-form { max-width: var(--atlas-content-w); }
+.thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--atlas-space-3); font-size: var(--atlas-text-md); }
+.thread-item { display: flex; gap: var(--atlas-space-2); }
+.thread-text { display: flex; flex-direction: column; gap: var(--atlas-space-1); min-width: 0; overflow-wrap: anywhere; }
+.avatar-xs {
+  flex: 0 0 var(--atlas-avatar-xs); width: var(--atlas-avatar-xs); height: var(--atlas-avatar-xs); border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; font-size: var(--atlas-text-xs); font-weight: 600;
+  background: var(--atlas-pale); color: var(--atlas-brand);
+}
+.thread-reply { display: flex; flex-direction: column; gap: var(--atlas-space-2); font-size: var(--atlas-text-sm); color: var(--atlas-muted); }
+.thread-reply textarea { font: inherit; font-size: var(--atlas-text-md); color: var(--atlas-ink); padding: var(--atlas-space-2) var(--atlas-space-3); border: var(--atlas-border) solid var(--atlas-line); border-radius: var(--atlas-radius-md); resize: vertical; }
+.thread-reply .btn { align-self: flex-start; }
+/* Diff d'une proposition (guide 4) : surchargé sur un point déclaré en pointillé orange,
+   « Normal » en vert d'eau ; un nœud retiré est barré. */
+.graph-card-mark { display: flex; justify-content: space-between; gap: var(--atlas-space-1); align-self: stretch; }
+.graph-card-note { font-weight: 700; }
+.graph-card.mark-overridden { border: var(--atlas-border-strong) dashed var(--atlas-warn); background: var(--atlas-warn-bg); }
+.graph-card.mark-overridden .graph-card-mark { color: var(--atlas-warn); }
+.graph-card.mark-overridden .graph-card-note { color: var(--atlas-ok); }
+.graph-card.mark-removed .graph-card-title { text-decoration: line-through; }

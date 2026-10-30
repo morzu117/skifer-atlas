@@ -115,4 +115,13 @@
   --atlas-minimap-h: 70px;
   --atlas-bottom-h: 220px;         /* panneau bas : problèmes, colonnes, SQL */
   --atlas-canvas-min-h: 320px;
+
+  /* Ajouts du plan 0014 (propositions) */
+  --atlas-queue-basis: 320px;      /* file : flex 1 1 320px */
+  --atlas-queue-w: 380px;          /* largeur maximale de la file (guide 10.4) */
+  --atlas-detail-basis: 480px;     /* détail : flex 999 1 480px */
+  --atlas-control-h-filter: 36px;  /* listes de filtres de la file */
+  --atlas-diff-col-min: 440px;     /* en dessous, les deux graphes du diff s'empilent */
+  --atlas-avatar-xs: 26px;         /* auteur d'un commentaire */
+  --atlas-tip-w: 260px;            /* infobulle d'un bouton désactivé */
 }
