@@ -1,0 +1,32 @@
+schema_version: 1
+kind: kpi
+data_product:
+  id: clients-hors-france
+  version: 1
+  owner: claire.m
+  domain: ventes
+label: Clients hors France
+semantics:
+  calendar: {key: civil}
+  timezone: Europe/Paris
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: duckdb
+      table: ventes.clients
+      owner: claire.m
+      columns:
+        - {name: id_client, type: string}
+        - {name: pays, type: string}
+    - id: n02
+      type: filter
+      inputs: [n01]
+      condition: pays:not_equals:FR
+      nulls: drop
+    - id: n03
+      type: aggregate
+      inputs: [n02]
+      group_by: []
+      measures: [['*', clients, count]]
+  output: n03

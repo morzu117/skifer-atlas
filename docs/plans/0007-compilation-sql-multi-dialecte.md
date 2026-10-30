@@ -51,3 +51,50 @@ Même entrée, même SQL (testé par empreinte du SQL). Une fonction ou un type 
 
 ## Estimation
 **L**. Incertitudes : écarts fins de sémantique temporelle entre dialectes ; mécanisme d'échec du contrôle de cardinalité en Snowflake.
+
+## Mise en œuvre (30 octobre 2026)
+- **Paquets** (`core/src/skifer_atlas/`) :
+  - `compile/` :
+    - `builder.py` construit l'AST, une CTE par nœud, et expose `compile_document(document, dialect, scope, library, calendars) -> Compiled` et `compilability(...)` ;
+    - `dialects.py` regroupe les agrégats, le tri des nulls, l'échec volontaire et les exclusions par dialecte ;
+    - `cardinality.py` porte les CTE de contrôle et la garde, avec la table des mécanismes d'échec ;
+    - `calendar.py` lit `calendars/<key>.yaml` ;
+    - `scope.py` applique période, périmètre et granularité ;
+    - `errors.py` définit `CompileError` et `NotCompilable`.
+  - `run/duckdb_local.py` fournit `open_database` et `run_local`.
+
+  Les choix qui s'écartent du plan, ou qu'il ne fixait pas, sont dans l'**ADR 0010** :
+  - colonnes explicites plutôt que `SELECT *` ;
+  - garde de contrôles dans la requête, avec `CAST(message AS INT)` en Snowflake plutôt qu'une division par zéro ;
+  - `QUALIFY` dans les trois dialectes ;
+  - fuseaux suivis le long du graphe ;
+  - calendrier joint au grain du calendrier, et contrôle de couverture ;
+  - `CompileError` distincte de `NotCompilable`.
+- **CLI** :
+  - `atlas compile <doc> --dialect databricks|snowflake|duckdb [--out f]` ;
+  - `atlas compile <doc> --compilability`, qui rend du JSON et sort en 2 si un dialecte est exclu ;
+  - `atlas run <doc> --data <dossier>`, qui affiche un CSV sur la sortie standard ;
+  - options communes : `--with` (KPI référencés, canonique d'une variante), `--calendars` (par défaut, le dossier `calendars/` de l'espace du document), `--period`, `--perimeter` (répétable) et `--by` ;
+  - une variante se compile résolue sur son canonique.
+- **Fixtures** (`core/tests/fixtures/compile/`) :
+  - `revenu-net/` : données et résultat attendu pour le KPI de la démonstration (`examples/espace-nordis/`), avec son calendrier fiscal ;
+  - `catalogue/` : un KPI qui a un nœud de chaque type, `kpi_ref` compris, avec ses données ;
+  - `cardinalite/`, `nulls/`, `ratios/`, `fuseau/` (calendrier fiscal mensuel non civil) et `filtres/` ;
+  - `oracle/` : schéma et données des tables du corpus d'extraction ;
+  - `golden/` : le SQL de référence par dialecte. On le régénère avec `ATLAS_UPDATE_GOLDEN=1`.
+- **Tests** (`core/tests/compile/`) :
+  - `test_compile.py` :
+    - critères 1 à 8 ;
+    - SQL de référence par dialecte pour tous les types de nœuds ;
+    - opérateurs de filtre ;
+    - scope et ses erreurs ;
+    - calendriers (version, grain, couverture) ;
+    - propriété *hypothesis* sur l'ordre des filtres ;
+    - déterminisme entre processus (`PYTHONHASHSEED`) ;
+    - CLI.
+  - `test_oracle.py` (critère 9) : les brouillons 01 à 06 du corpus, complétés (types depuis `oracle/schema.yaml`, cardinalités `TODO` en N:1), donnent sur DuckDB le même multiensemble de lignes que le SQL source traduit de Databricks vers DuckDB. 07 et 08 ont des résidus bloquants.
+  - 75 tests ajoutés. Les neuf critères sont couverts, le 2 en Snowflake par re-parse seulement.
+- **Reste à faire** :
+  - exécuter à la main le SQL Databricks généré dans un éditeur SQL Databricks ;
+  - vérifier le mécanisme d'échec Snowflake sur un compte réel (plan 0018) ;
+  - traiter les écarts connus de l'ADR 0010 : division, `WEEK_START`, garde sur une sortie vide.

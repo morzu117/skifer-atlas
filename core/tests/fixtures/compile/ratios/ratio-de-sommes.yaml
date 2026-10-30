@@ -1,0 +1,34 @@
+schema_version: 1
+kind: kpi
+data_product:
+  id: ratio-de-sommes
+  version: 1
+  owner: claire.m
+  domain: finance
+label: Taux de marge (ratio de sommes)
+semantics:
+  calendar: {key: civil}
+  timezone: Europe/Paris
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: duckdb
+      table: ventes.lignes
+      owner: claire.m
+      columns:
+        - {name: ligne_id, type: string}
+        - {name: marge, type: double}
+        - {name: ca, type: double}
+    - id: n02
+      type: aggregate
+      inputs: [n01]
+      group_by: []
+      measures: [[marge, marge, sum], [ca, ca, sum]]
+    - id: n03
+      type: metric_op
+      inputs: [n02]
+      order: aggregate_first
+      metrics:
+        - {name: taux, expr: marge / ca}
+  output: n03

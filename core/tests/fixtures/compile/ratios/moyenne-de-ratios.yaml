@@ -1,0 +1,33 @@
+schema_version: 1
+kind: kpi
+data_product:
+  id: moyenne-de-ratios
+  version: 1
+  owner: claire.m
+  domain: finance
+label: Taux de marge (moyenne de ratios)
+semantics:
+  calendar: {key: civil}
+  timezone: Europe/Paris
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: duckdb
+      table: ventes.lignes
+      owner: claire.m
+      columns:
+        - {name: ligne_id, type: string}
+        - {name: marge, type: double}
+        - {name: ca, type: double}
+    - id: n02
+      type: compute
+      inputs: [n01]
+      column: taux_ligne
+      expr: marge / ca
+    - id: n03
+      type: aggregate
+      inputs: [n02]
+      group_by: []
+      measures: [[taux_ligne, taux, avg]]
+  output: n03

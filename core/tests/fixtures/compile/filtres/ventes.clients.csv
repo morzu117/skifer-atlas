@@ -1,0 +1,7 @@
+id_client,pays,age,actif,ouvert_le
+K1,FR,30,true,2020-01-01
+K2,DE,17,false,2021-05-01
+K3,,40,true,2019-03-03
+K4,BE,22,,2022-02-02
+X5,,50,true,2023-01-01
+K6,ES,60,false,2024-06-01

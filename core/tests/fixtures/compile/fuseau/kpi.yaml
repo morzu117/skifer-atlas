@@ -1,0 +1,43 @@
+schema_version: 1
+kind: kpi
+data_product:
+  id: commandes-par-mois-fiscal
+  version: 1
+  owner: claire.m
+  domain: ventes
+label: Commandes par mois fiscal
+semantics:
+  calendar: {key: fiscal-test, version: '2026.1'}
+  timezone: Europe/Paris
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: duckdb
+      table: ventes.commandes
+      owner: claire.m
+      columns:
+        - {name: commande_id, type: string}
+        - {name: passee_le, type: timestamp, timezone: UTC, format: yyyy-MM-dd HH:mm:ss}
+    - id: n02
+      type: temporal
+      label: Jour local
+      inputs: [n01]
+      operation: to_date
+      column: passee_le
+      target: jour
+      timezone: Europe/Paris
+    - id: n03
+      type: temporal
+      label: Mois fiscal
+      inputs: [n02]
+      operation: period
+      column: jour
+      target: mois_fiscal
+      grain: month
+    - id: n04
+      type: aggregate
+      inputs: [n03]
+      group_by: [mois_fiscal]
+      measures: [['*', commandes, count]]
+  output: n04

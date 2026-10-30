@@ -1,0 +1,5 @@
+order_id,customer_id,product_id,amount,amount_with_vat,discount,country
+O1,K1,P1,100.00,120.00,10.00,FR
+O2,K2,P2,250.50,300.60,0,IE
+O4,K1,P3,19.99,23.99,0,FR
+O7,K3,P9,5.00,6.00,0,BR
