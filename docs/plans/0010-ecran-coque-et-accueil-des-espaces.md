@@ -64,7 +64,7 @@ Brief 5.3, 10.0 ; guide 1, 2, 3.1 à 3.4, 5 (10.0), 6, 7 (formulaires et états 
   - « + Créer un espace » toujours visible, et « Rejoindre un espace » à côté ;
   - focus au titre à chaque vue ;
   - tokens ajoutés, valeurs arrondies à la base de 4 px ;
-  - écart de contraste du guide, à arbitrer.
+  - écart de contraste du guide, tranché par l'ADR 0014 (`--atlas-mid` et `--atlas-warn` foncés d'environ 10 %).
 - **Tests** :
   - `core/tests/repo/test_proposals.py` : `awaiting_me`, `for_me` et les compteurs (2 tests).
   - Vitest et Testing Library, `npm test`, 32 tests :
@@ -81,6 +81,5 @@ Brief 5.3, 10.0 ; guide 1, 2, 3.1 à 3.4, 5 (10.0), 6, 7 (formulaires et états 
     - navigation au clavier et axe-core sur l'accueil, la coque et le panneau (critère 10) ;
     - bandeau du serveur injoignable puis « Réessayer » (critère 5), simulé en coupant les requêtes vers le serveur.
 - **Reste à faire** :
-  - arbitrer l'écart de contraste du guide (`--atlas-warn` et `--atlas-mid`, ADR 0013) ;
   - vérifier à la main sous Tauri : `npm run tauri dev`, création, ouverture, bascule entre deux espaces ;
   - invitation d'utilisateurs (plan 0017).

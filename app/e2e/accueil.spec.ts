@@ -28,26 +28,12 @@ test.beforeAll(() => {
   git(root, "clone", "-q", "--bare", work, bare);
 });
 
-// Contraste : l'élément actif de la navigation (blanc sur --atlas-mid, 4,04:1), le compteur
-// orange (blanc sur --atlas-warn, 4,09:1) et le texte orange sur blanc (4,09:1) suivent le
-// guide de style, qui annonce 4,6:1. Écart signalé dans l'ADR 0013, en attente d'arbitrage.
-const GUIDE_CONTRAST = '[aria-current="page"], .nav-count, .count-warn';
-
+// Toute violation sérieuse, contraste compris (ADR 0014).
 async function seriousViolations(page: Page) {
   const { violations } = await new AxeBuilder({ page }).analyze();
-  const found = [];
-  for (const violation of violations.filter((v) => v.impact === "serious" || v.impact === "critical")) {
-    const nodes = [];
-    for (const node of violation.nodes) {
-      const selector = node.target.join(" ");
-      const guide =
-        violation.id === "color-contrast" &&
-        (await page.locator(selector).first().evaluate((el, s) => el.closest(s) !== null, GUIDE_CONTRAST));
-      if (!guide) nodes.push(node.html);
-    }
-    if (nodes.length > 0) found.push({ id: violation.id, nodes });
-  }
-  return found;
+  return violations
+    .filter((v) => v.impact === "serious" || v.impact === "critical")
+    .map((v) => ({ id: v.id, nodes: v.nodes.map((node) => node.html) }));
 }
 
 test("registre vide : carte vide, polices locales, accessibilité (critères 2, 9, 10)", async ({ page }) => {
