@@ -23,7 +23,7 @@ Brief 5, 10.7 ; guide 5 (10.7), 7 ; `screens/10.7-administration.html` ; ADR 000
 1. Un non-référent n'accède ni à l'écran ni à l'API (403).
 2. Ajouter un domaine sans référent affiche l'alerte.
 3. Un nombre de validateurs à 0 est refusé (min 1).
-4. Enregistrer crée une proposition dont le diff ne porte que sur `governance.yaml`.
+4. Enregistrer crée une proposition dont le diff ne porte que sur `governance.yaml` et le `CODEOWNERS` régénéré (ADR 0009).
 5. Renommer un domaine ne modifie que son libellé.
 6. Aucun champ ni texte de token sur l'écran.
 7. « Synchroniser » met à jour la date et réindexe.

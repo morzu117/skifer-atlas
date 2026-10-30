@@ -30,6 +30,7 @@ class Workspace(BaseModel):
     name: str
     sector: str = ""
     git_remote: str = ""
+    account: str = ""  # identité de l'utilisateur dans cet espace (compte de l'hébergeur)
     role: Role = "lecteur"
     domains: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)

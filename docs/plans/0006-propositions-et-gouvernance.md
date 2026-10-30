@@ -80,3 +80,69 @@ Un `base_version` qui n'est plus la version courante renvoie `stale_base` et ne 
 
 ## Estimation
 **L**. Incertitudes : choix de l'hébergeur ; protections de branche côté client ; fusion faite hors d'Atlas (sur l'hébergeur) à rattraper au `sync` (pose du tag par Atlas a posteriori).
+
+## Mise en œuvre (30 octobre 2026)
+- **Paquets** (`core/src/skifer_atlas/`) :
+  - `governance/` :
+    - `model.py` porte le schéma de `governance.yaml` (pydantic, `extra="forbid"`), ses contrôles de cohérence et les rôles ;
+    - `rules.py` porte le nombre requis et le décompte (`decide`), ADR 0008 compris ;
+    - `codeowners.py` génère `CODEOWNERS` et détecte une retouche manuelle.
+  - `githost/` :
+    - `base.py` déclare l'interface `GitHost`, implémentée par `github.py` (API REST, `urllib`, pagination) et par `local.py` (`LocalHost`) ;
+    - `host_for(url)` choisit l'hôte : une adresse GitHub donne GitHub, un chemin ou `file://` donne `LocalHost`, toute autre adresse donne `unsupported_host`.
+  - `proposals/` : `common.py` (contexte, bloc `atlas-proposal`, plomberie Git), `create.py`, `status.py` et `merge.py`.
+  - `api/routes/` : `proposals.py` et `governance.py`.
+  
+  Les choix qui s'écartent du plan, ou qu'il ne fixait pas, sont dans l'**ADR 0009** : version fixée à la création, union des rôles, demande de changements bloquante, forme de `CODEOWNERS`, jeton par assistant d'identification, identité.
+- **`governance.yaml`** :
+  - erreurs : `no_referent`, `unknown_member`, `unknown_domain`, `duplicate_member` et `duplicate_domain`, plus les erreurs de schéma (`validators_required` ≥ 1, rôles et plateformes connus, comptes au format GitHub) ;
+  - avertissement : `domain_without_referent`, qui alimente le bandeau 10.7 ;
+  - la démonstration (`examples/espace-nordis/`) passe au format complet, avec membres et rôles. Marketing y reste sans référent, et sert à montrer l'avertissement ;
+  - la création d'un espace écrit une gouvernance où le créateur est seul référent d'espace. Le registre local lit désormais le compte, le rôle et les domaines dans `governance.yaml`, à l'adhésion comme à chaque `sync`.
+- **Création** :
+  - la proposition part de `origin/<main>`, après une synchronisation ;
+  - le commit est construit sans toucher à la copie de travail, avec un index temporaire, puis l'arbre proposé est extrait dans un dossier temporaire ;
+  - ce dossier est contrôlé comme un clone (plans 0002 et 0005), avec les tags du dépôt pour les versions antérieures ;
+  - une erreur donne `invalid_document`, avec ses diagnostics, et rien n'est poussé ;
+  - la nature se déduit du document (`new_version`, `declared_point`, `undeclared`, `from_scratch`). Le domaine d'une variante est celui de son KPI ;
+  - le diff (plan 0003) se calcule contre la version courante pour un canonique, contre le canonique désigné pour une variante. Il est plafonné à 200 écarts dans le bloc ;
+  - les branches : `prop/<id>-canonical-<n>`, `prop/<kpi>-<entité>-<n>` ou `prop/governance-<n>`. Le rang `n` est le premier libre sur le distant.
+- **Rôles requis** :
+  - proposer un document : au moins `contributeur` (sinon `forbidden`, 403) ;
+  - proposer une gouvernance : référent d'espace ;
+  - approuver : tout compte peut le faire, mais seuls les habilités comptent. Avec les deux hôtes, l'auteur ne peut pas approuver sa propre proposition (`cannot_review_own`).
+- **Routes** (préfixe `/api/workspaces/{ws}`) :
+  - `GET /proposals` (filtres `domain`, `kpi`, `author`, `entity` ; `status` vaut `open`, `merged`, `closed` ou `all`) ;
+  - `POST /proposals` (201) et `GET /proposals/{n}` ; le détail ajoute la justification, le bloc, les revues (`outdated` si elles portent sur un ancien commit), les commentaires et le YAML proposé ;
+  - `POST /proposals/{n}/comments` (201), `POST /proposals/{n}/reviews` (`approve` ou `request_changes`) et `POST /proposals/{n}/merge` ;
+  - `GET /governance`, qui donne la gouvernance, ses diagnostics, le compte, le rôle et `single_referent` pour le bandeau de l'ADR 0008 ;
+  - `POST /governance` (201) crée une proposition de gouvernance ;
+  - `POST /remote` rattache un dépôt distant à un espace créé localement, et pousse la branche principale. Le plan 0017 en aura besoin.
+- **Décompte** : il est recalculé à chaque lecture, avec la gouvernance de la branche principale. Une règle qui change s'applique donc aux propositions déjà ouvertes. `merge_mode` vaut `reviewed` ou `no_other_eligible` ; `explanation` dit ce qui manque.
+- **Fusion** :
+  - Atlas revérifie le décompte sur la tête de branche et la base ;
+  - la fusion est un commit `--no-ff`, qui porte les trailers `Atlas-Proposal: #n` et `Atlas-Review` ;
+  - le tag `doc/<id>/v<n>` est posé sur ce commit et poussé, puis l'espace est synchronisé et réindexé ;
+  - avec `LocalHost`, la fusion se fait dans un clone temporaire du dépôt nu. Avec GitHub, elle passe par `PUT …/merge` avec le `sha` décompté : une tête qui a bougé donne `head_changed`.
+- **API**, codes ajoutés :
+  - 403 : `forbidden` ;
+  - 409 : `stale_base`, `not_ready`, `not_open`, `head_changed`, `merge_conflict`, `merge_refused`, `branch_protected` ;
+  - 422 : `invalid_document`, `invalid_governance`, `cannot_review_own`, `host_rejected`, `unsupported_host` ;
+  - 502 : `push_failed`, `host_auth_failed`, `host_forbidden`, `host_unreachable`, `host_failed`.
+  
+  Une erreur qui a des diagnostics les rend dans `detail.issues`.
+- **Variables d'environnement** :
+  - `ATLAS_GITHUB_TOKEN` porte le jeton GitHub, d'ici le coffre du plan 0008 ;
+  - `ATLAS_GITHUB_API_URL` désigne GitHub Enterprise ou un faux serveur ;
+  - `ATLAS_ACCOUNT` donne l'identité avec `LocalHost`.
+- **Tests** (`core/tests/repo/`) :
+  - `test_governance.py` : schéma, rôles, table des nombres requis, décompte, ADR 0008 et `CODEOWNERS` ;
+  - `test_proposals.py` : cycle complet par l'API sur `LocalHost`, avec changement de membre par `ATLAS_ACCOUNT` ;
+  - `test_githost.py` : client GitHub contre un faux serveur HTTP (`ThreadingHTTPServer`, pagination, erreurs) et hygiène du jeton ;
+  - le test réel est marqué `github` et ne tourne que si `ATLAS_GITHUB_TEST_REPO` et `ATLAS_GITHUB_TOKEN` sont définis. Il se limite à la lecture. Le cycle complet sur GitHub, avec deux comptes, reste à jouer à la main (critère 8) ;
+  - les treize critères sont couverts, le 8 en partie seulement.
+- **À la main** : sur la démonstration, avec `curl` et le serveur relancé sous trois comptes (`ATLAS_ACCOUNT`), on a enchaîné adhésion, proposition, deux approbations et fusion. Le commit de fusion porte `Atlas-Review: approved by claire.m, marc.d`, le tag `doc/revenu-net/v5` est posé et la fiche montre la v5.
+- **Reste à faire** :
+  - poser le tag au `sync` quand une PR a été fusionnée directement sur GitHub ;
+  - ajouter une route de révision d'une proposition, si l'écran 0014 en a besoin ;
+  - remplacer `ATLAS_GITHUB_TOKEN` par le coffre (plan 0008).

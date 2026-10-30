@@ -61,7 +61,8 @@ def test_create_workspace(atlas_env):
     repo = repo_dir("groupe-nordis")
     assert read_meta(repo) == meta
     governance = yaml.safe_load((repo / "governance.yaml").read_text(encoding="utf-8"))
-    assert governance["referents"] == [USER]
+    assert governance["members"] == [{"account": USER, "name": USER,
+                                      "roles": [{"role": "referent", "domains": []}]}]
     assert git(repo, "log", "--format=%s").splitlines() == ["Création de l'espace Groupe Nordis"]
     assert git(repo, "status", "--porcelain") == ""
     assert [w.id for w in list_workspaces()] == ["groupe-nordis"]
@@ -75,7 +76,7 @@ def test_create_workspace(atlas_env):
 def test_join_clones_and_registers(remote):
     bare, _ = remote
     joined = join_workspace(str(bare))
-    assert (joined.id, joined.role, joined.git_remote) == ("groupe-nordis", "lecteur", str(bare))
+    assert (joined.id, joined.role, joined.git_remote) == ("groupe-nordis", "referent", str(bare))
     assert joined.domains == ["finance", "ventes", "supply", "marketing"]
     repo = repo_dir("groupe-nordis")
     assert (repo / "kpis" / "revenu-net.yaml").exists()
@@ -115,7 +116,8 @@ def test_sync_fast_forwards(remote):
     (work / "atlas.yaml").write_text(yaml.safe_dump(meta, sort_keys=False), encoding="utf-8")
     pushed = commit_all(work, "Nouvelle entité : Italie")
     git(work, "push", "--quiet", "origin", "main")
-    assert sync_workspace("groupe-nordis") == {"status": "fast_forward", "commit": pushed}
+    assert sync_workspace("groupe-nordis") == {"status": "fast_forward", "commit": pushed,
+                                               "warnings": []}
     assert git(repo_dir("groupe-nordis"), "rev-parse", "HEAD").strip() == pushed
     assert get_workspace("groupe-nordis").entities[-1] == "nordis-it"
 

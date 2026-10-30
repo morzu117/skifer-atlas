@@ -2,7 +2,7 @@
 
 ```
 atlas.yaml                         # schema_version, id, name, sector, entities[], main_branch
-governance.yaml                    # plan 0006 ; ici seuls domains[] sont lus
+governance.yaml                    # domaines, membres, rôles (plan 0006)
 calendars/<key>.yaml               # format calendrier du moteur Skifer
 concepts/<id>.yaml
 kpis/<id>.yaml
@@ -22,6 +22,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..governance.model import Governance, parse_governance
 from ..paths import WORKSPACE_ID_PATTERN
 
 META_FILE = "atlas.yaml"
@@ -43,17 +44,6 @@ class WorkspaceMeta(BaseModel):
     main_branch: str = Field(default="main", pattern=r"^[A-Za-z0-9._/-]+$")
 
 
-class Governance(BaseModel):
-    """`governance.yaml`, dans la mesure où le plan 0005 le lit (domaines). Le plan 0006
-    en fera le modèle complet ; les autres clés sont gardées telles quelles."""
-
-    model_config = ConfigDict(extra="allow")
-
-    schema_version: Literal[1] = 1
-    domains: list[str] = Field(default_factory=list)
-    referents: list[str] = Field(default_factory=list)
-
-
 @dataclass(frozen=True)
 class DocumentFile:
     kind: str  # concept | kpi | variant, d'après le dossier
@@ -65,9 +55,12 @@ def read_meta(root: Path) -> WorkspaceMeta:
     return WorkspaceMeta.model_validate(_load(root / META_FILE))
 
 
-def read_governance(root: Path) -> Governance:
+def read_governance(root: Path) -> Governance | None:
+    """La gouvernance du dépôt, ou None si elle manque ou n'est pas valide."""
     path = root / GOVERNANCE_FILE
-    return Governance.model_validate(_load(path) if path.exists() else {})
+    if not path.exists():
+        return None
+    return parse_governance(path.read_text(encoding="utf-8"))[0]
 
 
 def _load(path: Path) -> dict:
