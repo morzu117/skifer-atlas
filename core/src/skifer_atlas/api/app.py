@@ -17,7 +17,16 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..repo import RepoError
-from .routes import catalog, comparisons, connections, governance, proposals, sheet, workspaces
+from .routes import (
+    catalog,
+    comparisons,
+    connections,
+    editor,
+    governance,
+    proposals,
+    sheet,
+    workspaces,
+)
 
 # Code d'erreur métier → statut HTTP ; un code absent donne 500.
 ERROR_STATUS = {
@@ -27,6 +36,7 @@ ERROR_STATUS = {
     "workspace_exists": 409,
     "sync_conflict": 409,
     "stale_base": 409,
+    "document_exists": 409,
     "not_ready": 409,
     "not_open": 409,
     "head_changed": 409,
@@ -126,6 +136,7 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
     app.include_router(workspaces.router, dependencies=protected)
     app.include_router(catalog.router, dependencies=protected)
     app.include_router(sheet.router, dependencies=protected)
+    app.include_router(editor.router, dependencies=protected)
     app.include_router(proposals.router, dependencies=protected)
     app.include_router(governance.router, dependencies=protected)
     app.include_router(connections.router, dependencies=protected)

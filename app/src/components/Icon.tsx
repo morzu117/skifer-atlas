@@ -41,6 +41,22 @@ const PATHS = {
   switcher: <path d="M7 9l5-5 5 5M7 15l5 5 5-5" />,
   chevron: <path d="M6 9l6 6 6-6" />,
   back: <path d="M15 18l-6-6 6-6" />,
+  check: <path d="M20 6L9 17l-5-5" />,
+  code: <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />,
+  pointer: <path d="M4 3l16 7-7 2-2 7z" />,
+  hand: (
+    <>
+      <path d="M18 11V6a2 2 0 0 0-4 0v1M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8" />
+      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-5.9-2.5L3.2 16.1a2 2 0 0 1 2.8-2.8L7 14" />
+    </>
+  ),
+  edge: (
+    <>
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
+      <path d="M7 12h10" />
+    </>
+  ),
   search: (
     <>
       <circle cx="11" cy="11" r="7" />

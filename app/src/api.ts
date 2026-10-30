@@ -188,6 +188,73 @@ export type ComparisonRun = {
 };
 
 /** Erreur métier du serveur : `{"detail": {"code", "message", "issues"?}}`. */
+// --- Éditeur (plan 0013) ---------------------------------------------------------------
+
+export type Issue = { path: string; node_id: string | null; code: string; message: string; severity: "error" | "warning" | "info" };
+
+export type Compiled =
+  | { status: "ok"; sql: string; node_sql: string | null }
+  | { status: "not_compilable" | "error"; node_id: string | null; reason: string }
+  | { status: "blocked" };
+
+export type CheckResult = {
+  yaml: string;
+  fragments: Record<string, string>;
+  issues: Issue[];
+  status: { schema: boolean; acyclic: boolean; cycle: string[] | null; compilable: Record<string, Compiled> };
+  columns: Record<string, [string, string | null][]>;
+  submittable: boolean;
+};
+
+export type Vocabulary = {
+  operators: { name: string; arity: "none" | "single" | "list"; label: string }[];
+  aggregates: string[];
+  platforms: string[];
+  column_types: string[];
+};
+
+export type EditorDraft = {
+  document: Record<string, unknown>;
+  positions: Record<string, { x: number; y: number }>;
+  highest: number;
+  base_version: number | null;
+  saved_at: string;
+};
+
+export type EditorDocument = {
+  id: string;
+  mode: "canonical" | "override" | "from_scratch";
+  kind: "concept" | "kpi" | "variant";
+  base_version: number | null;
+  document: Record<string, unknown>;
+  canonical: Record<string, unknown> | null;
+  highest: number;
+  positions: Record<string, { x: number; y: number }> | null;
+  draft: EditorDraft | null;
+  calendars: { key: string; version: string }[];
+  domains: { id: string; label: string }[];
+  vocabulary: Vocabulary;
+};
+
+export type NewDocument = { kind: "concept" | "kpi"; id: string; label: string; domain: string; owner: string };
+
+export type ProposalPreview = {
+  nature: string;
+  domain: string | null;
+  required: number;
+  mention: string | null;
+  diff: DiffReport | null;
+};
+
+export type Proposal = {
+  id: number;
+  title: string;
+  branch: string;
+  state: string;
+  version?: number;
+  approvals?: { obtained: number; required: number };
+};
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -264,6 +331,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     throw new UnreachableError("Le serveur local ne répond pas.");
   }
   if (!res.ok) throw await errorOf(res);
+  if (res.status === 204) return null as T;
   return res.json() as Promise<T>;
 }
 
@@ -300,6 +368,23 @@ export const api = {
       { method: "POST" },
     ),
   draft: (id: string, documentId: string) => request<Draft>(`${doc(id, documentId)}/draft`),
+  editorOpen: (id: string, documentId: string) =>
+    request<EditorDocument>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}`),
+  editorNew: (id: string, body: NewDocument) => request<EditorDocument>(`${ws(id)}/editor/documents`, post(body)),
+  editorCheck: (id: string, document: unknown, nodeId: string | null) =>
+    request<CheckResult>(`${ws(id)}/editor/check`, post({ document, node_id: nodeId })),
+  editorParse: (id: string, text: string) =>
+    request<{ document: Record<string, unknown> | null; issues: Issue[] }>(`${ws(id)}/editor/parse`, post({ text })),
+  saveDraft: (id: string, documentId: string, draft: Omit<EditorDraft, "saved_at">) =>
+    request<{ saved_at: string }>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}/draft`, {
+      method: "PUT",
+      body: JSON.stringify(draft),
+    }),
+  deleteDraft: (id: string, documentId: string) =>
+    request<null>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}/draft`, { method: "DELETE" }),
+  preview: (id: string, document: unknown) => request<ProposalPreview>(`${ws(id)}/editor/preview`, post({ document })),
+  createProposal: (id: string, body: { document_yaml: string; justification: string; base_version: number | null }) =>
+    request<Proposal>(`${ws(id)}/proposals`, post(body)),
   comparisons: (id: string, kpiId: string, limit: number) =>
     request<ComparisonRun[]>(`${ws(id)}/comparisons?kpi=${encodeURIComponent(kpiId)}&limit=${limit}`),
 };

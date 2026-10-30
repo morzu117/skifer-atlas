@@ -32,6 +32,10 @@ const KNOWN: Record<string, Explained> = {
     title: "Adresse de dépôt invalide",
     text: "Donnez une adresse HTTPS, SSH ou un chemin vers un dépôt Git.",
   },
+  document_exists: {
+    title: "Identifiant déjà pris",
+    text: "Un document ou un brouillon porte déjà cet identifiant. Proposez une modification depuis sa fiche, ou choisissez-en un autre.",
+  },
   workspace_exists: {
     title: "Identifiant déjà pris",
     text: "Un espace porte déjà cet identifiant sur ce poste. Choisissez-en un autre.",

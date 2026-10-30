@@ -580,8 +580,10 @@ def compile_document(document: Any, dialect: str, scope: Scope | None = None,
         builder.add("atlas_guard", cardinality.guard(builder.checks, dialect))
         query = query.where(exp.select("failure").from_("atlas_guard").subquery().is_(
             exp.null()))
+    # Sans copie : chaque CTE appartient au constructeur, et recopier la requête à chaque
+    # ajout rendait la compilation quadratique (plan 0013, validation sous 150 ms).
     for name, cte in builder.ctes:
-        query = query.with_(name, as_=cte)
+        query = query.with_(name, as_=cte, copy=False)
     sql = query.sql(dialect=dialect, pretty=True)
     return Compiled(dialect, _header(document, dialect, builder) + sql + "\n",
                     builder.checked, builder.bypassed, list(builder.sources.values()))
