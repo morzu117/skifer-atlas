@@ -45,7 +45,7 @@ Tests de l'interface, depuis `app/` :
 
 ```bash
 npm test                          # Vitest + Testing Library : composants, routes, tokens
-npx playwright install chromium   # une fois
+npx playwright install chromium webkit   # une fois ; WebKit est le moteur de Tauri sous macOS
 npm run e2e                       # Playwright : l'app Vite contre un serveur Python sur un dossier temporaire
 ```
 

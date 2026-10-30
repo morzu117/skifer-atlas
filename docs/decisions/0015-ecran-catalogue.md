@@ -58,6 +58,11 @@ Le plan 0011 branche l'écran 10.1 sur l'index et ajoute deux routes : les facet
   - L'aperçu passe sous le tableau dès que la zone principale ne peut plus contenir les deux (520 + 20 + 300 px). Avec la barre latérale et les marges, cela arrive sous environ 1136 px de fenêtre, donc bien sous 900 px comme le veut le guide. Entre 960 et 1136 px, l'aperçu est déjà sous le tableau.
   - Les cinq nouvelles mesures sont des tokens : `--atlas-search-basis`, `--atlas-table-basis`, `--atlas-table-min-w`, `--atlas-preview-basis` et `--atlas-preview-w`.
 
+- **Listes déroulantes.**
+  - La vue de Tauri sous macOS est WebKit. Il ignore la hauteur d'un `<select>` natif : les filtres y tombaient à 22 px au lieu des 44 px du guide.
+  - `components/Select.tsx` retire l'apparence native (`appearance: none`) et dessine le chevron. Le rendu est le même sous WebKit et sous Chromium.
+  - Un projet Playwright WebKit (`*.webkit.spec.ts`) vérifie ces hauteurs. Les autres scénarios restent sous Chromium.
+
 ## Conséquences
 
 - La convergence d'un KPI dépend du mode de ses déclinaisons. Une surcharge qui s'écarte rend le KPI divergent, même si ses autres déclinaisons sont candidates.

@@ -10,6 +10,7 @@ import {
 } from "../api";
 import { Banner } from "../components/Banner";
 import { Icon } from "../components/Icon";
+import { Select } from "../components/Select";
 import { ago, convergence, KIND_LABELS, percent, STATUS_LABELS } from "../format";
 import { explain, type Explained } from "../messages";
 import { href, setParams, type Params } from "../router";
@@ -169,7 +170,7 @@ export function Catalogue({
         {FILTERS.map(({ key, label, all }) => (
           <label key={key} className="filter">
             {label}
-            <select value={filters[key]} onChange={(event) => setParams({ [key]: event.target.value }, { push: true })}>
+            <Select value={filters[key]} onChange={(event) => setParams({ [key]: event.target.value }, { push: true })}>
               <option value="">{all}</option>
               {options(key).map((option) => (
                 <option key={option.value} value={option.value}>
@@ -179,7 +180,7 @@ export function Catalogue({
               {filters[key] !== "" && !options(key).some((option) => option.value === filters[key]) && (
                 <option value={filters[key]}>{filters[key]}</option>
               )}
-            </select>
+            </Select>
           </label>
         ))}
       </div>

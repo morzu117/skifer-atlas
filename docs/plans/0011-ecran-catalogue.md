@@ -76,7 +76,9 @@ Brief 10.1, 5.3 ; guide 3.4 (badges, convergence), 3.5, 5 (10.1) ; `screens/10.1
     - aperçu sous le tableau à 880 px (critère 6) ;
     - « Jamais comparé », puis « 1 divergence » et la dernière comparaison après une vraie comparaison locale (critère 7).
 
+    `e2e/rendu.webkit.spec.ts` (WebKit, le moteur de Tauri sous macOS) : recherche et filtres à 44 px. La vérification sous Tauri avait montré des listes déroulantes à 22 px, corrigées par `components/Select.tsx`.
+
     axe-core passe sans exception, ligne sélectionnée comprise. `e2e/demo.ts` regroupe le dépôt de démonstration et le contrôle axe, partagés avec `accueil.spec.ts`.
 - **Reste à faire** :
-  - à la main : recherche avec accents, puis navigation au clavier sous Tauri ;
+  - à la main sous Tauri : la recherche, les filtres, l'aperçu et le passage sous le tableau ont été vérifiés. Restent à faire la recherche avec accents et la navigation au clavier ;
   - la fiche (0012) et l'éditeur (0013), aujourd'hui des emplacements.

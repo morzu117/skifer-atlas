@@ -234,11 +234,15 @@ a.btn { text-decoration: none; } /* lien d'action : même allure qu'un bouton */
   font: inherit; font-size: var(--atlas-text-base); color: var(--atlas-ink);
 }
 .filter { display: flex; align-items: center; gap: var(--atlas-space-2); font-size: var(--atlas-text-md); color: var(--atlas-muted); }
-.filter select {
-  min-height: var(--atlas-control-h); padding: 0 var(--atlas-space-2); color: var(--atlas-ink);
+/* Liste déroulante (components/Select.tsx) : sans apparence native, que WebKit garde à sa hauteur. */
+.select { position: relative; display: inline-flex; align-items: center; }
+.select select {
+  appearance: none; -webkit-appearance: none; height: var(--atlas-control-h); margin: 0;
+  padding: 0 calc(var(--atlas-space-3) + var(--atlas-icon-sm)) 0 var(--atlas-space-3); color: var(--atlas-ink);
   border: var(--atlas-border) solid var(--atlas-line); border-radius: var(--atlas-radius-md); background: var(--atlas-panel);
-  font: inherit; font-size: var(--atlas-text-base);
+  font: inherit; font-size: var(--atlas-text-base); cursor: pointer;
 }
+.select-chevron { position: absolute; right: var(--atlas-space-2); pointer-events: none; color: var(--atlas-muted); }
 .catalogue { display: flex; gap: var(--atlas-space-5); align-items: flex-start; flex-wrap: wrap; }
 .table-wrap {
   flex: 999 1 var(--atlas-table-basis); min-width: 0; overflow-x: auto;
