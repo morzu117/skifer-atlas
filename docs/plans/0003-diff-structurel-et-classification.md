@@ -83,3 +83,37 @@ L'ordre des `differences` est déterministe : ordre topologique de `base`, puis 
 
 ## Estimation
 **L**. Incertitudes : qualité de l'appariement par score sur des graphes from scratch réels, qu'il faudra calibrer sur les extractions du plan 0004 ; frontière entre `cosmetic` et renommage significatif.
+
+## Mise en œuvre (30 octobre 2026)
+- Paquet `core/src/skifer_atlas/diff/` : `align.py`, `compare.py`, `classify.py`, `report.py` (modèle de sortie, calcul, rendu texte). La normalisation expose désormais `logical_graph()`, que l'empreinte et le diff partagent : suites de filtres regroupées en `filter_set`, contenus sans métadonnées, encore désignés par les identifiants du document. `ResolvedGraph` garde la variante résolue (`variant`), pour nommer `other` dans le rapport.
+- **Court-circuit** : il faut une empreinte égale, une sémantique égale et des métadonnées égales nœud par nœud. L'empreinte ignore libellés et notes : sans ce dernier test, le critère 5 (libellé seul, `cosmetic`) serait masqué. Un diff complet sans aucun écart rend aussi `identical: true`.
+- **Alignement** :
+  - par identifiant ; une suite de filtres s'apparie par n'importe lequel de ses membres ;
+  - puis glouton par score, recalculé après chaque paire ;
+  - le type comparé inclut l'opération d'un nœud temporel : un `to_date` n'est jamais apparié à un `period` ;
+  - « concept commun aux colonnes touchées » : une colonne liée par un `binding` compte pour l'attribut du concept, sinon pour son nom ; deux sources rattachées au même concept prennent +3 ;
+  - la profondeur est le nombre d'opérations structurantes sur le plus long chemin amont ;
+  - départage par ordre topologique de `base`, puis d'`other` ; la forme canonique n'est jamais nécessaire, les positions étant uniques ;
+  - un score de 3 ou 4 est « faible » (`LOW_SCORE = 5`) : l'écart est classé `to_verify`, sauf s'il est critique ou s'il relève d'une surcharge ou du from scratch.
+- **Comparaison** :
+  - un filtre seul se lit `condition` + `nulls` ; une suite, `conditions` (forme triée `col:op:val|nulls`) ;
+  - les métadonnées (`label`, `note`, `owner`, `bypass_reason`) sont des changements cosmétiques ;
+  - le calendrier n'est comparé qu'une fois, au niveau `semantics`, avec `timezone` et `currency` (écart de sémantique : `node_ref` nul, `node_type: semantics`) ;
+  - un changement de devise est classé `to_verify` / `warn`.
+- **Renommage cohérent** : le nouveau nom d'une colonne produite (calcul, cible temporelle, mesure, métrique, colonne d'union) est substitué en aval avant comparaison. Un renommage suivi partout ne donne qu'un écart `cosmetic`, sur le nœud qui produit la colonne. Les `binding` servent de renommage initial (ES : `sociedad` ↔ `entite`).
+- **Équivalence d'expressions** : parenthèses retirées (l'arbre porte déjà les priorités), simplification SQLGlot, opérandes de `+`, `*`, `AND`, `OR`, `=`, `<>` triés. Équivalence démontrée : `cosmetic` / `info`. Sinon : `to_verify` / `warn`.
+- **Entrées et ordre** :
+  - les entrées d'une paire se comparent après avoir remonté les nœuds non appariés. Si elles diffèrent, le changement s'appelle `inputs`, il est critique, et le message dit « nœud déplacé dans le flux » (un filtre passé de l'autre côté d'une jointure, par exemple) ;
+  - `reordered` : deux opérations structurantes appariées (hors sources) dont l'ordre d'ascendance s'inverse. Un écart par paire inversée, sur le nœud amont de `base`, avec `changes: [{field: "order", …}]`. Les changements d'entrées qu'une inversion explique ne sont pas répétés.
+- **Gravité** :
+  - écarts critiques ajoutés à la spécification : `grain` d'un découpage, `having`, `order` et `aggregate` d'un `metric_op`, fuseau ou format d'une colonne de source, filtre ajouté ou retiré ;
+  - un calcul ajouté ou retiré est `warn` ;
+  - un écart ni critique ni cosmétique (table source, mode d'union, colonne d'un nœud temporel…) est classé `to_verify`.
+- Les classes `override_*` ne s'appliquent qu'en relation `override` : comparer deux variantes entre elles (`free`) ne réutilise pas leur classement de surcharge.
+- **`summary`** : l'exemple mélangeait gravité et classe. Le rapport donne `{by_classification: {…six classes…}, by_severity: {info, warn, critical}}`.
+- **CLI** :
+  - la relation est déduite : `b` variante de `a` donne son mode ; même identifiant, `version` ; sinon `free` ;
+  - `--canonical` et `--with` complètent la bibliothèque ;
+  - un document qui ne passe pas `atlas check` donne le code 1 ;
+  - `atlas schema --kind diff` publie `core/schemas/diff-report.v1.schema.json` ;
+  - rapports « golden » dans `core/tests/fixtures/diff/`, à régénérer avec `ATLAS_UPDATE_GOLDEN=1`.

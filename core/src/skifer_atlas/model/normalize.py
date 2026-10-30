@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from .functions import normalized_sql
@@ -50,7 +51,31 @@ def _content(node: Any, inputs: list[str], calendar: dict | None) -> dict:
     return content
 
 
-def normalized_form(document: Any) -> dict:
+@dataclass(frozen=True)
+class LogicalNode:
+    """Nœud de la forme normalisée, encore désigné par les identifiants du document.
+
+    Une suite de filtres devient un seul `filter_set`, désigné par son dernier filtre ;
+    `members` garde les nœuds du document regroupés (un seul hors `filter_set`).
+    """
+
+    id: str
+    type: str
+    content: dict
+    inputs: list[str]
+    members: tuple[Any, ...]
+
+
+@dataclass
+class LogicalGraph:
+    nodes: dict[str, LogicalNode]  # dans l'ordre topologique du document
+    output: str
+    signature: dict[str, str]  # signature de Merkle : contenu et amont
+
+
+def logical_graph(document: Any) -> LogicalGraph:
+    """Étapes 1, 2 et 4 de la normalisation : suites de filtres regroupées, métadonnées
+    retirées, nœuds qui ne mènent pas à la sortie ignorés."""
     view = GraphView(document.graph)
     if not view.is_dag():
         raise ValueError("Le graphe doit être un DAG sans entrée inconnue pour être normalisé.")
@@ -58,8 +83,8 @@ def normalized_form(document: Any) -> dict:
     calendar = semantics.calendar.model_dump(exclude_none=True) if semantics else None
     useful = view.ancestors_of_output()
 
-    # 1. Suites de filtres : chaque filtre rejoint le groupe de son entrée si celle-ci est un
-    #    filtre qu'il est seul à consommer. Le groupe est désigné par son dernier filtre.
+    # Suites de filtres : chaque filtre rejoint le groupe de son entrée si celle-ci est un
+    # filtre qu'il est seul à consommer. Le groupe est désigné par son dernier filtre.
     group_of: dict[str, list[str]] = {}
     for node_id in view.topological_order():
         node = view.by_id[node_id]
@@ -73,7 +98,7 @@ def normalized_form(document: Any) -> dict:
             group = [node_id]
         group_of[node_id] = group
 
-    logical: dict[str, tuple[str, dict, list[str]]] = {}  # id → (type, contenu, entrées)
+    nodes: dict[str, LogicalNode] = {}
     for node_id in view.topological_order():
         if node_id not in useful:
             continue
@@ -81,27 +106,35 @@ def normalized_form(document: Any) -> dict:
         if node.type == "filter":
             if node_id not in group_of:
                 continue  # filtre intérieur d'une suite
-            members = [view.by_id[m] for m in group_of[node_id]]
+            members = tuple(view.by_id[m] for m in group_of[node_id])
             conditions = sorted(_condition(m.condition, m.nulls) for m in members)
-            logical[node_id] = ("filter_set", {"conditions": conditions}, list(members[0].inputs))
+            nodes[node_id] = LogicalNode(
+                node_id, "filter_set", {"conditions": conditions}, list(members[0].inputs),
+                members,
+            )
         else:
             inputs = view.inputs(node_id)
-            logical[node_id] = (node.type, _content(node, inputs, calendar), inputs)
+            nodes[node_id] = LogicalNode(
+                node_id, node.type, _content(node, inputs, calendar), inputs, (node,)
+            )
 
-    # 2. Signature de Merkle : type, contenu et signatures des entrées, dans l'ordre.
     signature: dict[str, str] = {}
-    for node_id in view.topological_order():
-        if node_id in logical:
-            kind, content, inputs = logical[node_id]
-            payload = _canonical_json([kind, content, [signature[i] for i in inputs]])
-            signature[node_id] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    for node_id, node in nodes.items():
+        payload = _canonical_json([node.type, node.content, [signature[i] for i in node.inputs]])
+        signature[node_id] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return LogicalGraph(nodes, view.output, signature)
 
-    # 3. Ordre topologique départagé par (type, contenu, signature) ; renumérotation.
+
+def normalized_form(document: Any) -> dict:
+    graph = logical_graph(document)
+    logical = graph.nodes
+
+    # Étape 3 : ordre topologique départagé par (type, contenu, signature) ; renumérotation.
     def rank(node_id: str) -> tuple[str, str, str]:
-        kind, content, _ = logical[node_id]
-        return kind, _canonical_json(content), signature[node_id]
+        node = logical[node_id]
+        return node.type, _canonical_json(node.content), graph.signature[node_id]
 
-    remaining = {node_id: set(inputs) for node_id, (_, _, inputs) in logical.items()}
+    remaining = {node_id: set(node.inputs) for node_id, node in logical.items()}
     new_id: dict[str, str] = {}
     while remaining:
         ready = sorted((n for n, deps in remaining.items() if deps <= new_id.keys()), key=rank)
@@ -111,7 +144,8 @@ def normalized_form(document: Any) -> dict:
 
     nodes = []
     for old_id in sorted(new_id, key=new_id.__getitem__):
-        kind, content, inputs = logical[old_id]
+        node = logical[old_id]
+        kind, content, inputs = node.type, node.content, node.inputs
         entry: dict[str, Any] = {"id": new_id[old_id], "type": kind}
         if kind == "join":
             entry["inputs"] = {"left": new_id[inputs[0]], "right": new_id[inputs[1]]}
@@ -125,5 +159,5 @@ def normalized_form(document: Any) -> dict:
         nodes.append(entry)
     return {
         "normalization": NORMALIZATION,
-        "graph": {"nodes": nodes, "output": new_id[view.output]},
+        "graph": {"nodes": nodes, "output": new_id[graph.output]},
     }
