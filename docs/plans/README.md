@@ -1,5 +1,7 @@
 Plans spec-driven, un par fichier, numérotés (voir docs/KICKOFF.md). Analyse préalable : `docs/analysis.md`.
 
+Statut : plans validés le 30 octobre 2026, développement lancé par le plan 0001.
+
 | Plan | Titre | Livrable observable | Dépend de | Taille |
 |---|---|---|---|---|
 | 0001 | Modèle des dix nœuds et YAML versionné | `atlas validate`, `atlas schema` | — | M |
