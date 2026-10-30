@@ -264,6 +264,22 @@
           "title": "Kind",
           "type": "string"
         },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "draft",
+                "needs_curation"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
         "data_product": {
           "$ref": "#/$defs/DataProduct"
         },
@@ -289,7 +305,16 @@
           "title": "Synonyms"
         },
         "entity": {
-          "$ref": "#/$defs/Entity"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Entity"
+            },
+            {
+              "const": "TODO",
+              "type": "string"
+            }
+          ],
+          "title": "Entity"
         },
         "variation_points": {
           "anyOf": [
@@ -311,6 +336,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Graph"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "extraction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extraction"
             },
             {
               "type": "null"
@@ -427,9 +463,17 @@
           "type": "string"
         },
         "domain": {
-          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
-          "title": "Domain",
-          "type": "string"
+          "oneOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+              "type": "string"
+            },
+            {
+              "const": "TODO",
+              "type": "string"
+            }
+          ],
+          "title": "Domain"
         },
         "description": {
           "anyOf": [
@@ -626,6 +670,57 @@
         "expr"
       ],
       "title": "ExprCondition",
+      "type": "object"
+    },
+    "Extraction": {
+      "additionalProperties": false,
+      "properties": {
+        "source_file": {
+          "pattern": "\\S",
+          "title": "Source File",
+          "type": "string"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "dialect": {
+          "enum": [
+            "databricks",
+            "snowflake"
+          ],
+          "title": "Dialect",
+          "type": "string"
+        },
+        "sql_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sql Sha256",
+          "type": "string"
+        },
+        "residues": {
+          "items": {
+            "$ref": "#/$defs/Residue"
+          },
+          "title": "Residues",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source_file",
+        "dialect",
+        "sql_sha256",
+        "residues"
+      ],
+      "title": "Extraction",
       "type": "object"
     },
     "Filter": {
@@ -956,13 +1051,21 @@
           "type": "array"
         },
         "cardinality": {
-          "enum": [
-            "1:1",
-            "N:1",
-            "1:N"
+          "oneOf": [
+            {
+              "enum": [
+                "1:1",
+                "N:1",
+                "1:N"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "TODO",
+              "type": "string"
+            }
           ],
-          "title": "Cardinality",
-          "type": "string"
+          "title": "Cardinality"
         },
         "check": {
           "enum": [
@@ -1032,6 +1135,22 @@
           "title": "Kind",
           "type": "string"
         },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "draft",
+                "needs_curation"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
         "data_product": {
           "$ref": "#/$defs/DataProduct"
         },
@@ -1077,6 +1196,17 @@
         },
         "graph": {
           "$ref": "#/$defs/Graph"
+        },
+        "extraction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extraction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1618,11 +1748,60 @@
       "title": "Period",
       "type": "object"
     },
+    "Residue": {
+      "additionalProperties": false,
+      "description": "Ce que l'extraction n'a pas su traduire. Le message ne cite jamais de valeur de\ndonnées ni de nom de table ; l'extrait SQL n'est désigné que par son empreinte.",
+      "properties": {
+        "code": {
+          "pattern": "^[a-z][a-z_]*$",
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "pattern": "\\S",
+          "title": "Message",
+          "type": "string"
+        },
+        "blocking": {
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "sql_excerpt_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{16}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sql Excerpt Hash"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "blocking"
+      ],
+      "title": "Residue",
+      "type": "object"
+    },
     "Semantics": {
       "additionalProperties": false,
       "properties": {
         "calendar": {
-          "$ref": "#/$defs/CalendarRef"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/CalendarRef"
+            },
+            {
+              "const": "TODO",
+              "type": "string"
+            }
+          ],
+          "title": "Calendar"
         },
         "timezone": {
           "title": "Timezone",
@@ -1768,17 +1947,25 @@
           "type": "string"
         },
         "type": {
-          "enum": [
-            "string",
-            "integer",
-            "decimal",
-            "double",
-            "boolean",
-            "date",
-            "timestamp"
+          "oneOf": [
+            {
+              "enum": [
+                "string",
+                "integer",
+                "decimal",
+                "double",
+                "boolean",
+                "date",
+                "timestamp"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "TODO",
+              "type": "string"
+            }
           ],
-          "title": "Type",
-          "type": "string"
+          "title": "Type"
         },
         "timezone": {
           "anyOf": [

@@ -1,0 +1,83 @@
+schema_version: 1
+kind: concept
+status: draft
+data_product:
+  id: 04-silver-orders-enriched
+  version: 1
+  owner: TODO
+  domain: TODO
+label: silver.orders_enriched
+entity: TODO
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: databricks
+      table: silver.stg_orders
+      owner: TODO
+      columns:
+        - {name: order_id, type: TODO}
+        - {name: customer_id, type: TODO}
+        - {name: product_id, type: TODO}
+        - {name: amount, type: TODO}
+    - id: n02
+      type: source
+      platform: databricks
+      table: silver.stg_refunds
+      owner: TODO
+      columns:
+        - {name: discount, type: TODO}
+        - {name: order_id, type: TODO}
+        - {name: status, type: TODO}
+    - id: n03
+      type: source
+      platform: databricks
+      table: silver.stg_customers
+      owner: TODO
+      columns:
+        - {name: country, type: TODO}
+        - {name: customer_id, type: TODO}
+    - id: n04
+      type: join
+      inputs: {left: n01, right: n02}
+      how: left
+      keys: [[order_id, order_id]]
+      cardinality: TODO
+      check: required
+    - id: n05
+      type: join
+      inputs: {left: n04, right: n03}
+      how: left
+      keys: [[customer_id, customer_id]]
+      cardinality: TODO
+      check: required
+    - id: n06
+      type: filter
+      note: 'nulls déduit du SQL : une condition indéterminée (valeur nulle) écarte la ligne.'
+      inputs: [n05]
+      condition: status:equals:APPROVED
+      nulls: drop
+    - id: n07
+      type: compute
+      inputs: [n06]
+      column: amount_with_vat
+      expr: amount * 1.2
+    - id: n08
+      type: compute
+      inputs: [n07]
+      column: discount
+      expr: COALESCE(discount, 0)
+    - id: n09
+      type: compute
+      inputs: [n08]
+      column: country
+      expr: UPPER(TRIM(country))
+  output: n09
+extraction:
+  source_file: 04_silver_orders_enriched.sql
+  line: 11
+  dialect: databricks
+  sql_sha256: 022b590e97c86ff8cee0f3b1c5f5cb2cd41978a019dcd4efe8dfa154cc161299
+  residues:
+    - {code: cardinality_unknown, message: 'Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).', blocking: false, sql_excerpt_hash: e44bd57bbdc1ab02}
+    - {code: cardinality_unknown, message: 'Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).', blocking: false, sql_excerpt_hash: 398acfeec43c4d6a}

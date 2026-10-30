@@ -16,8 +16,12 @@ uv run atlas normalize revenu-net.yaml                         # forme normalis�
 uv run atlas fingerprint revenu-net.yaml                       # sha256:atlas1:…
 uv run atlas diff revenu-net.yaml revenu-net--nordis-de.yaml   # 0 identiques, 2 écarts, 3 écart critique
 uv run atlas diff a.yaml b.yaml --format json                  # rapport conforme à schemas/diff-report.v1.schema.json
+uv run atlas extract script.sql --dialect databricks --out brouillons   # 0 tout traduit, 2 résidus à revoir, 3 à reprendre
+uv run atlas extract notebook.py --dialect snowflake --format json      # brouillons sur stdout, rapport sur stderr
 ```
 
 `--with` fournit les KPI référencés par `kpi_ref` et le canonique d'une variante. `check` sort en 1 s'il reste une erreur ; avertissements et infos n'empêchent rien.
 
-Le modèle des documents (dix types de nœuds, concept, KPI, déclinaison) est dans `src/skifer_atlas/model/` ; spécification : `docs/plans/0001-*.md` (modèle) `docs/plans/0002-*.md` (contrôles, résolution, empreinte) et `docs/plans/0003-*.md` (diff, dans `src/skifer_atlas/diff/`). Exemples dans `tests/fixtures/documents/`, contre-exemples dans `tests/fixtures/documents-invalid/`.
+Le modèle des documents (dix types de nœuds, concept, KPI, déclinaison) est dans `src/skifer_atlas/model/` ; spécification : `docs/plans/0001-*.md` (modèle), `docs/plans/0002-*.md` (contrôles, résolution, empreinte), `docs/plans/0003-*.md` (diff, dans `src/skifer_atlas/diff/`) et `docs/plans/0004-*.md` (extraction, dans `src/skifer_atlas/extract/` ; brouillons : ADR 0006). Exemples dans `tests/fixtures/documents/`, contre-exemples dans `tests/fixtures/documents-invalid/`.
+
+`atlas extract` écrit un brouillon par requête (`SELECT`, `CREATE … AS SELECT`, `INSERT … SELECT`) d'un script `.sql` ou d'un notebook `.py`/`.ipynb`. Un brouillon marque `TODO` ce que le SQL ne dit pas et liste ses résidus dans `extraction.residues` ; s'il en reste un bloquant, il est en `status: needs_curation`. Démonstration : `examples/extraction/`.

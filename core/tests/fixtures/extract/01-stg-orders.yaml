@@ -1,0 +1,42 @@
+schema_version: 1
+kind: concept
+status: draft
+data_product:
+  id: 01-stg-orders
+  version: 1
+  owner: TODO
+  domain: TODO
+label: silver.stg_orders
+entity: TODO
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: databricks
+      table: bronze.orders_raw
+      owner: TODO
+      columns:
+        - {name: order_id, type: TODO}
+        - {name: customer_id, type: TODO}
+        - {name: product_id, type: TODO}
+        - {name: order_status, type: TODO}
+        - {name: amount, type: TODO}
+        - {name: order_date, type: TODO}
+    - id: n02
+      type: filter
+      note: 'nulls déduit du SQL : une condition indéterminée (valeur nulle) écarte la ligne.'
+      inputs: [n01]
+      condition: order_status:not_equals:CANCELLED
+      nulls: drop
+    - id: n03
+      type: compute
+      inputs: [n02]
+      column: status_label
+      expr: CASE WHEN order_status = 'NEW' THEN 'Pending' WHEN order_status = 'SHIPPED' THEN 'In transit' ELSE 'Closed' END
+  output: n03
+extraction:
+  source_file: 01_stg_orders.sql
+  line: 5
+  dialect: databricks
+  sql_sha256: fc34fb55477f392e7ea6225e47728a5108c7190e9a4824b4bc60f8168add2dd3
+  residues: []

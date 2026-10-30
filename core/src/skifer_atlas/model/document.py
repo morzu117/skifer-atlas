@@ -13,15 +13,17 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from .errors import Issue, issues_from_validation_error, pointer
 from .nodes import (
-    CalendarRef,
+    TODO,
+    CalendarOrTodo,
     ColumnName,
     ColumnType,
     Graph,
     NonEmptyStr,
     PositiveInt,
     Slug,
-    Timezone,
+    TimezoneOrTodo,
     _Model,
+    or_todo,
 )
 from .variants import CURRENCY_PATTERN, VariantDocument, VariationPoint
 
@@ -32,13 +34,13 @@ class DataProduct(_Model):
     id: Slug
     version: PositiveInt
     owner: NonEmptyStr
-    domain: Slug
+    domain: or_todo(Slug)
     description: str | None = None
 
 
 class Semantics(_Model):
-    calendar: CalendarRef
-    timezone: Timezone
+    calendar: CalendarOrTodo
+    timezone: TimezoneOrTodo
     currency: Annotated[str, Field(pattern=CURRENCY_PATTERN)] | None = None
 
 
@@ -52,26 +54,54 @@ class Entity(_Model):
     attributes: Annotated[list[EntityAttribute], Field(min_length=1)]
 
 
+class Residue(_Model):
+    """Ce que l'extraction n'a pas su traduire. Le message ne cite jamais de valeur de
+    données ni de nom de table ; l'extrait SQL n'est désigné que par son empreinte."""
+
+    code: Annotated[str, Field(pattern=r"^[a-z][a-z_]*$")]
+    message: NonEmptyStr
+    blocking: bool
+    sql_excerpt_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{16}$")] | None = None
+
+
+class Extraction(_Model):
+    source_file: NonEmptyStr
+    line: PositiveInt | None = None
+    dialect: Literal["databricks", "snowflake"]
+    sql_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    residues: list[Residue]
+
+
+Status = Literal["draft", "needs_curation"]
+
+
+EntityOrTodo = or_todo(Entity)
+
+
 class ConceptDocument(_Model):
     schema_version: Literal[1]
     kind: Literal["concept"]
+    status: Status | None = None
     data_product: DataProduct
     label: NonEmptyStr
     synonyms: list[NonEmptyStr] | None = None
-    entity: Entity
+    entity: EntityOrTodo
     variation_points: list[VariationPoint] | None = None
     graph: Graph | None = None
+    extraction: Extraction | None = None
 
 
 class KpiDocument(_Model):
     schema_version: Literal[1]
     kind: Literal["kpi"]
+    status: Status | None = None
     data_product: DataProduct
     label: NonEmptyStr
     synonyms: list[NonEmptyStr] | None = None
     semantics: Semantics
     variation_points: list[VariationPoint] | None = None
     graph: Graph
+    extraction: Extraction | None = None
 
 
 Document = Annotated[
@@ -87,7 +117,7 @@ class ValidationResult:
 
     @property
     def valid(self) -> bool:
-        return not self.issues
+        return not any(issue.severity == "error" for issue in self.issues)
 
 
 def validate_data(raw: Any) -> ValidationResult:
@@ -110,7 +140,8 @@ def validate_data(raw: Any) -> ValidationResult:
     except ValidationError as error:
         issues.extend(issues_from_validation_error(error, raw))
     issues.extend(document_checks(raw))
-    return ValidationResult(None if issues else document, issues)
+    errors = any(issue.severity == "error" for issue in issues)
+    return ValidationResult(None if errors else document, issues)
 
 
 def document_checks(raw: dict) -> list[Issue]:
@@ -159,6 +190,8 @@ def document_checks(raw: dict) -> list[Issue]:
                 f"« {point} » est déclaré point de variation mais n'est pas renseigné.",
             ))
 
+    issues.extend(draft_checks(raw))
+
     overrides = raw.get("overrides")
     targets: set[str] = set()
     for index, override in enumerate(overrides if isinstance(overrides, list) else []):
@@ -170,4 +203,57 @@ def document_checks(raw: dict) -> list[Issue]:
                     "invalid_value", f"« {target} » est surchargé deux fois.",
                 ))
             targets.add(target)
+    return issues
+
+
+def _todo_paths(value: Any, path: list[str | int]) -> list[list[str | int]]:
+    if value == TODO or (isinstance(value, str) and value.startswith(f"{TODO}.")):
+        return [path]
+    if isinstance(value, dict):
+        return [p for key, item in value.items() for p in _todo_paths(item, [*path, key])]
+    if isinstance(value, list):
+        return [p for index, item in enumerate(value) for p in _todo_paths(item, [*path, index])]
+    return []
+
+
+def draft_checks(raw: dict) -> list[Issue]:
+    """Brouillons d'extraction (plan 0004) : statut, résidus, valeurs à compléter.
+
+    Un `TODO` est un avertissement dans un brouillon et une erreur ailleurs ; un document
+    `needs_curation`, ou un brouillon qui garde un résidu bloquant, est refusé.
+    """
+    issues: list[Issue] = []
+    status = raw.get("status")
+    extraction = raw.get("extraction")
+    if extraction is not None and status is None:
+        issues.append(Issue(
+            "/extraction", None, "invalid_value",
+            "Le bloc « extraction » n'est admis que dans un brouillon (status: draft).",
+        ))
+    if status == "needs_curation":
+        issues.append(Issue(
+            "/status", None, "needs_curation",
+            "Brouillon à reprendre : lever les résidus bloquants de « extraction.residues », "
+            "puis passer status à draft.",
+        ))
+    residues = extraction.get("residues") if isinstance(extraction, dict) else None
+    if status == "draft":
+        for index, residue in enumerate(residues if isinstance(residues, list) else []):
+            if isinstance(residue, dict) and residue.get("blocking") is True:
+                issues.append(Issue(
+                    pointer(["extraction", "residues", index]), None, "blocking_residue",
+                    f"Résidu bloquant « {residue.get('code')} » non levé : le traiter, puis "
+                    "le retirer de la liste.",
+                ))
+    graph = raw.get("graph")
+    nodes = graph.get("nodes") if isinstance(graph, dict) else None
+    for path in _todo_paths({k: v for k, v in raw.items() if k != "extraction"}, []):
+        node_id = None
+        if path[:2] == ["graph", "nodes"] and isinstance(nodes, list) and len(path) > 2:
+            node = nodes[path[2]]
+            node_id = node.get("id") if isinstance(node, dict) else None
+        issues.append(Issue(
+            pointer(path), node_id, "todo", "Valeur à compléter.",
+            "warning" if status is not None else "error",
+        ))
     return issues

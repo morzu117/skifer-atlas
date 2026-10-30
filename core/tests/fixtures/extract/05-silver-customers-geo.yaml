@@ -1,0 +1,68 @@
+schema_version: 1
+kind: concept
+status: draft
+data_product:
+  id: 05-silver-customers-geo
+  version: 1
+  owner: TODO
+  domain: TODO
+label: 05_silver_customers_geo
+entity: TODO
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: databricks
+      table: bronze.customers_raw
+      owner: TODO
+      columns:
+        - {name: customer_id, type: TODO}
+        - {name: country, type: TODO}
+        - {name: region, type: TODO}
+    - id: n02
+      type: compute
+      inputs: [n01]
+      column: country
+      expr: UPPER(TRIM(country))
+    - id: n03
+      type: filter
+      note: 'nulls déduit du SQL : une condition indéterminée (valeur nulle) écarte la ligne.'
+      inputs: [n02]
+      condition: region:in:EU,US,CA
+      nulls: drop
+    - id: n04
+      type: compute
+      inputs: [n03]
+      column: hemisphere
+      expr: '''NORTH'''
+    - id: n05
+      type: filter
+      note: 'nulls déduit du SQL : une condition indéterminée (valeur nulle) écarte la ligne.'
+      inputs: [n02]
+      condition: region:in:BR,AR,AU
+      nulls: drop
+    - id: n06
+      type: compute
+      inputs: [n05]
+      column: hemisphere
+      expr: '''SOUTH'''
+    - id: n07
+      type: union
+      inputs: [n04, n06]
+      mode: all
+      columns:
+        - name: customer_id
+          from: {n04: customer_id, n06: customer_id}
+        - name: country
+          from: {n04: country, n06: country}
+        - name: region
+          from: {n04: region, n06: region}
+        - name: hemisphere
+          from: {n04: hemisphere, n06: hemisphere}
+  output: n07
+extraction:
+  source_file: 05_silver_customers_geo.sql
+  line: 9
+  dialect: databricks
+  sql_sha256: cb7b1cea87c2b82ba5fa2d72e9ae9432a1e05dec11ef7bfc17974d21d1e7bf75
+  residues: []

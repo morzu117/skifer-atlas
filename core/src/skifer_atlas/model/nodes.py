@@ -65,6 +65,26 @@ Slug = Annotated[str, Field(pattern=SLUG_PATTERN)]
 ColumnName = Annotated[str, Field(pattern=COLUMN_PATTERN)]
 NonEmptyStr = Annotated[str, Field(pattern=r"\S")]
 ColumnType = Literal["string", "integer", "decimal", "double", "boolean", "date", "timestamp"]
+# Valeur à compléter d'un brouillon d'extraction (plan 0004, ADR 0006). Admise seulement
+# là où l'extraction ne peut pas savoir ; signalée par `document_checks`.
+TODO = "TODO"
+Todo = Literal["TODO"]
+
+
+def _todo_branch(value: Any) -> str:
+    return "todo" if value == TODO else "value"
+
+
+def or_todo(kind: Any) -> Any:
+    """`kind`, ou la valeur `TODO` d'un brouillon ; une seule branche est validée, pour que
+    les erreurs restent celles de `kind`."""
+    return Annotated[
+        Annotated[kind, Tag("value")] | Annotated[Todo, Tag("todo")],
+        Discriminator(_todo_branch),
+    ]
+
+
+ColumnTypeOrTodo = or_todo(ColumnType)
 PositiveInt = Annotated[int, Field(ge=1)]
 
 
@@ -81,6 +101,13 @@ def _check_timezone(value: str) -> str:
 
 
 Timezone = Annotated[str, AfterValidator(_check_timezone)]
+
+
+def _check_timezone_or_todo(value: str) -> str:
+    return value if value == TODO else _check_timezone(value)
+
+
+TimezoneOrTodo = Annotated[str, AfterValidator(_check_timezone_or_todo)]
 
 
 def _sorted_keys(value: dict) -> dict:
@@ -257,7 +284,7 @@ class _Node(_Model):
 
 class SourceColumn(_Model):
     name: ColumnName
-    type: ColumnType
+    type: ColumnTypeOrTodo
     timezone: Timezone | None = None
     format: NonEmptyStr | None = None
 
@@ -306,12 +333,15 @@ class JoinInputs(_Model):
     right: NodeId
 
 
+Cardinality = or_todo(Literal["1:1", "N:1", "1:N"])
+
+
 class Join(_Node):
     type: Literal["join"]
     inputs: JoinInputs
     how: Literal["inner", "left", "right", "full", "cross", "left_anti", "left_semi"]
     keys: list[KeyPair]
-    cardinality: Literal["1:1", "N:1", "1:N"]
+    cardinality: Cardinality
     check: Literal["required", "bypass"]
     bypass_reason: NonEmptyStr | None = None
 
@@ -387,12 +417,12 @@ class _Temporal(_Node):
 
 class ConvertTimezone(_Temporal):
     operation: Literal["convert_timezone"]
-    to: Timezone
+    to: TimezoneOrTodo
 
 
 class ToDate(_Temporal):
     operation: Literal["to_date"]
-    timezone: Timezone
+    timezone: TimezoneOrTodo
     format: NonEmptyStr | None = None
 
 
@@ -459,6 +489,9 @@ Node = Annotated[
 class CalendarRef(_Model):
     key: Slug
     version: NonEmptyStr | None = None
+
+
+CalendarOrTodo = or_todo(CalendarRef)
 
 
 class Graph(_Model):

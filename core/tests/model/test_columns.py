@@ -124,6 +124,16 @@ def test_forbidden_functions_in_compute(expr):
     assert ("forbidden_function", "n03") in problems(raw)
 
 
+@pytest.mark.parametrize("expr", [
+    "CASE WHEN avoirs > 0 AND montant_ttc > 0 THEN avoirs ELSE 0 END",
+    "CASE WHEN avoirs IS NULL OR avoirs < 0 THEN 0 ELSE avoirs END",
+])
+def test_logical_operators_are_not_functions(expr):
+    raw = revenu_net()
+    nodes(raw)["n03"]["expr"] = expr
+    assert problems(raw) == []
+
+
 def test_window_function_in_compute_points_to_the_temporal_node():
     raw = revenu_net()
     nodes(raw)["n03"]["expr"] = "LAG(avoirs) OVER (ORDER BY date_facture)"

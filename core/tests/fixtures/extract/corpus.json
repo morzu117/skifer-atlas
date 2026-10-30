@@ -1,0 +1,219 @@
+[
+  {
+    "file": "01_stg_orders.sql",
+    "residues": [],
+    "statements": [
+      {
+        "id": "01-stg-orders",
+        "line": 5,
+        "kind": "concept",
+        "status": "draft",
+        "roundtrip": {
+          "status": "verified"
+        },
+        "residues": [],
+        "infos": [
+          {
+            "code": "nulls_inferred",
+            "node_id": "n02",
+            "message": "nulls: drop déduit du SQL : à confirmer."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "file": "02_stg_customers.sql",
+    "residues": [],
+    "statements": [
+      {
+        "id": "02-stg-customers",
+        "line": 10,
+        "kind": "concept",
+        "status": "draft",
+        "roundtrip": {
+          "status": "verified"
+        },
+        "residues": [],
+        "infos": []
+      }
+    ]
+  },
+  {
+    "file": "03_stg_refunds.sql",
+    "residues": [],
+    "statements": [
+      {
+        "id": "03-stg-refunds",
+        "line": 7,
+        "kind": "concept",
+        "status": "draft",
+        "roundtrip": {
+          "status": "verified"
+        },
+        "residues": [],
+        "infos": [
+          {
+            "code": "nulls_inferred",
+            "node_id": "n02",
+            "message": "nulls: drop déduit du SQL : à confirmer."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "file": "04_silver_orders_enriched.sql",
+    "residues": [],
+    "statements": [
+      {
+        "id": "04-silver-orders-enriched",
+        "line": 11,
+        "kind": "concept",
+        "status": "draft",
+        "roundtrip": {
+          "status": "verified"
+        },
+        "residues": [
+          {
+            "code": "cardinality_unknown",
+            "message": "Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).",
+            "blocking": false,
+            "sql_excerpt_hash": "e44bd57bbdc1ab02"
+          },
+          {
+            "code": "cardinality_unknown",
+            "message": "Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).",
+            "blocking": false,
+            "sql_excerpt_hash": "398acfeec43c4d6a"
+          }
+        ],
+        "infos": [
+          {
+            "code": "nulls_inferred",
+            "node_id": "n06",
+            "message": "nulls: drop déduit du SQL : à confirmer."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "file": "05_silver_customers_geo.sql",
+    "residues": [],
+    "statements": [
+      {
+        "id": "05-silver-customers-geo",
+        "line": 9,
+        "kind": "concept",
+        "status": "draft",
+        "roundtrip": {
+          "status": "verified"
+        },
+        "residues": [],
+        "infos": [
+          {
+            "code": "nulls_inferred",
+            "node_id": "n03",
+            "message": "nulls: drop déduit du SQL : à confirmer."
+          },
+          {
+            "code": "nulls_inferred",
+            "node_id": "n05",
+            "message": "nulls: drop déduit du SQL : à confirmer."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "file": "06_gold_margin_v1.sql",
+    "residues": [],
+    "statements": [
+      {
+        "id": "06-gold-margin-v1",
+        "line": 5,
+        "kind": "concept",
+        "status": "draft",
+        "roundtrip": {
+          "status": "verified"
+        },
+        "residues": [
+          {
+            "code": "cardinality_unknown",
+            "message": "Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).",
+            "blocking": false,
+            "sql_excerpt_hash": "e9d34e087c6a7437"
+          }
+        ],
+        "infos": []
+      }
+    ]
+  },
+  {
+    "file": "07_gold_margin_v2.sql",
+    "residues": [],
+    "statements": [
+      {
+        "id": "07-gold-margin-v2",
+        "line": 6,
+        "kind": "concept",
+        "status": "needs_curation",
+        "roundtrip": {
+          "status": "skipped"
+        },
+        "residues": [
+          {
+            "code": "cardinality_unknown",
+            "message": "Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).",
+            "blocking": false,
+            "sql_excerpt_hash": "e9d34e087c6a7437"
+          },
+          {
+            "code": "unsupported_construct",
+            "message": "Construction SQL non traduite (sous-requête dans une expression).",
+            "blocking": true,
+            "sql_excerpt_hash": "e85f893efc90881d"
+          }
+        ],
+        "infos": []
+      }
+    ]
+  },
+  {
+    "file": "08_kpi_monthly.sql",
+    "residues": [],
+    "statements": [
+      {
+        "id": "08-kpi-monthly",
+        "line": 13,
+        "kind": "kpi",
+        "status": "needs_curation",
+        "roundtrip": {
+          "status": "skipped"
+        },
+        "residues": [
+          {
+            "code": "cardinality_unknown",
+            "message": "Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).",
+            "blocking": false,
+            "sql_excerpt_hash": "43db894455040ac1"
+          },
+          {
+            "code": "window_function",
+            "message": "Fonction de fenêtre sans équivalent dans le graphe (LAG) : la reprendre à la main.",
+            "blocking": true,
+            "sql_excerpt_hash": "cb817079eaffa517"
+          },
+          {
+            "code": "unsupported_construct",
+            "message": "Construction SQL non traduite (sous-requête dans une expression).",
+            "blocking": true,
+            "sql_excerpt_hash": "e85f893efc90881d"
+          }
+        ],
+        "infos": []
+      }
+    ]
+  }
+]
