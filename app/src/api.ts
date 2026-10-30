@@ -9,6 +9,7 @@ export type Workspace = {
   name: string;
   sector: string;
   git_remote: string;
+  account: string;
   role: "referent" | "validateur" | "contributeur" | "lecteur";
   role_label: string;
   domains: string[];

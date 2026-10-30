@@ -60,7 +60,9 @@ def test_join_rejects_credentials_in_url(client):
 def test_join_indexes_and_lists(client, joined):
     """Critère 2."""
     [workspace] = client.get("/api/workspaces").json()
-    assert (workspace["id"], workspace["role"]) == ("groupe-nordis", "lecteur")
+    # julien.h est référent d'espace dans le governance.yaml de la démonstration
+    assert (workspace["id"], workspace["account"], workspace["role"]) == (
+        "groupe-nordis", "julien.h", "referent")
     rows = client.get(f"{WS}/catalog").json()
     assert len(rows) == 7
     assert index_path("groupe-nordis").exists()

@@ -17,20 +17,38 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..repo import RepoError
-from .routes import catalog, workspaces
+from .routes import catalog, governance, proposals, workspaces
 
 # Code d'erreur métier → statut HTTP ; un code absent donne 500.
 ERROR_STATUS = {
     "not_found": 404,
+    "forbidden": 403,
     "workspace_exists": 409,
     "sync_conflict": 409,
+    "stale_base": 409,
+    "not_ready": 409,
+    "not_open": 409,
+    "head_changed": 409,
+    "merge_conflict": 409,
+    "merge_refused": 409,
+    "branch_protected": 409,
     "invalid_remote": 422,
     "credentials_in_url": 422,
     "invalid_workspace": 422,
+    "invalid_document": 422,
+    "invalid_governance": 422,
+    "cannot_review_own": 422,
+    "host_rejected": 422,
     "no_remote": 422,
+    "unsupported_host": 422,
     "clone_failed": 502,
     "fetch_failed": 502,
+    "push_failed": 502,
     "git_failed": 502,
+    "host_auth_failed": 502,  # pas 401 : réservé au token de session de l'API locale
+    "host_forbidden": 502,
+    "host_unreachable": 502,
+    "host_failed": 502,
     "git_missing": 503,
     "git_timeout": 504,
 }
@@ -64,8 +82,11 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
 
     @app.exception_handler(RepoError)
     def repo_error(_: Request, error: RepoError) -> JSONResponse:
+        detail = {"code": error.code, "message": error.message}
+        if error.details is not None:
+            detail["issues"] = error.details
         return JSONResponse(status_code=ERROR_STATUS.get(error.code, 500),
-                            content={"detail": {"code": error.code, "message": error.message}})
+                            content={"detail": detail})
 
     @app.get("/health")
     def health() -> dict:
@@ -74,4 +95,6 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
     protected = [Depends(require_token)]
     app.include_router(workspaces.router, dependencies=protected)
     app.include_router(catalog.router, dependencies=protected)
+    app.include_router(proposals.router, dependencies=protected)
+    app.include_router(governance.router, dependencies=protected)
     return app

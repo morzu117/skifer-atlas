@@ -40,7 +40,7 @@ _locks_guard = threading.Lock()
 
 
 @dataclass
-class _Entry:
+class Entry:
     file: DocumentFile
     raw: Any
     document: Any
@@ -66,15 +66,15 @@ def _list(value: Any) -> list:
     return value if isinstance(value, list) else []
 
 
-def _read(root: Path, file: DocumentFile) -> _Entry:
+def _read(root: Path, file: DocumentFile) -> Entry:
     try:
         text = (root / file.path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as error:
-        return _Entry(file, {}, None, [Issue("", None, "unreadable_file",
+        return Entry(file, {}, None, [Issue("", None, "unreadable_file",
                                              f"Lecture impossible : {error}")])
     raw, issues = read_yaml(text)
     if issues:
-        return _Entry(file, {}, None, issues)
+        return Entry(file, {}, None, issues)
     result = validate_data(raw)
     issues = list(result.issues)
     raw = _mapping(raw)
@@ -95,7 +95,7 @@ def _read(root: Path, file: DocumentFile) -> _Entry:
                                 f"Une variante rangée ici porte sur « {kpi_id} », entité "
                                 f"« {entity} »."))
     document = result.document if not _has_errors(issues) else None
-    return _Entry(file, raw, document, issues)
+    return Entry(file, raw, document, issues)
 
 
 def _has_errors(issues: list[Issue]) -> bool:
@@ -112,7 +112,7 @@ def _tagged_kpi(repo: Path, kpi_id: str, version: int) -> KpiDocument | None:
     return document if isinstance(document, KpiDocument) else None
 
 
-def _library(repo: Path, entries: list[_Entry]) -> Library:
+def _library(repo: Path, entries: list[Entry]) -> Library:
     """KPI valides au commit courant, plus les versions taguées qu'un `kpi_ref` ou une
     variante désigne : un KPI qui passe en v5 n'invalide pas ce qui référence sa v4."""
     library = Library(e.document for e in entries if isinstance(e.document, KpiDocument))
@@ -127,7 +127,7 @@ def _library(repo: Path, entries: list[_Entry]) -> Library:
     return library
 
 
-def _check(repo: Path, entries: list[_Entry]) -> None:
+def _check(repo: Path, entries: list[Entry]) -> Library:
     library = _library(repo, entries)
     canonicals = {e.file.expected_id: e.document for e in entries if e.file.kind == "kpi"}
     for entry in entries:
@@ -159,15 +159,16 @@ def _check(repo: Path, entries: list[_Entry]) -> None:
                                      for o in resolved.overrides)
         if resolved.valid:
             entry.fingerprint = fingerprint(resolved.document)
+    return library
 
 
-def _status(entry: _Entry) -> str:
+def _status(entry: Entry) -> str:
     if any(i.severity == "error" and i.code not in DRAFT_CODES for i in entry.issues):
         return "invalid"
     return _text(entry.raw.get("status")) or "validated"
 
 
-def _dependencies(entry: _Entry) -> list[tuple]:
+def _dependencies(entry: Entry) -> list[tuple]:
     found = []
     graph = _mapping(entry.raw.get("graph"))
     for node in _list(graph.get("nodes")):
@@ -183,7 +184,7 @@ def _dependencies(entry: _Entry) -> list[tuple]:
     return sorted(set(found), key=lambda d: (d[1], d[3], d[2] or 0))
 
 
-def _rows(entries: list[_Entry]) -> tuple[list, list, list]:
+def _rows(entries: list[Entry]) -> tuple[list, list, list]:
     kpis = {e.file.expected_id: e.raw for e in entries if e.file.kind == "kpi"}
     documents, variants, dependencies = [], [], []
     for entry in entries:
@@ -214,12 +215,31 @@ def _rows(entries: list[_Entry]) -> tuple[list, list, list]:
     return documents, variants, dependencies
 
 
+@dataclass
+class Analysis:
+    entries: list[Entry]
+    library: Library
+
+    def entry(self, document_id: str) -> Entry | None:
+        return next((e for e in self.entries if e.file.expected_id == document_id), None)
+
+
+def analyze(root: Path, repo: Path | None = None) -> Analysis:
+    """Lit et contrôle tous les documents d'un arbre. `repo` fournit les tags des
+    versions antérieures quand `root` n'est qu'une extraction (proposition)."""
+    entries = [_read(root, file) for file in document_files(root)]
+    library = _check(repo or root, entries)
+    return Analysis(entries, library)
+
+
+def entry_status(entry: Entry) -> str:
+    return _status(entry)
+
+
 def build_index(repo: Path, db: Path) -> str:
     """Reconstruit entièrement le schéma `index` ; renvoie le commit indexé."""
     commit = head(repo)
-    entries = [_read(repo, file) for file in document_files(repo)]
-    _check(repo, entries)
-    documents, variants, dependencies = _rows(entries)
+    documents, variants, dependencies = _rows(analyze(repo).entries)
     connection = connect(db)
     try:
         connection.execute("BEGIN TRANSACTION")
