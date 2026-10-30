@@ -78,3 +78,11 @@ graph:
       group_by: [mois_fiscal, entite]
       measures: [[montant_ht, revenu_net, sum]]
   output: n05
+scopes:
+  - id: fy2026-mois-entite
+    period: {from: 2026-02-01, to: 2026-09-30}
+    granularity: [mois_fiscal, entite]
+  - id: fy2026-t4
+    period: {calendar_period: FY2026_Q4}
+    granularity: [mois_fiscal, entite]
+tolerance: {percent: 1.5}

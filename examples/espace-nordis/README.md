@@ -1,4 +1,4 @@
-# Démonstration : l'espace Groupe Nordis (plans 0005 à 0008)
+# Démonstration : l'espace Groupe Nordis (plans 0005 à 0009)
 
 Le dépôt d'un espace Atlas, tel qu'on le clone : sept documents canoniques et trois variantes, sur le modèle des maquettes.
 
@@ -95,3 +95,37 @@ Ce qu'on doit voir :
 - **Déclaration** : une proposition de nature `access_points`, branche `prop/access-point-dbx-fr-…`. `julien.h` est le seul référent d'espace : elle est prête sans revue, et sa fusion ajoute `access_points.yaml`, sans aucun secret, sur `main`. Une plateforme absente d'`allowed_platforms` (`bigquery`, par exemple) est refusée : `invalid_access_point`, diagnostic `platform_not_allowed`.
 - **Connexions** : `dbx-fr` avec `my_access: never`, puis `connected` et `auth: pat` après le token personnel ; le token n'apparaît dans aucune réponse.
 - **Test** : l'hôte de la démonstration n'existe pas, donc `{"ok": false, "error": {"code": "host_unreachable", …}}`. Avec un vrai hôte et `POST …/dbx-fr/authorize`, l'URL rendue ouvre la connexion Databricks dans le navigateur.
+
+## Comparer les déclinaisons (plan 0009)
+
+Revenu net déclare deux scopes : `fy2026-mois-entite` (février à septembre 2026, par mois fiscal et entité) et `fy2026-t4`. Sa tolérance est de 1,5 % ; celle de l'espace, dans `governance.yaml`, est de 1 %. Les données de test sont dans `core/tests/fixtures/compare/revenu-net/`, un dossier par entité. Depuis `core/` :
+
+```sh
+uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de,nordis-fr --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net
+uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de --scope fy2026-mois-entite --tolerance 1 --duckdb-data tests/fixtures/compare/revenu-net
+uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-es --scope fy2026-t4 --duckdb-data tests/fixtures/compare/revenu-net
+```
+
+Ce qu'on doit voir :
+
+- **Nordis DE** : 93,8 % de validation sur 16 cellules, écart maximal 6,10 % en septembre. Juillet à septembre reprennent la maquette 10.5 : +0,2 %, +1,43 %, +6,10 %. Le nœud divergent est n02, le filtre « Factures validées », surchargé hors des points de variation déclarés. La comparaison sort en 2.
+- **Tolérance** : avec `--tolerance 1`, l'écart de 1,43 % d'août sort aussi de la tolérance, et la validation tombe à 87,5 %.
+- **Nordis FR** : 100 % sur 8 cellules.
+- **Nordis ES** : `canonical_not_rebindable`. Ses tables `from_scratch` n'ont pas les colonnes du canonique, qui ne peut donc pas s'exécuter sur ses données.
+
+Depuis l'API, sur un espace rejoint comme plus haut mais sans la fusion du plan 0006 (Revenu net en v4), on relance le serveur avec `ATLAS_COMPARE_DATA="$PWD/tests/fixtures/compare/revenu-net"` :
+
+```sh
+curl -H "$H" -H "$J" -d '{"kpi_id":"revenu-net","variants":["nordis-de","nordis-fr"],"scope_id":"fy2026-mois-entite"}' $API/groupe-nordis/comparisons
+curl -H "$H" $API/groupe-nordis/comparisons/1
+curl -H "$H" "$API/groupe-nordis/comparisons/matrix?domain=finance"
+curl -H "$H" "$API/groupe-nordis/catalog?q=revenu"
+```
+
+Ce qu'on doit voir :
+
+- **Création** : 202, `{"id": 1, "status": "running", "alerts": [{"code": "undeclared_override", …}]}`.
+- **Résultat** : `status: done`, les quatre requêtes exécutées (canonique et déclinaison pour chaque entité) avec leur SQL, puis les synthèses et les cellules.
+- **Matrice et catalogue** : DE à 93,75 %, FR à 100 %, ES non comparée ; Revenu net passe en `convergence: divergences:1`.
+- **Après la fusion du plan 0006** : Revenu net est en v5, mais ses déclinaisons portent encore sur la v4. La comparaison répond 409 `variant_outdated`.
+- **Sans `ATLAS_COMPARE_DATA`** : la comparaison passe par les points d'accès. Sans point d'accès déclaré pour l'entité, la réponse est `no_access_point`. Sans accès dans le coffre, elle est 409 `needs_auth`, et rien n'est exécuté.

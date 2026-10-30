@@ -67,10 +67,12 @@ def _todo(node_id: str, what: str) -> CompileError:
 
 
 class _Builder:
-    def __init__(self, dialect: str, library: Library, calendars: dict[str, Calendar]):
+    def __init__(self, dialect: str, library: Library, calendars: dict[str, Calendar],
+                 renames: dict[str, dict[str, str]] | None = None):
         self.dialect = dialect
         self.library = library
         self.calendars = calendars
+        self.renames = renames or {}
         self.ctes: list[tuple[str, exp.Expression]] = []
         self.checks: list[cardinality.Check] = []
         self.checked: list[str] = []
@@ -290,9 +292,14 @@ class _Unit:
     # --- nœuds ----------------------------------------------------------------------------
 
     def _source(self, node: Any) -> exp.Select:
+        # Source rebranchée (plan 0009) : colonne du graphe → colonne de la table.
+        physical = self.builder.renames.get(node.id, {}) if not self.prefix else {}
         self.builder.sources.setdefault(node.table, SourceTable(node.table, tuple(
-            (c.name, None if c.type == TODO else c.type) for c in node.columns)))
-        return exp.select(*[c.name for c in node.columns]).from_(exp.to_table(node.table))
+            (physical.get(c.name, c.name), None if c.type == TODO else c.type)
+            for c in node.columns)))
+        items = [exp.column(physical[c.name]).as_(c.name) if c.name in physical
+                 else exp.column(c.name) for c in node.columns]
+        return exp.select(*items).from_(exp.to_table(node.table))
 
     def _filter(self, node: Any) -> exp.Select:
         source = node.inputs[0]
@@ -548,8 +555,12 @@ def _header(document: Any, dialect: str, builder: _Builder) -> str:
 
 def compile_document(document: Any, dialect: str, scope: Scope | None = None,
                      library: Library | None = None,
-                     calendars: dict[str, Calendar] | None = None) -> Compiled:
-    """SQL du document (concept ou KPI ; une variante se compile une fois résolue)."""
+                     calendars: dict[str, Calendar] | None = None,
+                     renames: dict[str, dict[str, str]] | None = None) -> Compiled:
+    """SQL du document (concept ou KPI ; une variante se compile une fois résolue).
+
+    `renames` lit certaines colonnes d'une source sous un autre nom dans sa table : c'est
+    le canonique rebranché sur les sources d'une déclinaison (plan 0009)."""
     if dialect not in DIALECTS:
         raise ValueError(f"Dialecte inconnu : {dialect}.")
     if getattr(document, "graph", None) is None:
@@ -560,7 +571,7 @@ def compile_document(document: Any, dialect: str, scope: Scope | None = None,
         raise CompileError([i for i in issues if i.severity == "error"])
     scope = scope or Scope()
     document = apply_granularity(document, scope, library)
-    builder = _Builder(dialect, library, calendars or {})
+    builder = _Builder(dialect, library, calendars or {}, renames)
     output = _Unit(builder, document, scope=scope).build()
     query = exp.select(*output.schema).from_(output.cte)
     for check in builder.checks:

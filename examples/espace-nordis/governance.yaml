@@ -42,3 +42,4 @@ members:
     entity: nordis-es
     roles: [{role: contributeur}]
 allowed_platforms: [databricks, snowflake]
+tolerance: {percent: 1}
