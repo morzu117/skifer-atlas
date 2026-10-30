@@ -1,4 +1,4 @@
-# Démonstration : l'espace Groupe Nordis (plans 0005 et 0006)
+# Démonstration : l'espace Groupe Nordis (plans 0005, 0006 et 0007)
 
 Le dépôt d'un espace Atlas, tel qu'on le clone : sept documents canoniques et trois variantes, sur le modèle des maquettes.
 
@@ -59,3 +59,20 @@ Ce qu'on doit voir :
 - **Décompte** : l'approbation de `anna.k` (contributrice) ou de `sami.b` (Supply) ne compte pas ; celles de `marc.d` et `claire.m` mettent `ready_to_merge` à `true`.
 - **Fusion** : le tag `doc/revenu-net/v5` est posé, le commit porte `Atlas-Review: approved by claire.m, marc.d`, et la fiche de Revenu net passe en v5.
 - **Gouvernance** : `GET $API/groupe-nordis/governance` signale que Marketing n'a pas de référent. `julien.h` est le seul référent d'espace : sa proposition de gouvernance est prête sans revue (`merge_mode: no_other_eligible`, ADR 0008).
+
+## Compiler et exécuter (plan 0007)
+
+Depuis `core/` :
+
+```sh
+uv run atlas compile ../examples/espace-nordis/kpis/revenu-net.yaml --dialect databricks
+uv run atlas compile ../examples/espace-nordis/kpis/revenu-net.yaml --dialect duckdb --period FY2026_Q1 --by entite
+uv run atlas run ../examples/espace-nordis/kpis/revenu-net.yaml --data tests/fixtures/compile/revenu-net
+```
+
+Ce qu'on doit voir :
+
+- **SQL** : une CTE par nœud (`n01` à `n07`), la CTE `cal_fiscal_nordis` tirée de `calendars/fiscal-nordis.yaml`, puis deux contrôles :
+  - `chk_n07_right` vérifie que la date comptable est unique par jour ;
+  - `chk_n04_calendar` vérifie que chaque date tombe dans le calendrier.
+- **Exécution** : le revenu net par mois et par entité. La facture du 31 octobre compte en novembre, mois de sa date comptable.

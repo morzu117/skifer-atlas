@@ -1,0 +1,3 @@
+customer_id,name,country,region,is_vip
+K1,Durand, fr ,EU,0
+K2,O'Brien,ie,EU,1

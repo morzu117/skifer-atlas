@@ -1,0 +1,5 @@
+commande_id,client_id,statut,montant,passee_le
+A1,K1,validée,120,2025-09-30 23:00:00
+A2,K2,annulée,60,2025-10-05 10:00:00
+A3,K1,,240,2025-10-10 10:00:00
+A1,K1,validée,999,2025-09-29 10:00:00

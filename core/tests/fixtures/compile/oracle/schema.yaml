@@ -1,0 +1,18 @@
+# Types des tables du corpus d'extraction (plan 0004), pour compléter les `type: TODO`
+# des brouillons avant de les compiler (plan 0007, critère 9).
+bronze.orders_raw:
+  {order_id: string, customer_id: string, product_id: string, order_status: string, amount: decimal, order_date: string}
+bronze.customers_raw:
+  {customer_id: string, name: string, country: string, region: string}
+bronze.refunds_raw:
+  {refund_id: string, order_id: string, status: string, reason: string, discount: decimal}
+bronze.products_raw:
+  {product_id: string, cost: decimal}
+silver.stg_orders:
+  {order_id: string, customer_id: string, product_id: string, order_status: string, amount: decimal, order_date: string}
+silver.stg_refunds:
+  {refund_id: string, order_id: string, status: string, reason: string, discount: decimal}
+silver.stg_customers:
+  {customer_id: string, name: string, country: string, region: string, is_vip: integer}
+silver.orders_enriched:
+  {order_id: string, customer_id: string, product_id: string, amount: decimal, amount_with_vat: decimal, discount: decimal, country: string}

@@ -1,0 +1,4 @@
+refund_id,order_id,status,reason,discount
+R1,O1,APPROVED,DAMAGED,10.00
+R3,O4,APPROVED,LATE,
+R5,O6,APPROVED,LATE,1.50

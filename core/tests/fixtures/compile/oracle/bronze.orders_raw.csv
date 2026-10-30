@@ -1,0 +1,6 @@
+order_id,customer_id,product_id,order_status,amount,order_date
+O1,K1,P1,NEW,100.00,2025-10-01
+O2,K2,P2,SHIPPED,250.50,2025-10-02
+O3,K3,P1,CANCELLED,80.00,2025-10-03
+O4,K1,P3,DELIVERED,19.99,2025-10-04
+O5,K4,P2,,42.00,2025-10-05

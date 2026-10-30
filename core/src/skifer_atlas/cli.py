@@ -1,4 +1,5 @@
-"""CLI `atlas` : validation, contrôle, résolution, empreinte, diff et extraction.
+"""CLI `atlas` : validation, contrôle, résolution, empreinte, diff, extraction,
+compilation et exécution locale.
 
 argparse seulement, sans chargement dynamique de sous-commandes (PyInstaller).
 """
@@ -6,11 +7,23 @@ argparse seulement, sans chargement dynamique de sous-commandes (PyInstaller).
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from pathlib import Path
 
+import duckdb
+
 from . import extract
+from .compile import (
+    DIALECTS,
+    CompileError,
+    NotCompilable,
+    Scope,
+    compilability,
+    compile_document,
+    load_calendars,
+)
 from .diff import RELATIONS, DiffContext, diff, diff_schema_text, report_text
 from .model import DocumentError, Issue, load_document, validate_file
 from .model.check import check_document, has_errors
@@ -20,6 +33,7 @@ from .model.io import dump_data, dump_document
 from .model.jsonschema import schema_text
 from .model.normalize import normalized_form
 from .model.resolve import ResolvedGraph, resolve
+from .run import MissingData, run_local
 
 _SEVERITY = {"error": "erreur", "warning": "avertissement", "info": "info"}
 
@@ -276,6 +290,93 @@ def _schema(args: argparse.Namespace) -> int:
     return 0
 
 
+def _scope(args: argparse.Namespace) -> Scope:
+    granularity = None if args.by is None else tuple(
+        d.strip() for d in args.by.split(",") if d.strip())
+    return Scope(args.period, tuple(args.perimeter), granularity)
+
+
+def _calendars(args: argparse.Namespace, path: str) -> dict:
+    """`--calendars`, sinon le dossier `calendars/` de l'espace du document."""
+    if args.calendars:
+        return load_calendars(Path(args.calendars))
+    for folder in Path(path).resolve().parents:
+        if (folder / "calendars").is_dir():
+            return load_calendars(folder / "calendars")
+    return {}
+
+
+def _compiled(args: argparse.Namespace, dialect: str):
+    """SQL compilé, ou None après avoir signalé pourquoi."""
+    library = _library(args.with_)
+    document = _checked_graph(args.file, library)
+    if document is None:
+        return None
+    try:
+        return compile_document(document, dialect, _scope(args), library,
+                                _calendars(args, args.file))
+    except CompileError as error:
+        print(f"{args.file} : non compilable", file=sys.stderr)
+        _print_issues(error.issues, sys.stderr)
+    except NotCompilable as error:
+        print(f"{args.file} : non compilable en {dialect}, {error.node_id} : {error.reason}",
+              file=sys.stderr)
+    return None
+
+
+def _compile(args: argparse.Namespace) -> int:
+    if args.compilability:
+        library = _library(args.with_)
+        document = _checked_graph(args.file, library)
+        if document is None:
+            return 1
+        try:
+            found = compilability(document, library, _calendars(args, args.file), _scope(args))
+        except CompileError as error:
+            _print_issues(error.issues, sys.stderr)
+            return 1
+        print(json.dumps(found, indent=2, ensure_ascii=False))
+        return 0 if all(v["status"] == "ok" for v in found.values()) else 2
+    compiled = _compiled(args, args.dialect)
+    if compiled is None:
+        return 1
+    if args.out:
+        Path(args.out).write_text(compiled.sql, encoding="utf-8")
+    else:
+        sys.stdout.write(compiled.sql)
+    return 0
+
+
+def _run(args: argparse.Namespace) -> int:
+    compiled = _compiled(args, "duckdb")
+    if compiled is None:
+        return 1
+    try:
+        result = run_local(compiled, Path(args.data))
+    except MissingData as error:
+        print(error, file=sys.stderr)
+        return 1
+    except duckdb.Error as error:
+        print(f"Échec de l'exécution : {error}", file=sys.stderr)
+        return 1
+    writer = csv.writer(sys.stdout, lineterminator="\n")
+    writer.writerow(result.columns)
+    writer.writerows(result.rows)
+    return 0
+
+
+def _add_scope(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--with", dest="with_", action="append", default=[], metavar="fichier",
+                         help="document référencé (kpi_ref) ou canonique d'une variante")
+    command.add_argument("--calendars", metavar="dossier",
+                         help="calendriers ; par défaut le dossier calendars/ de l'espace")
+    command.add_argument("--period", metavar="AAAA-MM-JJ..AAAA-MM-JJ|PÉRIODE")
+    command.add_argument("--perimeter", action="append", default=[], metavar="condition",
+                         help="condition sur un attribut de concept, ex. entite:in:FR,DE")
+    command.add_argument("--by", metavar="dimensions",
+                         help="granularité : dimensions séparées par des virgules")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="atlas", description="Skifer Atlas")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -334,6 +435,24 @@ def build_parser() -> argparse.ArgumentParser:
     extract_cmd.add_argument("--format", choices=("text", "json"), default="text",
                              help="format du rapport")
     extract_cmd.set_defaults(handler=_extract)
+
+    compile_cmd = commands.add_parser(
+        "compile", help="SQL d'un dialecte (2 avec --compilability si un dialecte est exclu)"
+    )
+    compile_cmd.add_argument("file", metavar="fichier")
+    compile_cmd.add_argument("--dialect", choices=DIALECTS, default="databricks")
+    compile_cmd.add_argument("--compilability", action="store_true",
+                             help="statut par dialecte, en JSON")
+    compile_cmd.add_argument("--out", metavar="fichier")
+    _add_scope(compile_cmd)
+    compile_cmd.set_defaults(handler=_compile)
+
+    run_cmd = commands.add_parser("run", help="exécuter le SQL DuckDB sur des fichiers locaux")
+    run_cmd.add_argument("file", metavar="fichier")
+    run_cmd.add_argument("--data", required=True, metavar="dossier",
+                         help="un fichier <table>.csv ou .parquet par source")
+    _add_scope(run_cmd)
+    run_cmd.set_defaults(handler=_run)
 
     schema = commands.add_parser("schema", help="écrire le JSON Schema des documents")
     schema.add_argument("--kind", choices=("document", "diff"), default="document",

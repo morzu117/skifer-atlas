@@ -1,0 +1,8 @@
+facture_id,commande_id,entite,statut,date_facture,montant_ttc,montant_taxes,avoirs
+F1,C1,FR,validée,2025-10-15,120.00,20.00,0
+F2,C2,FR,validée,2025-10-31,240.00,40.00,10.00
+F3,C3,DE,validée,2025-11-02,119.00,19.00,0
+F4,C4,FR,brouillon,2025-11-03,500.00,100.00,0
+F5,C5,DE,validée,2025-12-31,238.00,38.00,20.00
+F6,C6,FR,,2025-11-10,60.00,10.00,0
+F7,C7,DE,validée,2026-01-05,59.50,9.50,0

@@ -1,0 +1,46 @@
+schema_version: 1
+kind: kpi
+data_product:
+  id: ca-par-pays
+  version: 1
+  owner: claire.m
+  domain: finance
+label: CA par pays
+semantics:
+  calendar: {key: civil}
+  timezone: Europe/Paris
+graph:
+  nodes:
+    - id: n01
+      type: source
+      label: Factures
+      platform: duckdb
+      table: ventes.factures
+      owner: claire.m
+      columns:
+        - {name: facture_id, type: string}
+        - {name: client_id, type: string}
+        - {name: montant, type: decimal}
+    - id: n02
+      type: source
+      label: Clients
+      platform: duckdb
+      table: ventes.clients
+      owner: claire.m
+      columns:
+        - {name: id_client, type: string}
+        - {name: pays, type: string}
+    - id: n03
+      type: join
+      label: Pays du client
+      inputs: {left: n01, right: n02}
+      how: left
+      keys: [[client_id, id_client]]
+      cardinality: N:1
+      check: required
+    - id: n04
+      type: aggregate
+      inputs: [n03]
+      group_by: [pays]
+      measures: [[montant, ca, sum]]
+  output: n04

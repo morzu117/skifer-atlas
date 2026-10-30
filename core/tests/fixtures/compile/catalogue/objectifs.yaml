@@ -1,0 +1,28 @@
+schema_version: 1
+kind: kpi
+data_product:
+  id: objectifs-mensuels
+  version: 2
+  owner: claire.m
+  domain: ventes
+label: Objectifs mensuels
+semantics:
+  calendar: {key: civil}
+  timezone: Europe/Paris
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: duckdb
+      table: ventes.objectifs
+      owner: claire.m
+      columns:
+        - {name: mois, type: date, timezone: Europe/Paris, format: yyyy-MM-dd}
+        - {name: segment, type: string}
+        - {name: objectif, type: decimal}
+    - id: n02
+      type: aggregate
+      inputs: [n01]
+      group_by: [mois, segment]
+      measures: [[objectif, objectif, sum]]
+  output: n02

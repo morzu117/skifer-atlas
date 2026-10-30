@@ -1,0 +1,137 @@
+# Un nœud de chaque type, pour les SQL de référence par dialecte (plan 0007).
+schema_version: 1
+kind: kpi
+data_product:
+  id: ventes-contre-objectif
+  version: 1
+  owner: claire.m
+  domain: ventes
+label: Ventes contre objectif
+semantics:
+  calendar: {key: civil}
+  timezone: Europe/Paris
+graph:
+  nodes:
+    - id: n01
+      type: source
+      label: Commandes magasin
+      platform: duckdb
+      table: ventes.commandes
+      owner: claire.m
+      columns:
+        - {name: commande_id, type: string}
+        - {name: client_id, type: string}
+        - {name: statut, type: string}
+        - {name: montant, type: decimal}
+        - {name: passee_le, type: timestamp, timezone: UTC, format: yyyy-MM-dd HH:mm:ss}
+    - id: n02
+      type: source
+      label: Commandes web
+      platform: duckdb
+      table: ventes.commandes_web
+      owner: claire.m
+      columns:
+        - {name: id, type: string}
+        - {name: client, type: string}
+        - {name: montant_web, type: decimal}
+        - {name: horodatage, type: timestamp, timezone: UTC, format: yyyy-MM-dd HH:mm:ss}
+    - id: n03
+      type: union
+      inputs: [n01, n02]
+      mode: all
+      columns:
+        - {name: commande_id, from: {n01: commande_id, n02: id}}
+        - {name: client_id, from: {n01: client_id, n02: client}}
+        - {name: statut, from: {n01: statut}}
+        - {name: montant, from: {n01: montant, n02: montant_web}}
+        - {name: passee_le, from: {n01: passee_le, n02: horodatage}}
+    - id: n04
+      type: filter
+      label: Hors commandes annulées, web compris
+      inputs: [n03]
+      condition: statut:not_in:annulée,test
+      nulls: keep
+    - id: n05
+      type: deduplicate
+      inputs: [n04]
+      keys: [commande_id]
+      keep: {order_by: [[passee_le, desc]]}
+    - id: n06
+      type: temporal
+      inputs: [n05]
+      operation: convert_timezone
+      column: passee_le
+      target: passee_le_paris
+      to: Europe/Paris
+    - id: n07
+      type: temporal
+      inputs: [n06]
+      operation: to_date
+      column: passee_le
+      target: jour
+      timezone: Europe/Paris
+    - id: n08
+      type: compute
+      inputs: [n07]
+      column: montant_ht
+      expr: montant / 1.2
+      column_type: decimal
+    - id: n09
+      type: source
+      label: Clients
+      platform: duckdb
+      table: ventes.clients
+      owner: claire.m
+      columns:
+        - {name: id_client, type: string}
+        - {name: segment, type: string}
+    - id: n10
+      type: join
+      inputs: {left: n08, right: n09}
+      how: left
+      keys: [[client_id, id_client]]
+      cardinality: N:1
+      check: required
+    - id: n11
+      type: temporal
+      inputs: [n10]
+      operation: window
+      column: montant_ht
+      target: cumul_client
+      function: sum
+      frame: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+      partition_by: [client_id]
+      order_by: [[jour, asc], [commande_id, asc]]
+    - id: n12
+      type: temporal
+      inputs: [n11]
+      operation: period
+      column: jour
+      target: mois
+      grain: month
+    - id: n13
+      type: aggregate
+      inputs: [n12]
+      group_by: [mois, segment]
+      measures: [[montant_ht, ca, sum], [client_id, clients, count_distinct]]
+      having: ['ca:greater_than:0']
+    - id: n14
+      type: kpi_ref
+      kpi: objectifs-mensuels
+      version: 2
+    - id: n15
+      type: join
+      inputs: {left: n13, right: n14}
+      how: left
+      keys: [[mois, mois], [segment, segment]]
+      cardinality: '1:1'
+      check: bypass
+      bypass_reason: Un objectif par mois et par segment, garanti par la saisie.
+    - id: n16
+      type: metric_op
+      inputs: [n15]
+      order: aggregate_first
+      metrics:
+        - {name: ecart, expr: ca - objectif}
+        - {name: taux_atteinte, expr: ca / objectif}
+  output: n16
