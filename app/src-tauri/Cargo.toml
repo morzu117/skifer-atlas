@@ -1,6 +1,7 @@
 [package]
 name = "skifer-atlas"
 version = "0.0.1"
+license = "MIT"
 description = "Skifer Atlas — définitions canoniques et déclinaisons des KPI"
 edition = "2021"
 
