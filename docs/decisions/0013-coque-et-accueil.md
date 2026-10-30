@@ -6,7 +6,7 @@ Date : 2026-10-30 · Statut : **acceptée** (mise en œuvre du plan 0010)
 
 Le plan 0010 pose la première interface réelle : la coque, l'accueil branché sur l'API et les formulaires de création et d'adhésion. Il suppose deux enrichissements de l'API qui n'existaient pas encore : les compteurs des cartes et le filtre des propositions qui attendent l'utilisateur. Le guide de style laisse plusieurs points ouverts, et en contredit deux :
 
-- il annonce des contrastes que les tokens n'atteignent pas ;
+- il annonce des contrastes que les tokens n'atteignent pas (tranché par l'ADR 0014) ;
 - il ne prévoit pas de taille pour certaines valeurs de la maquette.
 
 ## Décision
@@ -52,18 +52,11 @@ Le plan 0010 pose la première interface réelle : la coque, l'accueil branché 
   - Ailleurs dans `app/src`, aucune valeur `#…` ni `…px` : le test n'admet que ses propres données.
   - Les espacements hors de la base de 4 px de la maquette (10, 14 et 22 px) sont arrondis au token le plus proche.
 
-## Écart avec le guide, à arbitrer
+## Écart avec le guide, tranché par l'ADR 0014
 
-Le guide annonce 4,6:1 pour `--atlas-warn` sur blanc. Le calcul WCAG donne **4,09:1**. Le blanc sur `--atlas-mid`, l'élément actif de la navigation, donne **4,04:1**, et le blanc sur `--atlas-warn`, le compteur de la navigation, donne **4,09:1**. Ces trois couples sont sous le seuil de 4,5:1 que fixe la section 6 du guide pour un texte de 11 à 14 px.
+Le guide annonçait 4,6:1 pour `--atlas-warn` sur blanc, mais le calcul WCAG donnait **4,09:1**. Le blanc sur `--atlas-mid` (élément actif de la navigation) donnait **4,04:1**, et le blanc sur `--atlas-warn` (compteur de la navigation) **4,09:1**. Ces trois couples étaient sous le seuil de 4,5:1 de la section 6 du guide, et le test axe-core les tolérait.
 
-L'interface suit le guide et les tokens, qui ne sont pas modifiés. Le test axe-core (critère 10) n'admet d'exception que pour ces trois usages, identifiés par leur élément (`aria-current="page"`, `.nav-count`, `.count-warn`). Toute autre violation sérieuse le fait échouer.
-
-Deux corrections sont possibles :
-
-- foncer `--atlas-warn` et `--atlas-mid` d'environ 10 % ;
-- changer ces trois usages, par exemple un élément actif sur `--atlas-deep`.
-
-L'une ou l'autre modifie le guide. Elle relève donc d'une décision de design.
+L'ADR 0014 fonce `--atlas-mid` et `--atlas-warn` d'environ 10 %. Le test n'a plus d'exception.
 
 ## Conséquences
 

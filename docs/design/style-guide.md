@@ -26,13 +26,13 @@ Voir `tokens.css`. Résumé :
 | Texte principal | `--atlas-ink` | `#14302F` |
 | Texte secondaire | `--atlas-muted` | `#5B7470` |
 | Marque (sidebar, boutons primaires) | `--atlas-brand` | `#1C4F4D` |
-| Navigation active, succès | `--atlas-mid` | `#2E8C83` |
+| Navigation active, succès | `--atlas-mid` | `#297E76` |
 | Accent sur fond sombre | `--atlas-mint` | `#9FE1CF` |
 | Fond de badge, sélection | `--atlas-pale` | `#E3F5F0` |
-| À examiner | `--atlas-warn` | `#C2641E` |
+| À examiner | `--atlas-warn` | `#AF5A1B` |
 | Critique | `--atlas-bad` | `#B13B3B` |
 
-Contrastes vérifiés : `--atlas-muted` sur blanc 4.6:1, `--atlas-pale` sur `--atlas-brand` 9.8:1, `--atlas-warn` sur blanc 4.6:1, `--atlas-bad` sur blanc 6.4:1. Ne pas éclaircir ces couleurs.
+Contrastes vérifiés (calcul WCAG 2.1) : `--atlas-muted` sur blanc 5.0:1, `--atlas-pale` sur `--atlas-brand` 8.2:1, `--atlas-warn` sur blanc 4.9:1 et sur `--atlas-warn-bg` 4.6:1, blanc sur `--atlas-warn` 4.9:1, blanc sur `--atlas-mid` 4.8:1, `--atlas-bad` sur blanc 5.9:1. Ne pas éclaircir ces couleurs. `--atlas-mid` et `--atlas-warn` ne s'écrivent en texte que sur blanc ou `--atlas-warn-bg` : sur `--atlas-pale` (4.3:1), `--atlas-ground` (4.48:1) ou `--atlas-warn-cell` (4.0:1), le texte reste en `--atlas-ink`.
 
 **Typographie** : Inter (400, 500, 600, 700) pour l'interface ; JetBrains Mono (400, 500) pour tout ce qui est identifiant, expression, chemin, schéma, YAML, SQL. Taille de base 14 px ; 13 px dans les tableaux et l'éditeur ; 12 px pour les métadonnées ; 11 px minimum (libellés de nœuds, badges), jamais en dessous. Les polices sont chargées localement dans l'app (pas de Google Fonts en production, l'app peut tourner hors ligne).
 

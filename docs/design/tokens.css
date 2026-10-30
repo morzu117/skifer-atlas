@@ -5,7 +5,7 @@
   /* Couleurs de marque (tirées du logo) */
   --atlas-deep: #163f3f;       /* sélecteur d'espace, fonds profonds */
   --atlas-brand: #1c4f4d;      /* barre latérale, boutons primaires, textes de marque */
-  --atlas-mid: #2e8c83;        /* élément de navigation actif, succès, sélection */
+  --atlas-mid: #297e76;        /* élément de navigation actif, succès, sélection */
   --atlas-mint: #9fe1cf;       /* accents sur fond sombre, avatars */
   --atlas-pale: #e3f5f0;       /* fonds de badges, ligne sélectionnée, cellule « OK » */
 
@@ -18,8 +18,8 @@
   --atlas-panel: #ffffff;      /* cartes, panneaux, tableaux */
 
   /* Sémantique des écarts (couleurs qui diffèrent aussi en luminosité) */
-  --atlas-ok: #2e8c83;         /* convergé, dans la tolérance, connecté */
-  --atlas-warn: #c2641e;       /* à examiner, point de variation, hors points déclarés, token expiré */
+  --atlas-ok: #297e76;         /* convergé, dans la tolérance, connecté */
+  --atlas-warn: #af5a1b;       /* à examiner, point de variation, hors points déclarés, token expiré */
   --atlas-warn-bg: #fff7f0;
   --atlas-warn-cell: #ffe3cc;  /* cellule de matrice « partiellement validée » */
   --atlas-bad: #b13b3b;        /* divergence critique, hors tolérance, actions destructives */
@@ -29,9 +29,9 @@
   /* Familles de nœuds (en-têtes dans l'éditeur) */
   --atlas-node-source: #5b7470;
   --atlas-node-rows: #6b8e8a;      /* filtre, dédoublonnage, calcul, temporel */
-  --atlas-node-combine: #c2641e;   /* jointure, union */
+  --atlas-node-combine: #af5a1b;   /* jointure, union */
   --atlas-node-result: #1c4f4d;    /* agrégation, opération entre métriques */
-  --atlas-node-ref: #2e8c83;       /* référence à un KPI */
+  --atlas-node-ref: #297e76;       /* référence à un KPI */
 
   /* Typographie */
   --atlas-font: Inter, system-ui, -apple-system, sans-serif;
