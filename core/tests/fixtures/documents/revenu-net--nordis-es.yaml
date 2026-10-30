@@ -1,0 +1,43 @@
+schema_version: 1
+kind: variant
+data_product:
+  id: revenu-net--nordis-es
+  version: 1
+  owner: sofia.r
+variant_of: {id: revenu-net, version: 4}
+entity: nordis-es
+mode: from_scratch
+justification: Le système de facturation espagnol publie directement un montant net par facture clôturée.
+graph:
+  nodes:
+    - id: n01
+      type: source
+      label: Facturas
+      platform: snowflake
+      table: FINANZAS.PUBLIC.FACTURAS
+      owner: sofia.r
+      columns:
+        - {name: factura_id, type: string}
+        - {name: sociedad, type: string}
+        - {name: estado, type: string}
+        - {name: fecha, type: timestamp, timezone: Europe/Madrid, format: 'yyyy-MM-dd HH:mm:ss'}
+        - {name: importe_neto, type: decimal}
+    - id: n02
+      type: filter
+      inputs: [n01]
+      condition: estado:equals:cerrada
+      nulls: drop
+    - id: n03
+      type: temporal
+      inputs: [n02]
+      operation: period
+      column: fecha
+      target: mois_fiscal
+      grain: month
+    - id: n04
+      type: aggregate
+      inputs: [n03]
+      group_by: [mois_fiscal, sociedad]
+      measures: [[importe_neto, revenu_net, sum]]
+  output: n04
+concepts: [commande, date-de-reference]

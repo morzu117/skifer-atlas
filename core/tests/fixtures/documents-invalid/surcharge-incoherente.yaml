@@ -1,0 +1,30 @@
+schema_version: 1
+kind: variant
+data_product:
+  id: revenu-net--nordis-de
+  version: 3
+  owner: anna.k
+variant_of: {id: revenu-net, version: 4}
+entity: nordis-de
+mode: override
+justification: En Allemagne, une commande expédiée est comptabilisée comme revenu avant sa validation comptable.
+overrides:
+  - node: n02
+    justification: Règle locale de reconnaissance du revenu à l'expédition.
+    replace:
+      id: n02
+      type: filter
+      label: Factures validées ou expédiées
+      inputs: [n01]
+      condition: statut:in:validée,expédiée
+      cardinality: 1:1
+      nulls: drop
+  - node: n03
+    replace:
+      id: n13
+      type: compute
+      label: déduction des taxes
+      inputs: [n02]
+      column: montant_ht
+      expr: montant_ttc / 1.19 - avoirs
+      column_type: decimal

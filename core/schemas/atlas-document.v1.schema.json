@@ -1,0 +1,2263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Document Skifer Atlas (schema_version 1)",
+  "$defs": {
+    "Aggregate": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "aggregate",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "group_by": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Group By",
+          "type": "array"
+        },
+        "measures": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "pattern": "^(\\*|[A-Za-z_][A-Za-z0-9_]*)$",
+                "type": "string"
+              },
+              {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "approx_count_distinct",
+                  "approx_distinct_count",
+                  "average",
+                  "avg",
+                  "count",
+                  "count_distinct",
+                  "countdistinct",
+                  "distinct_count",
+                  "max",
+                  "mean",
+                  "min",
+                  "std",
+                  "stddev",
+                  "sum",
+                  "sum_distinct",
+                  "sumdistinct",
+                  "var",
+                  "variance"
+                ],
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Measures",
+          "type": "array"
+        },
+        "having": {
+          "anyOf": [
+            {
+              "items": {
+                "oneOf": [
+                  {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*:(greater_than_equal|less_than_equal|greater_than|not_contains|is_not_null|not_between|notcontains|starts_with|not_equals|ends_with|less_than|contains|not_like|between|is_null|notlike|equals|not_in|like|gte|lte|!=|<=|>=|eq|gt|in|lt|ne|<|=|>)(:.*)?$",
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ExprCondition"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Having"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "group_by",
+        "measures"
+      ],
+      "title": "Aggregate",
+      "type": "object"
+    },
+    "CalendarRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "CalendarRef",
+      "type": "object"
+    },
+    "Compute": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "compute",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Column",
+          "type": "string"
+        },
+        "expr": {
+          "pattern": "\\S",
+          "title": "Expr",
+          "type": "string"
+        },
+        "column_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "string",
+                "integer",
+                "decimal",
+                "double",
+                "boolean",
+                "date",
+                "timestamp"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Type"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "column",
+        "expr"
+      ],
+      "title": "Compute",
+      "type": "object"
+    },
+    "ConceptDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "concept",
+          "title": "Kind",
+          "type": "string"
+        },
+        "data_product": {
+          "$ref": "#/$defs/DataProduct"
+        },
+        "label": {
+          "pattern": "\\S",
+          "title": "Label",
+          "type": "string"
+        },
+        "synonyms": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Synonyms"
+        },
+        "entity": {
+          "$ref": "#/$defs/Entity"
+        },
+        "variation_points": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^(n[0-9]{2,4}|semantics\\.(calendar|timezone|currency))$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variation Points"
+        },
+        "graph": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Graph"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "data_product",
+        "label",
+        "entity"
+      ],
+      "title": "ConceptDocument",
+      "type": "object"
+    },
+    "ConvertTimezone": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "temporal",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "operation": {
+          "const": "convert_timezone",
+          "title": "Operation",
+          "type": "string"
+        },
+        "column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Column",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Target",
+          "type": "string"
+        },
+        "to": {
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "operation",
+        "column",
+        "target",
+        "to"
+      ],
+      "title": "ConvertTimezone",
+      "type": "object"
+    },
+    "DataProduct": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "owner": {
+          "pattern": "\\S",
+          "title": "Owner",
+          "type": "string"
+        },
+        "domain": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Domain",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "owner",
+        "domain"
+      ],
+      "title": "DataProduct",
+      "type": "object"
+    },
+    "Deduplicate": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "deduplicate",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "keys": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Keys",
+          "type": "array"
+        },
+        "keep": {
+          "$ref": "#/$defs/DeduplicateKeep"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "keys",
+        "keep"
+      ],
+      "title": "Deduplicate",
+      "type": "object"
+    },
+    "DeduplicateKeep": {
+      "additionalProperties": false,
+      "properties": {
+        "order_by": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "asc",
+                  "desc"
+                ],
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Order By",
+          "type": "array"
+        }
+      },
+      "required": [
+        "order_by"
+      ],
+      "title": "DeduplicateKeep",
+      "type": "object"
+    },
+    "Entity": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Key",
+          "type": "array"
+        },
+        "attributes": {
+          "items": {
+            "$ref": "#/$defs/EntityAttribute"
+          },
+          "minItems": 1,
+          "title": "Attributes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "key",
+        "attributes"
+      ],
+      "title": "Entity",
+      "type": "object"
+    },
+    "EntityAttribute": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "decimal",
+            "double",
+            "boolean",
+            "date",
+            "timestamp"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "EntityAttribute",
+      "type": "object"
+    },
+    "ExprCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "expr": {
+          "pattern": "\\S",
+          "title": "Expr",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expr"
+      ],
+      "title": "ExprCondition",
+      "type": "object"
+    },
+    "Filter": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "filter",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "condition": {
+          "oneOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*:(greater_than_equal|less_than_equal|greater_than|not_contains|is_not_null|not_between|notcontains|starts_with|not_equals|ends_with|less_than|contains|not_like|between|is_null|notlike|equals|not_in|like|gte|lte|!=|<=|>=|eq|gt|in|lt|ne|<|=|>)(:.*)?$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/ExprCondition"
+            }
+          ],
+          "title": "Condition"
+        },
+        "nulls": {
+          "enum": [
+            "keep",
+            "drop"
+          ],
+          "title": "Nulls",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "condition",
+        "nulls"
+      ],
+      "title": "Filter",
+      "type": "object"
+    },
+    "FromScratchVariant": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "variant",
+          "title": "Kind",
+          "type": "string"
+        },
+        "data_product": {
+          "$ref": "#/$defs/VariantDataProduct"
+        },
+        "variant_of": {
+          "$ref": "#/$defs/VariantOf"
+        },
+        "entity": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Entity",
+          "type": "string"
+        },
+        "mode": {
+          "const": "from_scratch",
+          "title": "Mode",
+          "type": "string"
+        },
+        "justification": {
+          "pattern": "\\S",
+          "title": "Justification",
+          "type": "string"
+        },
+        "graph": {
+          "$ref": "#/$defs/Graph"
+        },
+        "concepts": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Concepts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "data_product",
+        "variant_of",
+        "entity",
+        "mode",
+        "justification",
+        "graph",
+        "concepts"
+      ],
+      "title": "FromScratchVariant",
+      "type": "object"
+    },
+    "Graph": {
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "aggregate": "#/$defs/Aggregate",
+                "compute": "#/$defs/Compute",
+                "deduplicate": "#/$defs/Deduplicate",
+                "filter": "#/$defs/Filter",
+                "join": "#/$defs/Join",
+                "kpi_ref": "#/$defs/KpiRef",
+                "metric_op": "#/$defs/MetricOp",
+                "source": "#/$defs/Source",
+                "temporal": {
+                  "discriminator": {
+                    "mapping": {
+                      "convert_timezone": "#/$defs/ConvertTimezone",
+                      "period": "#/$defs/Period",
+                      "to_date": "#/$defs/ToDate",
+                      "window": "#/$defs/Window"
+                    },
+                    "propertyName": "operation"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/ConvertTimezone"
+                    },
+                    {
+                      "$ref": "#/$defs/ToDate"
+                    },
+                    {
+                      "$ref": "#/$defs/Period"
+                    },
+                    {
+                      "$ref": "#/$defs/Window"
+                    }
+                  ]
+                },
+                "union": "#/$defs/UnionNode"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Source"
+              },
+              {
+                "$ref": "#/$defs/Filter"
+              },
+              {
+                "$ref": "#/$defs/Join"
+              },
+              {
+                "$ref": "#/$defs/UnionNode"
+              },
+              {
+                "$ref": "#/$defs/Compute"
+              },
+              {
+                "$ref": "#/$defs/Deduplicate"
+              },
+              {
+                "$ref": "#/$defs/Aggregate"
+              },
+              {
+                "discriminator": {
+                  "mapping": {
+                    "convert_timezone": "#/$defs/ConvertTimezone",
+                    "period": "#/$defs/Period",
+                    "to_date": "#/$defs/ToDate",
+                    "window": "#/$defs/Window"
+                  },
+                  "propertyName": "operation"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/ConvertTimezone"
+                  },
+                  {
+                    "$ref": "#/$defs/ToDate"
+                  },
+                  {
+                    "$ref": "#/$defs/Period"
+                  },
+                  {
+                    "$ref": "#/$defs/Window"
+                  }
+                ]
+              },
+              {
+                "$ref": "#/$defs/KpiRef"
+              },
+              {
+                "$ref": "#/$defs/MetricOp"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Nodes",
+          "type": "array"
+        },
+        "output": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Output",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodes",
+        "output"
+      ],
+      "title": "Graph",
+      "type": "object"
+    },
+    "Join": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "join",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "$ref": "#/$defs/JoinInputs"
+        },
+        "how": {
+          "enum": [
+            "inner",
+            "left",
+            "right",
+            "full",
+            "cross",
+            "left_anti",
+            "left_semi"
+          ],
+          "title": "How",
+          "type": "string"
+        },
+        "keys": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Keys",
+          "type": "array"
+        },
+        "cardinality": {
+          "enum": [
+            "1:1",
+            "N:1",
+            "1:N"
+          ],
+          "title": "Cardinality",
+          "type": "string"
+        },
+        "check": {
+          "enum": [
+            "required",
+            "bypass"
+          ],
+          "title": "Check",
+          "type": "string"
+        },
+        "bypass_reason": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bypass Reason"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "how",
+        "keys",
+        "cardinality",
+        "check"
+      ],
+      "title": "Join",
+      "type": "object"
+    },
+    "JoinInputs": {
+      "additionalProperties": false,
+      "properties": {
+        "left": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Left",
+          "type": "string"
+        },
+        "right": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Right",
+          "type": "string"
+        }
+      },
+      "required": [
+        "left",
+        "right"
+      ],
+      "title": "JoinInputs",
+      "type": "object"
+    },
+    "KpiDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "kpi",
+          "title": "Kind",
+          "type": "string"
+        },
+        "data_product": {
+          "$ref": "#/$defs/DataProduct"
+        },
+        "label": {
+          "pattern": "\\S",
+          "title": "Label",
+          "type": "string"
+        },
+        "synonyms": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Synonyms"
+        },
+        "semantics": {
+          "$ref": "#/$defs/Semantics"
+        },
+        "variation_points": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^(n[0-9]{2,4}|semantics\\.(calendar|timezone|currency))$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variation Points"
+        },
+        "graph": {
+          "$ref": "#/$defs/Graph"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "data_product",
+        "label",
+        "semantics",
+        "graph"
+      ],
+      "title": "KpiDocument",
+      "type": "object"
+    },
+    "KpiRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "kpi_ref",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "kpi": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Kpi",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "columns": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Columns"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "kpi",
+        "version"
+      ],
+      "title": "KpiRef",
+      "type": "object"
+    },
+    "Metric": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "expr": {
+          "pattern": "\\S",
+          "title": "Expr",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "expr"
+      ],
+      "title": "Metric",
+      "type": "object"
+    },
+    "MetricAggregate": {
+      "additionalProperties": false,
+      "properties": {
+        "group_by": {
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Group By",
+          "type": "array"
+        },
+        "measures": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "pattern": "^(\\*|[A-Za-z_][A-Za-z0-9_]*)$",
+                "type": "string"
+              },
+              {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "approx_count_distinct",
+                  "approx_distinct_count",
+                  "average",
+                  "avg",
+                  "count",
+                  "count_distinct",
+                  "countdistinct",
+                  "distinct_count",
+                  "max",
+                  "mean",
+                  "min",
+                  "std",
+                  "stddev",
+                  "sum",
+                  "sum_distinct",
+                  "sumdistinct",
+                  "var",
+                  "variance"
+                ],
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Measures",
+          "type": "array"
+        }
+      },
+      "required": [
+        "group_by",
+        "measures"
+      ],
+      "title": "MetricAggregate",
+      "type": "object"
+    },
+    "MetricOp": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "metric_op",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "metrics": {
+          "items": {
+            "$ref": "#/$defs/Metric"
+          },
+          "minItems": 1,
+          "title": "Metrics",
+          "type": "array"
+        },
+        "order": {
+          "enum": [
+            "aggregate_first",
+            "rows_first"
+          ],
+          "title": "Order",
+          "type": "string"
+        },
+        "aggregate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricAggregate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "metrics",
+        "order"
+      ],
+      "title": "MetricOp",
+      "type": "object"
+    },
+    "Override": {
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "pattern": "^(n[0-9]{2,4}|semantics\\.(calendar|timezone|currency))$",
+          "title": "Node",
+          "type": "string"
+        },
+        "justification": {
+          "pattern": "\\S",
+          "title": "Justification",
+          "type": "string"
+        },
+        "replace": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "aggregate": "#/$defs/Aggregate",
+                  "compute": "#/$defs/Compute",
+                  "deduplicate": "#/$defs/Deduplicate",
+                  "filter": "#/$defs/Filter",
+                  "join": "#/$defs/Join",
+                  "kpi_ref": "#/$defs/KpiRef",
+                  "metric_op": "#/$defs/MetricOp",
+                  "source": "#/$defs/Source",
+                  "temporal": {
+                    "discriminator": {
+                      "mapping": {
+                        "convert_timezone": "#/$defs/ConvertTimezone",
+                        "period": "#/$defs/Period",
+                        "to_date": "#/$defs/ToDate",
+                        "window": "#/$defs/Window"
+                      },
+                      "propertyName": "operation"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/ConvertTimezone"
+                      },
+                      {
+                        "$ref": "#/$defs/ToDate"
+                      },
+                      {
+                        "$ref": "#/$defs/Period"
+                      },
+                      {
+                        "$ref": "#/$defs/Window"
+                      }
+                    ]
+                  },
+                  "union": "#/$defs/UnionNode"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Source"
+                },
+                {
+                  "$ref": "#/$defs/Filter"
+                },
+                {
+                  "$ref": "#/$defs/Join"
+                },
+                {
+                  "$ref": "#/$defs/UnionNode"
+                },
+                {
+                  "$ref": "#/$defs/Compute"
+                },
+                {
+                  "$ref": "#/$defs/Deduplicate"
+                },
+                {
+                  "$ref": "#/$defs/Aggregate"
+                },
+                {
+                  "discriminator": {
+                    "mapping": {
+                      "convert_timezone": "#/$defs/ConvertTimezone",
+                      "period": "#/$defs/Period",
+                      "to_date": "#/$defs/ToDate",
+                      "window": "#/$defs/Window"
+                    },
+                    "propertyName": "operation"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/ConvertTimezone"
+                    },
+                    {
+                      "$ref": "#/$defs/ToDate"
+                    },
+                    {
+                      "$ref": "#/$defs/Period"
+                    },
+                    {
+                      "$ref": "#/$defs/Window"
+                    }
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/KpiRef"
+                },
+                {
+                  "$ref": "#/$defs/MetricOp"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replace"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/CalendarRef"
+                },
+                {
+                  "pattern": "\\S",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "node",
+        "justification"
+      ],
+      "title": "Override",
+      "type": "object"
+    },
+    "OverrideVariant": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "variant",
+          "title": "Kind",
+          "type": "string"
+        },
+        "data_product": {
+          "$ref": "#/$defs/VariantDataProduct"
+        },
+        "variant_of": {
+          "$ref": "#/$defs/VariantOf"
+        },
+        "entity": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Entity",
+          "type": "string"
+        },
+        "mode": {
+          "const": "override",
+          "title": "Mode",
+          "type": "string"
+        },
+        "justification": {
+          "pattern": "\\S",
+          "title": "Justification",
+          "type": "string"
+        },
+        "overrides": {
+          "items": {
+            "$ref": "#/$defs/Override"
+          },
+          "minItems": 1,
+          "title": "Overrides",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "data_product",
+        "variant_of",
+        "entity",
+        "mode",
+        "justification",
+        "overrides"
+      ],
+      "title": "OverrideVariant",
+      "type": "object"
+    },
+    "Period": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "temporal",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "operation": {
+          "const": "period",
+          "title": "Operation",
+          "type": "string"
+        },
+        "column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Column",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Target",
+          "type": "string"
+        },
+        "grain": {
+          "enum": [
+            "day",
+            "week",
+            "month",
+            "quarter",
+            "year"
+          ],
+          "title": "Grain",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "operation",
+        "column",
+        "target",
+        "grain"
+      ],
+      "title": "Period",
+      "type": "object"
+    },
+    "Semantics": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar": {
+          "$ref": "#/$defs/CalendarRef"
+        },
+        "timezone": {
+          "title": "Timezone",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        }
+      },
+      "required": [
+        "calendar",
+        "timezone"
+      ],
+      "title": "Semantics",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "source",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "platform": {
+          "enum": [
+            "databricks",
+            "snowflake",
+            "bigquery",
+            "fabric",
+            "redshift",
+            "duckdb"
+          ],
+          "title": "Platform",
+          "type": "string"
+        },
+        "table": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*){1,2}$",
+          "title": "Table",
+          "type": "string"
+        },
+        "owner": {
+          "pattern": "\\S",
+          "title": "Owner",
+          "type": "string"
+        },
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/SourceColumn"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "concept": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Concept"
+        },
+        "binding": {
+          "anyOf": [
+            {
+              "patternProperties": {
+                "^[A-Za-z_][A-Za-z0-9_]*$": {
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Binding"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "platform",
+        "table",
+        "owner",
+        "columns"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "SourceColumn": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "decimal",
+            "double",
+            "boolean",
+            "date",
+            "timestamp"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timezone"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "SourceColumn",
+      "type": "object"
+    },
+    "ToDate": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "temporal",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "operation": {
+          "const": "to_date",
+          "title": "Operation",
+          "type": "string"
+        },
+        "column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Column",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Target",
+          "type": "string"
+        },
+        "timezone": {
+          "title": "Timezone",
+          "type": "string"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "operation",
+        "column",
+        "target",
+        "timezone"
+      ],
+      "title": "ToDate",
+      "type": "object"
+    },
+    "UnionColumn": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "from": {
+          "minProperties": 1,
+          "patternProperties": {
+            "^n[0-9]{2,4}$": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "title": "From",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "from"
+      ],
+      "title": "UnionColumn",
+      "type": "object"
+    },
+    "UnionNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "union",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "minItems": 2,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "all",
+            "distinct"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/UnionColumn"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "mode",
+        "columns"
+      ],
+      "title": "UnionNode",
+      "type": "object"
+    },
+    "VariantDataProduct": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "owner": {
+          "pattern": "\\S",
+          "title": "Owner",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "owner"
+      ],
+      "title": "VariantDataProduct",
+      "type": "object"
+    },
+    "VariantOf": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "VariantOf",
+      "type": "object"
+    },
+    "Window": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^n[0-9]{2,4}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "temporal",
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "inputs": {
+          "items": {
+            "pattern": "^n[0-9]{2,4}$",
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "operation": {
+          "const": "window",
+          "title": "Operation",
+          "type": "string"
+        },
+        "column": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Column",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Target",
+          "type": "string"
+        },
+        "function": {
+          "enum": [
+            "approx_count_distinct",
+            "approx_distinct_count",
+            "average",
+            "avg",
+            "count",
+            "count_distinct",
+            "countdistinct",
+            "distinct_count",
+            "max",
+            "mean",
+            "min",
+            "std",
+            "stddev",
+            "sum",
+            "sum_distinct",
+            "sumdistinct",
+            "var",
+            "variance"
+          ],
+          "title": "Function",
+          "type": "string"
+        },
+        "frame": {
+          "pattern": "\\S",
+          "title": "Frame",
+          "type": "string"
+        },
+        "order_by": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "asc",
+                  "desc"
+                ],
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Order By",
+          "type": "array"
+        },
+        "partition_by": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Partition By"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "inputs",
+        "operation",
+        "column",
+        "target",
+        "function",
+        "frame",
+        "order_by"
+      ],
+      "title": "Window",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "concept": "#/$defs/ConceptDocument",
+      "kpi": "#/$defs/KpiDocument",
+      "variant": {
+        "discriminator": {
+          "mapping": {
+            "from_scratch": "#/$defs/FromScratchVariant",
+            "override": "#/$defs/OverrideVariant"
+          },
+          "propertyName": "mode"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/OverrideVariant"
+          },
+          {
+            "$ref": "#/$defs/FromScratchVariant"
+          }
+        ]
+      }
+    },
+    "propertyName": "kind"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ConceptDocument"
+    },
+    {
+      "$ref": "#/$defs/KpiDocument"
+    },
+    {
+      "discriminator": {
+        "mapping": {
+          "from_scratch": "#/$defs/FromScratchVariant",
+          "override": "#/$defs/OverrideVariant"
+        },
+        "propertyName": "mode"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/OverrideVariant"
+        },
+        {
+          "$ref": "#/$defs/FromScratchVariant"
+        }
+      ]
+    }
+  ]
+}
