@@ -51,7 +51,7 @@ Routes des plans 0005 et 0006, toutes avec l'en-tête `Authorization: Bearer <to
 
 ```sh
 H="Authorization: Bearer $ATLAS_TOKEN"; API=http://127.0.0.1:8765/api/workspaces
-curl -H "$H" $API                                                     # espaces du registre local
+curl -H "$H" $API                                                     # espaces du registre local, avec counts {kpi, concept, open_proposals}
 curl -H "$H" -H 'Content-Type: application/json' -d '{"id":"acme","name":"Acme","sector":"Industrie","entities":["acme-fr"]}' $API
 curl -H "$H" -H 'Content-Type: application/json' -d '{"remote_url":"/chemin/vers/depot.git"}' $API/join
 curl -H "$H" -X POST $API/acme/sync                                   # fetch + avance rapide, 409 sync_conflict si divergence
@@ -68,6 +68,7 @@ Propositions et gouvernance (plan 0006). `document_yaml` est le document entier 
 J='Content-Type: application/json'
 curl -H "$H" -H "$J" -d '{"document_yaml":"…","justification":"Remises incluses.","base_version":4}' $API/acme/proposals
 curl -H "$H" "$API/acme/proposals?domain=finance&status=open"         # aussi kpi=, author=, entity= ; status=merged|closed|all
+curl -H "$H" "$API/acme/proposals?for_me=true"                        # celles qui attendent ma revue (awaiting_me)
 curl -H "$H" $API/acme/proposals/1                                    # justification, diff, revues, commentaires, YAML
 curl -H "$H" -H "$J" -d '{"body":"Et les avoirs ?"}' $API/acme/proposals/1/comments
 curl -H "$H" -H "$J" -d '{"event":"approve"}' $API/acme/proposals/1/reviews   # ou request_changes
@@ -82,6 +83,8 @@ L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/�
 - `ATLAS_GITHUB_TOKEN` : le jeton GitHub. Git le reçoit par un assistant d'identification, jamais dans l'URL ni dans `.git/config` (ADR 0009) ;
 - `ATLAS_GITHUB_API_URL` : l'API de GitHub Enterprise, ou un faux serveur ;
 - `ATLAS_ACCOUNT` : l'identité de l'utilisateur avec un dépôt local. À défaut, c'est le nom Git de l'utilisateur.
+
+Les compteurs de la liste des espaces se calculent sans réseau : l'index du clone, et les propositions ouvertes qui attendent la revue de l'utilisateur d'après le dernier fetch (`awaiting_me` : un autre auteur, un compte habilité, pas encore d'avis sur le dernier commit). Un compteur indisponible vaut `null`.
 
 Une erreur métier répond `{"detail": {"code", "message"}}`, plus `issues` quand il y a des diagnostics (`workspace_exists`, `sync_conflict`, `credentials_in_url`, `stale_base`, `not_ready`, `invalid_document`, `branch_protected`, `git_missing`…). Le dépôt d'un espace (`src/skifer_atlas/repo/`) et son index (`src/skifer_atlas/index/`) suivent `docs/plans/0005-*.md` et l'ADR 0007 ; la gouvernance, les hébergeurs et les propositions (`governance/`, `githost/`, `proposals/`) suivent `docs/plans/0006-*.md` et les ADR 0008 et 0009. Le test réel contre GitHub ne tourne qu'avec `ATLAS_GITHUB_TEST_REPO=owner/repo` et `ATLAS_GITHUB_TOKEN` : `uv run pytest -m github`. Démonstration : `examples/espace-nordis/`.
 

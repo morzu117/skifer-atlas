@@ -35,9 +35,10 @@ class ReviewRequest(_Body):
 @router.get("")
 def get_proposals(ws: str, domain: str | None = None, kpi: str | None = None,
                   author: str | None = None, entity: str | None = None,
-                  status: Literal["open", "merged", "closed", "all"] = "open") -> list[dict]:
+                  status: Literal["open", "merged", "closed", "all"] = "open",
+                  for_me: bool = False) -> list[dict]:
     return proposals.list_proposals(workspace_or_404(ws).id, domain, kpi, author, entity,
-                                    status)
+                                    status, for_me)
 
 
 @router.post("", status_code=201)

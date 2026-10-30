@@ -71,4 +71,27 @@
   --atlas-node-w: 184px;
   --atlas-grid: 24px;          /* trame du canevas */
   --atlas-shadow-node: 0 1px 2px rgba(20, 48, 47, 0.08);
+
+  /* Ajouts du plan 0010 (coque et accueil) */
+  --atlas-text-2xs: 10px;          /* libellés en capitales espacées : « ESPACE », type de nœud */
+  --atlas-text-lead: 15px;         /* phrase d'introduction de l'accueil, initiales des cartes */
+  --atlas-text-title: 18px;        /* titre d'une carte d'espace */
+  --atlas-space-10: 40px;          /* padding horizontal de l'en-tête d'accueil */
+  --atlas-space-12: 48px;          /* padding vertical de l'accueil */
+  --atlas-border: 1px;
+  --atlas-border-strong: 2px;      /* sélection, contour de focus */
+  --atlas-border-accent: 3px;      /* onglet actif, bordure gauche maître-détail */
+  --atlas-content-w: 1040px;       /* largeur maximale de l'accueil */
+  --atlas-card-min-w: 280px;       /* grille des cartes d'espace */
+  --atlas-card-min-h: 170px;
+  --atlas-drawer-w: 340px;         /* panneau latéral (créer, rejoindre un espace) */
+  --atlas-main-basis: 560px;       /* zone principale : flex 999 1 560px (guide 3.1) */
+  --atlas-avatar: 40px;            /* initiales d'une carte d'espace */
+  --atlas-avatar-sm: 32px;         /* utilisateur courant */
+  --atlas-logo: 40px;
+  --atlas-logo-sm: 34px;           /* logo de la barre latérale */
+  --atlas-icon: 18px;              /* navigation */
+  --atlas-icon-sm: 16px;           /* boutons */
+  --atlas-icon-banner: 20px;       /* bandeaux d'alerte */
+  --atlas-dot: 10px;               /* pastilles d'état */
 }

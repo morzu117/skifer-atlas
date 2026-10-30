@@ -323,3 +323,29 @@ def test_access_point_is_declared_by_proposal(client, joined, as_, monkeypatch):
     [listed] = client.get(connections).json()
     assert (listed["access_point"], listed["allowed"], listed["my_access"]) == (
         "dbx-fr", True, "never")
+
+
+def test_awaiting_my_review(client, joined, as_):
+    """Plan 0010 : le compteur orange de la navigation et des cartes d'accueil."""
+    as_("claire.m")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    assert client.get(PROPOSALS, params={"for_me": 1}).json() == []  # l'autrice
+    assert client.get("/api/workspaces").json()[0]["counts"] == {
+        "kpi": 4, "concept": 3, "open_proposals": 0}
+    as_("marc.d")
+    [waiting] = client.get(PROPOSALS, params={"for_me": 1}).json()
+    assert waiting["id"] == 1 and waiting["awaiting_me"] is True
+    assert client.get("/api/workspaces").json()[0]["counts"]["open_proposals"] == 1
+    as_("anna.k")  # contributrice : son avis ne compte pas
+    assert client.get(PROPOSALS, params={"for_me": 1}).json() == []
+    as_("marc.d")
+    client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"})
+    assert client.get(PROPOSALS, params={"for_me": 1}).json() == []
+    assert client.get(PROPOSALS).json()[0]["awaiting_me"] is False
+
+
+def test_counts_of_a_local_workspace(client):
+    created = client.post("/api/workspaces", json={"id": "acme", "name": "Acme"})
+    assert created.status_code == 201 and "counts" not in created.json()
+    assert client.get("/api/workspaces").json()[0]["counts"] == {
+        "kpi": 0, "concept": 0, "open_proposals": 0}

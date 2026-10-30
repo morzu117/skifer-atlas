@@ -47,8 +47,9 @@ class Context:
             return None
 
 
-def open_context(workspace_id: str, sync: bool = False) -> Context:
-    """`sync` : avance rapide du clone (création et fusion) ; sinon un simple fetch."""
+def open_context(workspace_id: str, sync: bool = False, fetch: bool = True) -> Context:
+    """`sync` : avance rapide du clone (création et fusion) ; sinon un simple fetch, ou
+    rien avec `fetch=False` (la gouvernance est celle du dernier fetch)."""
     workspace = get_workspace(workspace_id)
     if workspace is None:
         raise RepoError("not_found", f"Espace « {workspace_id} » inconnu.")
@@ -58,7 +59,7 @@ def open_context(workspace_id: str, sync: bool = False) -> Context:
     token = remote_token(workspace.git_remote)
     if sync:
         sync_workspace(workspace_id)
-    else:
+    elif fetch:
         run_git(["fetch", "--quiet", "--prune", "origin"], repo, error_code="fetch_failed",
                 token=token)
     base = run_git(["rev-parse", "--verify", f"refs/remotes/origin/{main_branch}"],

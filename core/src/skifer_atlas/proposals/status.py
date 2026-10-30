@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ..githost.base import PullRequest
 from ..governance.model import member_domains
-from ..governance.rules import decide
+from ..governance.rules import decide, requirement
 from ..repo.git import RepoError
 from .common import Context, open_context, parse_body
 
@@ -30,6 +30,7 @@ def describe(context: Context, pull: PullRequest, detail: bool = False) -> dict:
         decision = decide(context.governance, block["nature"], block.get("domain"),
                           pull.author, reviews, pull.head)
         found.update(decision.to_dict())
+        found["awaiting_me"] = _awaiting(context, pull, block, decision)
         if block.get("mention") and decision.merge_mode == "reviewed":
             found["mention"] = block["mention"]
     if detail:
@@ -45,18 +46,32 @@ def describe(context: Context, pull: PullRequest, detail: bool = False) -> dict:
     return found
 
 
+def _awaiting(context: Context, pull: PullRequest, block: dict, decision) -> bool:
+    """Ouverte, d'un autre auteur, et j'y suis habilité sans m'être encore prononcé sur le
+    dernier commit : c'est le compteur orange de la navigation."""
+    account = context.account
+    eligible = requirement(context.governance, block["nature"], block.get("domain")).eligible
+    return (account != pull.author and account in eligible
+            and account not in decision.approvers
+            and account not in decision.changes_requested_by)
+
+
 def _matches(item: dict, filters: dict) -> bool:
     return all(value is None or item.get(key) == value for key, value in filters.items())
 
 
 def list_proposals(workspace_id: str, domain: str | None = None, kpi: str | None = None,
                    author: str | None = None, entity: str | None = None,
-                   status: str | None = "open") -> list[dict]:
-    """Propositions créées par Atlas ; celles des domaines de l'utilisateur d'abord."""
-    context = open_context(workspace_id)
-    pulls = context.host.list_pull_requests(status or "all")
+                   status: str | None = "open", for_me: bool = False,
+                   fetch: bool = True) -> list[dict]:
+    """Propositions créées par Atlas ; celles des domaines de l'utilisateur d'abord.
+    `for_me` : seulement celles qui attendent ma revue. `fetch=False` lit l'état connu du
+    clone, sans réseau côté Git."""
+    context = open_context(workspace_id, fetch=fetch)
+    pulls = context.host.list_pull_requests("open" if for_me else status or "all")
     items = [describe(context, pull) for pull in pulls]
-    filters = {"domain": domain, "kpi_id": kpi, "author": author, "entity": entity}
+    filters = {"domain": domain, "kpi_id": kpi, "author": author, "entity": entity,
+               "awaiting_me": True if for_me else None}
     items = [i for i in items if i["atlas"] and _matches(i, filters)]
     mine = member_domains(context.governance, context.account)
     return sorted(items, key=lambda i: (i.get("domain") not in mine, -i["id"]))

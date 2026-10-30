@@ -1,0 +1,162 @@
+import { execFileSync } from "node:child_process";
+import { cpSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
+
+// Plan 0010 de bout en bout. Un seul serveur pour tout le fichier : les tests se suivent
+// (registre vide, création, adhésion, puis deux cartes).
+test.describe.configure({ mode: "serial" });
+
+const EXAMPLE = fileURLToPath(new URL("../../examples/espace-nordis", import.meta.url));
+const API = "http://127.0.0.1:8799";
+let bare = "";
+
+test.beforeAll(() => {
+  // Le dépôt de démonstration, en dépôt nu « distant » (examples/espace-nordis/README.md).
+  const root = mkdtempSync(join(tmpdir(), "atlas-demo-"));
+  const work = join(root, "travail");
+  cpSync(EXAMPLE, work, { recursive: true });
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=Démo", "-c", "user.email=demo@exemple.invalid", ...args], { cwd });
+  git(work, "init", "-q", "-b", "main");
+  git(work, "add", "-A");
+  git(work, "commit", "-qm", "Espace Groupe Nordis");
+  bare = join(root, "distant.git");
+  git(root, "clone", "-q", "--bare", work, bare);
+});
+
+// Contraste : l'élément actif de la navigation (blanc sur --atlas-mid, 4,04:1), le compteur
+// orange (blanc sur --atlas-warn, 4,09:1) et le texte orange sur blanc (4,09:1) suivent le
+// guide de style, qui annonce 4,6:1. Écart signalé dans l'ADR 0013, en attente d'arbitrage.
+const GUIDE_CONTRAST = '[aria-current="page"], .nav-count, .count-warn';
+
+async function seriousViolations(page: Page) {
+  const { violations } = await new AxeBuilder({ page }).analyze();
+  const found = [];
+  for (const violation of violations.filter((v) => v.impact === "serious" || v.impact === "critical")) {
+    const nodes = [];
+    for (const node of violation.nodes) {
+      const selector = node.target.join(" ");
+      const guide =
+        violation.id === "color-contrast" &&
+        (await page.locator(selector).first().evaluate((el, s) => el.closest(s) !== null, GUIDE_CONTRAST));
+      if (!guide) nodes.push(node.html);
+    }
+    if (nodes.length > 0) found.push({ id: violation.id, nodes });
+  }
+  return found;
+}
+
+test("registre vide : carte vide, polices locales, accessibilité (critères 2, 9, 10)", async ({ page }) => {
+  const external: string[] = [];
+  await page.route("**/*", (route) => {
+    const { hostname } = new URL(route.request().url());
+    if (hostname === "localhost" || hostname === "127.0.0.1") return route.continue();
+    external.push(route.request().url());
+    return route.abort(); // réseau coupé : rien d'autre que l'app et le serveur local
+  });
+  await page.goto("/");
+  await expect(page.getByText("Aucun espace pour l'instant")).toBeVisible();
+
+  const inter = await page.evaluate(async () => (await document.fonts.load("600 14px Inter")).length);
+  const mono = await page.evaluate(async () => (await document.fonts.load('400 13px "JetBrains Mono"')).length);
+  expect([inter, mono]).toEqual([1, 1]);
+  expect(external).toEqual([]);
+
+  expect(await seriousViolations(page)).toEqual([]);
+});
+
+test("créer un espace l'ouvre, un identifiant pris donne l'erreur sous le champ (critères 3, 6)", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Créer un espace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Créer un espace" });
+  await dialog.getByLabel(/^Nom/).fill("Maison Perrault");
+  await expect(dialog.getByLabel(/^Identifiant/)).toHaveValue("maison-perrault");
+  await dialog.getByLabel("Secteur").fill("Luxe");
+  await dialog.getByLabel("Entités").fill("mp-fr, mp-it");
+  expect(await seriousViolations(page)).toEqual([]);
+  await dialog.getByRole("button", { name: "Créer l'espace" }).click();
+
+  await expect(page).toHaveURL(/#\/w\/maison-perrault\/catalogue$/);
+  await expect(page.getByRole("heading", { name: "Catalogue" })).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Navigation de l'espace" });
+  await expect(nav.getByRole("link", { name: "Administration" })).toBeVisible(); // créatrice = référente
+  expect(await seriousViolations(page)).toEqual([]);
+
+  const switcher = page.getByRole("link", { name: /Espace\s*Maison Perrault/ });
+  await switcher.click();
+  await expect(page).toHaveURL(/#\/$/);
+  await page.getByRole("button", { name: "Créer un espace" }).click();
+  await dialog.getByLabel(/^Nom/).fill("Maison Perrault");
+  await dialog.getByRole("button", { name: "Créer l'espace" }).click();
+  await expect(dialog.getByLabel(/^Identifiant/)).toHaveAccessibleDescription(/Un espace porte déjà cet identifiant/);
+});
+
+test("rejoindre le dépôt de démonstration le clone et l'ouvre (critères 4, 7)", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Rejoindre un espace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Rejoindre un espace" });
+  await dialog.getByLabel(/^Adresse du dépôt/).fill(bare);
+  await dialog.getByRole("button", { name: "Cloner et ouvrir" }).click();
+
+  await expect(page).toHaveURL(/#\/w\/groupe-nordis\/catalogue$/);
+  await expect(page.getByRole("link", { name: /Espace\s*Groupe Nordis/ })).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Navigation de l'espace" });
+  await expect(nav.getByRole("link", { name: "Connexions" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Administration" })).toHaveCount(0); // anna.k : contributrice
+  await expect(page.getByText("Contributeur")).toBeVisible();
+});
+
+test("deux espaces, deux cartes ; navigation au clavier (critères 1, 10)", async ({ page }) => {
+  await page.goto("/");
+  const cards = page.getByRole("list", { name: "Espaces" }).getByRole("link");
+  await expect(cards).toHaveCount(2);
+  const nordis = cards.filter({ hasText: "Groupe Nordis" });
+  await expect(nordis).toContainText("Contributeur");
+  await expect(nordis).toContainText("Distribution · 3 entités · 4 domaines");
+  await expect(nordis).toContainText("4 KPI");
+  await expect(nordis).toContainText("3 concepts");
+  await expect(nordis).toContainText("Aucune proposition");
+  const perrault = cards.filter({ hasText: "Maison Perrault" });
+  await expect(perrault).toContainText("Référent d'annuaire");
+  await expect(perrault).toContainText("Luxe · 2 entités · 0 domaine");
+  expect(await seriousViolations(page)).toEqual([]);
+
+  for (let i = 0; i < 12; i += 1) {
+    await page.keyboard.press("Tab");
+    if (await nordis.evaluate((el) => el === document.activeElement)) break;
+  }
+  await expect(nordis).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/w\/groupe-nordis\/catalogue$/);
+  await expect(page.getByRole("heading", { name: "Catalogue" })).toBeFocused(); // le titre de la vue
+  await page.keyboard.press("Shift+Tab"); // dernier lien de la navigation
+  await expect(page.getByRole("link", { name: "Connexions" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.getByRole("link", { name: "Propositions" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Propositions" })).toBeFocused();
+  for (let i = 0; i < 5; i += 1) await page.keyboard.press("Shift+Tab"); // Connexions → … → sélecteur
+  await expect(page.getByRole("link", { name: /Espace\s*Groupe Nordis/ })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Vos espaces de travail" })).toBeFocused();
+});
+
+test("serveur arrêté : bandeau, puis Réessayer après redémarrage (critère 5)", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("list", { name: "Espaces" })).toBeVisible();
+  await page.route(`${API}/**`, (route) => route.abort("connectionrefused"));
+  await page.getByRole("link", { name: /Groupe Nordis/ }).click();
+  const banner = page.getByRole("alert").filter({ hasText: "Serveur local injoignable" });
+  await expect(banner).toBeVisible();
+  await banner.getByRole("button", { name: "Réessayer" }).click();
+  await expect(banner).toBeVisible(); // toujours arrêté
+  await page.unroute(`${API}/**`);
+  await banner.getByRole("button", { name: "Réessayer" }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Catalogue" })).toBeVisible();
+});
