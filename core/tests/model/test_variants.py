@@ -25,7 +25,7 @@ def test_override_variant_replaces_whole_nodes(de):
 def test_from_scratch_variant(es):
     document = validate_data(es).document
     assert isinstance(document, FromScratchVariant)
-    assert document.concepts == ["commande", "date-de-reference"]
+    assert document.concepts == ["facture"]
 
 
 def test_override_without_overrides_is_refused(de):
