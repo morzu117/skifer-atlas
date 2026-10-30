@@ -52,10 +52,10 @@ Les identifiants de type sont en anglais ; le libellé français vient de l'UI.
 | `filter` | `[n]` | `condition`, `nulls` | — | `condition` dans la grammaire Skifer `col:op[:val]` (opérateur ∈ `FILTER_OPERATORS`, sauf `sql`) ou `{expr: "<SQL>"}` ; `nulls` ∈ {keep, drop} |
 | `join` | `{left: n, right: n}` | `how`, `keys` [[gauche, droite], …] (≥ 1 sauf `cross`), `cardinality`, `check` | `bypass_reason` (requis si `check: bypass`) | `how` ∈ {inner, left, right, full, cross, left_anti, left_semi} ; `cardinality` ∈ {"1:1", "N:1", "1:N"} ; `check` ∈ {required, bypass} |
 | `union` | `[n, n, …]` (≥ 2, l'ordre compte) | `mode`, `columns` [{name, from: {nXX: col}}] | — | `mode` ∈ {all, distinct} |
-| `compute` | `[n]` | `column`, `expr` | `type` | `expr` en SQL ; `round` interdit (arrondi à la restitution) |
+| `compute` | `[n]` | `column`, `expr` | `column_type` | `expr` en SQL ; `round` interdit (arrondi à la restitution) |
 | `deduplicate` | `[n]` | `keys[]`, `keep` {`order_by`: [[col, asc\|desc], …]} | — | — |
 | `aggregate` | `[n]` | `group_by[]` (peut être vide = total), `measures` [[source, cible, fonction]] | `having[]` (grammaire filtre) | fonction ∈ `AGGREGATE_FUNCTIONS` ; `first`/`last` interdits (non déterministes) |
-| `temporal` | `[n]` | `operation`, `column`, `target` | selon `operation` | `operation` ∈ {convert_timezone (`to`), to_date (`timezone`), period (`grain` ∈ {day, week, month, quarter, year}, utilise `semantics.calendar`), window (`frame`, `order_by`)} |
+| `temporal` | `[n]` | `operation`, `column`, `target` | selon `operation` | `operation` ∈ {convert_timezone (`to`), to_date (`timezone`), period (`grain` ∈ {day, week, month, quarter, year}, utilise `semantics.calendar`), window (`function`, `frame`, `order_by`, `partition_by` optionnel)} |
 | `kpi_ref` | aucun | `kpi` (id), `version` (entier) | `columns[]` exposées | — |
 | `metric_op` | `[n]` | `metrics` [{name, expr}], `order` | `aggregate` (requis si `order: rows_first`) | `order` ∈ {aggregate_first, rows_first} |
 
@@ -88,7 +88,7 @@ La cohérence avec le canonique (nœud existant, point déclaré ou non) est vé
 - Les ancres, alias et balises YAML (`!!python/...`) sont refusés : chargement via `yaml.safe_load` et vérification qu'aucun alias n'est utilisé.
 
 ### Erreurs
-Chaque erreur est `{path, node_id | null, code, message}` ; `path` en notation JSON pointer (`/graph/nodes/3/nulls`). Messages en français. Codes stables, en anglais : `unknown_key`, `missing_field`, `invalid_value`, `unknown_node_type`, `duplicate_node_id`, `unknown_schema_version`, `forbidden_function`.
+Chaque erreur est `{path, node_id | null, code, message}` ; `path` en notation JSON pointer (`/graph/nodes/3/nulls`). Messages en français. Codes stables, en anglais : `unknown_key`, `missing_field`, `invalid_value`, `unknown_node_type`, `duplicate_node_id`, `unknown_schema_version`, `forbidden_function`, `invalid_yaml` (syntaxe, ancre, alias, balise, clé répétée), `unreadable_file`. Une erreur dans une surcharge porte le `node_id` du nœud surchargé.
 
 ### CLI
 - `atlas validate <fichier>… [--format text|json]` : code de sortie 0 si valide, 1 sinon. Le JSON liste les erreurs ci-dessus.
@@ -109,7 +109,7 @@ Chaque erreur est `{path, node_id | null, code, message}` ; `path` en notation J
 8. Deux nœuds de même `id` produisent `duplicate_node_id`.
 9. `dump(load(f)) == f` pour toutes les fixtures canoniques ; pour une fixture aux clés désordonnées, la seconde réécriture est identique à la première.
 10. Un fichier avec ancre ou alias YAML est refusé.
-11. Le JSON Schema commité correspond au modèle, et valide les mêmes fixtures que pydantic (même verdict sur tout le corpus).
+11. Le JSON Schema commité correspond au modèle, et donne le même verdict que pydantic sur le corpus valide et sur les erreurs de forme. Les contrôles qui demandent du code (SQL analysable, fonctions interdites, fuseaux IANA, champs requis selon un autre champ, identifiants uniques) restent hors du schéma.
 12. `atlas validate` renvoie 0 ou 1 selon le cas, et sa sortie `--format json` respecte le format d'erreur.
 13. `import skifer_atlas.model` ne charge ni `pyspark` ni `fastapi`.
 14. Les variantes : `override` sans `overrides`, ou `from_scratch` sans `justification` ou sans `concepts`, sont refusés.
@@ -124,3 +124,10 @@ Aucune.
 
 ## Estimation
 **M**. Incertitudes : l'arbitrage Q1 à Q3 ; l'écart entre `version` entier et le semver de `data_product` dans le moteur ; la stabilité des catalogues d'opérateurs importés depuis `skifer`.
+
+## Mise en œuvre (30 octobre 2026)
+- `compute` : le type de la colonne produite s'appelle `column_type`, car `type` est déjà le discriminant du nœud.
+- `temporal` / `window` : ajout de `function` (requis, catalogue d'agrégation sans `first`/`last`) et de `partition_by` (optionnel). Une fenêtre sans fonction n'a pas de sens.
+- Dépendance au moteur épinglée sur le dépôt public `github.com/morzu117/skifer`, tag `v4.0.0`, en dev comme en release : un chemin relatif ne fonctionne pas depuis un worktree. Pour co-développer le moteur, `uv pip install -e ../skifer` en local, sans committer.
+- Forme canonique d'écriture : listes de scalaires et petits mappings plats en style compact (`inputs: [n01]`, `- {name: x, type: string}`), nœuds et `data_product` toujours en bloc ; alias d'opérateurs et de fonctions réécrits sous leur forme canonique (`eq` → `equals`, `mean` → `avg`, `in: a ; b` → `in:a,b`).
+- Test de fumée PyInstaller : un binaire figé de la CLI, avec `skifer` et `sqlglot`, valide le corpus (vérifié à la main, ADR 0003).
