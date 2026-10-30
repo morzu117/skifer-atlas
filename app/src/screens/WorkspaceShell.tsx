@@ -9,6 +9,7 @@ import { href, navigate, type NavView, type Params, type View } from "../router"
 import { Catalogue } from "./Catalogue";
 import { Editor } from "./Editor";
 import { Fiche } from "./Fiche";
+import { Proposals, PROPOSALS_CHANGED } from "./Proposals";
 
 type Item = { view: NavView; label: string; plan: string };
 
@@ -63,13 +64,18 @@ export function WorkspaceShell({
   useEffect(() => {
     let alive = true;
     setWaiting(0);
-    // Masqué tant qu'on ne sait pas, et si l'hébergeur ne répond pas.
-    api
-      .proposalsForMe(wsId)
-      .then((found) => alive && setWaiting(found.length))
-      .catch(() => alive && setWaiting(0));
+    // Masqué tant qu'on ne sait pas, et si l'hébergeur ne répond pas. Relu après une
+    // revue ou une fusion depuis l'écran des propositions.
+    const refresh = () =>
+      api
+        .proposalsForMe(wsId)
+        .then((found) => alive && setWaiting(found.length))
+        .catch(() => alive && setWaiting(0));
+    void refresh();
+    window.addEventListener(PROPOSALS_CHANGED, refresh);
     return () => {
       alive = false;
+      window.removeEventListener(PROPOSALS_CHANGED, refresh);
     };
   }, [wsId]);
 
@@ -171,7 +177,8 @@ export function WorkspaceShell({
         )}
         {ws && view === "catalogue" && <Catalogue ws={ws} params={params} heading={heading} />}
         {ws && view === "fiche" && doc && <Fiche ws={ws} id={doc} params={params} heading={heading} />}
-        {ws && view !== "catalogue" && view !== "fiche" && (
+        {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} />}
+        {ws && view !== "catalogue" && view !== "fiche" && view !== "propositions" && (
           <>
             <div className="main-head">
               <h1 ref={heading} tabIndex={-1}>

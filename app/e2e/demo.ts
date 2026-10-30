@@ -10,13 +10,18 @@ import type { APIRequestContext, Page } from "@playwright/test";
 
 export const API = "http://127.0.0.1:8799";
 const SCRIPT = fileURLToPath(new URL("../../examples/depot-nordis.sh", import.meta.url));
+const PROPOSALS = fileURLToPath(new URL("../../examples/propositions-nordis.py", import.meta.url));
+const CORE = fileURLToPath(new URL("../../core", import.meta.url));
 
 /** Le dépôt de démonstration et l'historique de Revenu net, en dépôt nu « distant »
- * (examples/depot-nordis.sh). */
+ * (examples/depot-nordis.sh), avec ses cinq propositions ouvertes
+ * (examples/propositions-nordis.py). */
 export function demoRemote(): string {
   const root = mkdtempSync(join(tmpdir(), "atlas-demo-"));
   execFileSync("bash", [SCRIPT, root]);
-  return join(root, "distant.git");
+  const remote = join(root, "distant.git");
+  execFileSync("uv", ["run", "--project", CORE, "python", PROPOSALS, remote]);
+  return remote;
 }
 
 /** Groupe Nordis au registre du serveur, rejoint ici s'il ne l'est pas déjà. */

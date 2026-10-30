@@ -3,19 +3,12 @@ import { api, type Proposal, type ProposalPreview } from "../api";
 import { Banner } from "../components/Banner";
 import { DiffList, DiffSummary } from "../components/DiffList";
 import { Drawer } from "../components/Drawer";
-import { plural } from "../format";
+import { NATURES, plural } from "../format";
 import { explain, type Explained } from "../messages";
 
 // Soumission (guide 10.3) : récapitulatif de la proposition, nature et validations
 // requises (plan 0006), écarts classés avec la version courante ou le canonique (plan
 // 0003), justification obligatoire. Le YAML soumis est celui qu'a produit le serveur.
-
-export const NATURES: Record<string, { label: string; tone: string }> = {
-  new_version: { label: "Nouvelle version", tone: "badge-pale" },
-  declared_point: { label: "Point déclaré", tone: "badge-pale" },
-  undeclared: { label: "Hors points déclarés", tone: "badge-warn" },
-  from_scratch: { label: "From scratch", tone: "badge-warn" },
-};
 
 type Load = { kind: "loading" } | { kind: "ready"; preview: ProposalPreview } | { kind: "error"; error: Explained };
 

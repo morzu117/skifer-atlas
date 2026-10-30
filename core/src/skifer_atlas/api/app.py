@@ -37,6 +37,7 @@ ERROR_STATUS = {
     "sync_conflict": 409,
     "stale_base": 409,
     "document_exists": 409,
+    "comment_required": 422,
     "not_ready": 409,
     "not_open": 409,
     "head_changed": 409,

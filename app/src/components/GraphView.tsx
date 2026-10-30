@@ -5,22 +5,23 @@ import type { GraphLayout, GraphNode } from "../api";
 // Graphe en lecture (guide 4, « Nœud en lecture ») : cartes de 150 de large placées par
 // la disposition du serveur (couche, rang), sans zoom ni déplacement. Un graphe plus large
 // que la zone défile dans son conteneur, comme un tableau. Réutilisé par le diff (0012,
-// 0014) : `marks` surligne les nœuds modifiés, ajoutés ou retirés.
+// 0014) : `marks` surligne les nœuds modifiés, ajoutés, retirés ou surchargés, `notes`
+// écrit à droite la classification de l'écart.
 
-export type Mark = "modified" | "added" | "removed";
+export type Mark = "modified" | "added" | "removed" | "overridden";
 
-const MARK_LABELS: Record<Mark, string> = { modified: "modifié", added: "ajouté", removed: "retiré" };
+const MARK_LABELS: Record<Mark, string> = { modified: "modifié", added: "ajouté", removed: "retiré", overridden: "surchargé" };
 
 // Pas de la grille, en unités du canevas : carte (--atlas-node-read-w) plus l'espace des arêtes.
 const COLUMN = 206;
 const ROW = 150;
 const PAD = 24;
 
-type CardData = { node: GraphNode; mark?: Mark };
+type CardData = { node: GraphNode; mark?: Mark; note?: string };
 type CardNode = Node<CardData, "card">;
 
 function Card({ data }: NodeProps<CardNode>) {
-  const { node, mark } = data;
+  const { node, mark, note } = data;
   const classes = [
     "graph-card",
     node.variation && "is-variation",
@@ -47,7 +48,12 @@ function Card({ data }: NodeProps<CardNode>) {
       </span>
       <span className="graph-card-title">{node.title}</span>
       <span className="graph-card-detail">{node.detail}</span>
-      {mark && <span className="graph-card-mark">{MARK_LABELS[mark]}</span>}
+      {mark && (
+        <span className="graph-card-mark">
+          <span>{MARK_LABELS[mark]}</span>
+          {note && <span className="graph-card-note">{note}</span>}
+        </span>
+      )}
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   );
@@ -73,10 +79,12 @@ export function GraphView({
   layout,
   label,
   marks = {},
+  notes = {},
 }: {
   layout: GraphLayout;
   label: string;
   marks?: Record<string, Mark>;
+  notes?: Record<string, string>;
 }) {
   const { placed, width, height } = positions(layout);
   const at = new Map(placed.map((p) => [p.id, p]));
@@ -84,7 +92,7 @@ export function GraphView({
     id: node.id,
     type: "card",
     position: { x: at.get(node.id)!.x, y: at.get(node.id)!.y },
-    data: { node, mark: marks[node.id] },
+    data: { node, mark: marks[node.id], note: notes[node.id] },
     draggable: false,
     selectable: false,
     focusable: false,

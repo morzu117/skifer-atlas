@@ -11,6 +11,13 @@ const API_PORT = 8799;
 // Comparaisons chiffrées en local dans DuckDB, sans plateforme (plan 0009).
 const COMPARE_DATA = fileURLToPath(new URL("../core/tests/fixtures/compare/revenu-net", import.meta.url));
 
+// Deux comptes de plus pour les propositions (plan 0014) : un serveur par compte, comme un
+// poste par personne, chacun sur son propre dossier de données.
+const REVIEWERS = [
+  { account: "claire.m", port: 8798 }, // référente Finance
+  { account: "marc.d", port: 8797 }, // validateur Finance
+];
+
 export default defineConfig({
   testDir: "e2e",
   workers: 1,
@@ -39,6 +46,20 @@ export default defineConfig({
         ATLAS_COMPARE_DATA: COMPARE_DATA,
       },
     },
+    ...REVIEWERS.map(({ account, port }) => ({
+      command: "uv run --project ../core skifer-atlas-server",
+      url: `http://127.0.0.1:${port}/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        ATLAS_PORT: String(port),
+        ATLAS_DEV_NO_TOKEN: "1",
+        ATLAS_DATA_DIR: join(process.env.ATLAS_E2E_DATA!, account),
+        ATLAS_ACCOUNT: account,
+        ATLAS_VAULT: "memory",
+        ATLAS_LOG_LEVEL: "warning",
+      },
+    })),
     {
       command: "npx vite --port 1420 --strictPort",
       url: "http://localhost:1420",

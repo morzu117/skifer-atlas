@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
 from ... import proposals
+from ...proposals import view
 from .common import workspace_or_404
 
 router = APIRouter(prefix="/api/workspaces/{ws}/proposals")
@@ -41,6 +42,12 @@ def get_proposals(ws: str, domain: str | None = None, kpi: str | None = None,
                                     status, for_me)
 
 
+@router.get("/queue")
+def get_queue(ws: str, status: Literal["open", "merged", "closed", "all"] = "open") -> dict:
+    """File de l'écran 10.4 (plan 0014), avec ses filtres et les noms des membres."""
+    return view.queue(workspace_or_404(ws).id, status)
+
+
 @router.post("", status_code=201)
 def post_proposal(ws: str, body: ProposalRequest) -> dict:
     return proposals.create_proposal(workspace_or_404(ws).id, body.document_yaml,
@@ -50,6 +57,11 @@ def post_proposal(ws: str, body: ProposalRequest) -> dict:
 @router.get("/{number}")
 def get_proposal(ws: str, number: int) -> dict:
     return proposals.get_proposal(workspace_or_404(ws).id, number)
+
+
+@router.get("/{number}/graphs")
+def get_graphs(ws: str, number: int) -> dict:
+    return view.graphs(workspace_or_404(ws).id, number)
 
 
 @router.post("/{number}/comments", status_code=201)
