@@ -1,0 +1,15 @@
+key: fiscal-nordis
+version: "2026.1"
+periods:
+  - name: FY2026_Q1
+    start: "2025-10-01"
+    end: "2025-12-31"
+  - name: FY2026_Q2
+    start: "2026-01-01"
+    end: "2026-03-31"
+  - name: FY2026_Q3
+    start: "2026-04-01"
+    end: "2026-06-30"
+  - name: FY2026_Q4
+    start: "2026-07-01"
+    end: "2026-09-30"

@@ -1,17 +1,19 @@
 """Espaces de travail : un par client, étanches entre eux.
 
 Le registre des espaces est un fichier YAML local ; chaque espace pointe vers
-son dépôt Git et porte le rôle de l'utilisateur courant.
+son dépôt Git et porte le rôle de l'utilisateur courant. Le clone d'un espace est
+dans `workspace_dir(id)/repo`, son index dans `workspace_dir(id)/atlas.duckdb`.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
 
-from .paths import data_dir
+from .paths import WORKSPACE_ID_PATTERN, data_dir, is_workspace_id, workspace_dir
 
 Role = Literal["referent", "validateur", "contributeur", "lecteur"]
 
@@ -24,7 +26,7 @@ ROLE_LABELS: dict[Role, str] = {
 
 
 class Workspace(BaseModel):
-    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,63}$")
+    id: str = Field(pattern=WORKSPACE_ID_PATTERN)
     name: str
     sector: str = ""
     git_remote: str = ""
@@ -67,3 +69,23 @@ def add_workspace(ws: Workspace) -> Workspace:
     registry.workspaces.append(ws)
     save_registry(registry)
     return ws
+
+
+def get_workspace(workspace_id: str) -> Workspace | None:
+    if not is_workspace_id(workspace_id):
+        return None
+    return next((w for w in list_workspaces() if w.id == workspace_id), None)
+
+
+def update_workspace(ws: Workspace) -> None:
+    registry = load_registry()
+    registry.workspaces = [ws if w.id == ws.id else w for w in registry.workspaces]
+    save_registry(registry)
+
+
+def repo_dir(workspace_id: str) -> Path:
+    return workspace_dir(workspace_id) / "repo"
+
+
+def index_path(workspace_id: str) -> Path:
+    return workspace_dir(workspace_id) / "atlas.duckdb"

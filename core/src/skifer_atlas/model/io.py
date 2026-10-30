@@ -21,21 +21,30 @@ def _yaml_issue(message: str, mark: Any = None) -> Issue:
     return Issue("", None, "invalid_yaml", message + where)
 
 
+# libyaml quand il est là : l'index d'un espace relit des milliers de fichiers (plan 0005).
+_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
 def read_yaml(text: str) -> tuple[Any, list[Issue]]:
     """Charge le YAML sans rien construire d'autre que des mappings, listes et scalaires."""
     try:
-        for event in yaml.parse(text, Loader=yaml.SafeLoader):
+        for event in yaml.parse(text, Loader=_LOADER):
             if isinstance(event, yaml.AliasEvent):
                 return None, [_yaml_issue("Les alias YAML (*) ne sont pas admis", event.start_mark)]
             if getattr(event, "anchor", None) is not None:
                 return None, [_yaml_issue("Les ancres YAML (&) ne sont pas admises", event.start_mark)]
             if isinstance(event, yaml.NodeEvent) and getattr(event, "tag", None) not in (None, "!"):
                 return None, [_yaml_issue("Les balises YAML (!!) ne sont pas admises", event.start_mark)]
-        root = yaml.compose(text, Loader=yaml.SafeLoader)
-        duplicate = _first_duplicate_key(root)
-        if duplicate is not None:
-            return None, [_yaml_issue(f"Clé « {duplicate.value} » répétée", duplicate.start_mark)]
-        return yaml.safe_load(text), []
+        loader = _LOADER(text)
+        try:
+            root = loader.get_single_node()
+            duplicate = _first_duplicate_key(root)
+            if duplicate is not None:
+                return None, [_yaml_issue(f"Clé « {duplicate.value} » répétée",
+                                          duplicate.start_mark)]
+            return (None if root is None else loader.construct_document(root)), []
+        finally:
+            loader.dispose()
     except yaml.MarkedYAMLError as error:
         return None, [_yaml_issue(f"YAML illisible : {error.problem}", error.problem_mark)]
     except yaml.YAMLError as error:

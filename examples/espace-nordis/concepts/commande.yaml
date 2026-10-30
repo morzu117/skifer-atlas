@@ -1,0 +1,18 @@
+schema_version: 1
+kind: concept
+data_product:
+  id: commande
+  version: 5
+  owner: marc.d
+  domain: ventes
+  description: Une commande client, de sa création à sa facturation.
+label: Commande
+synonyms: [order, bon de commande]
+entity:
+  key: [commande_id]
+  attributes:
+    - {name: commande_id, type: string}
+    - {name: client_id, type: string}
+    - {name: entite, type: string}
+    - {name: date_commande, type: date}
+    - {name: statut, type: string}

@@ -1,0 +1,45 @@
+schema_version: 1
+kind: kpi
+data_product:
+  id: taux-de-service
+  version: 2
+  owner: sami.b
+  domain: supply
+  description: Part des lignes de commande livrées complètes à la date promise.
+label: Taux de service
+synonyms: [OTIF, service level]
+semantics:
+  calendar: {key: civil}
+  timezone: Europe/Paris
+graph:
+  nodes:
+    - id: n01
+      type: source
+      label: Livraisons
+      platform: snowflake
+      table: SUPPLY.PUBLIC.LIVRAISONS
+      owner: sami.b
+      columns:
+        - {name: ligne_id, type: string}
+        - {name: entite, type: string}
+        - {name: date_promise, type: date, timezone: Europe/Paris, format: yyyy-MM-dd}
+        - {name: livree_complete_a_temps, type: integer}
+    - id: n02
+      type: temporal
+      inputs: [n01]
+      operation: period
+      column: date_promise
+      target: mois
+      grain: month
+    - id: n03
+      type: aggregate
+      inputs: [n02]
+      group_by: [mois, entite]
+      measures: [[livree_complete_a_temps, lignes_ok, sum], ['*', lignes, count]]
+    - id: n04
+      type: metric_op
+      inputs: [n03]
+      metrics:
+        - {name: taux_de_service, expr: 'lignes_ok / NULLIF(lignes, 0)'}
+      order: aggregate_first
+  output: n04
