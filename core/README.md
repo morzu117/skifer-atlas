@@ -23,6 +23,8 @@ uv run atlas compile ../examples/espace-nordis/kpis/revenu-net.yaml --dialect sn
 uv run atlas compile revenu-net.yaml --period FY2026_Q1 --perimeter entite:in:FR --by entite
 uv run atlas compile revenu-net.yaml --compilability          # statut JSON par dialecte ; 2 si un dialecte est exclu
 uv run atlas run ../examples/espace-nordis/kpis/revenu-net.yaml --data tests/fixtures/compile/revenu-net   # CSV
+uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de,nordis-fr --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net   # 0 dans la tolérance, 2 écarts
+uv run atlas compare groupe-nordis revenu-net --variants nordis-de --period FY2026_Q4 --by mois_fiscal,entite --format json   # espace du registre, sur ses points d'accès
 ```
 
 `--with` fournit les KPI référencés par `kpi_ref` et le canonique d'une variante. `check` sort en 1 s'il reste une erreur ; avertissements et infos n'empêchent rien.
@@ -32,6 +34,8 @@ Le modèle des documents (dix types de nœuds, concept, KPI, déclinaison) est d
 `atlas extract` écrit un brouillon par requête (`SELECT`, `CREATE … AS SELECT`, `INSERT … SELECT`) d'un script `.sql` ou d'un notebook `.py`/`.ipynb`. Un brouillon marque `TODO` ce que le SQL ne dit pas et liste ses résidus dans `extraction.residues` ; s'il en reste un bloquant, il est en `status: needs_curation`. Démonstration : `examples/extraction/`.
 
 `atlas compile` produit le SQL Databricks, Snowflake ou DuckDB d'un document : une CTE par nœud, et des contrôles de cardinalité qui font échouer la requête en citant le nœud. Les calendriers fiscaux sont lus dans le dossier `calendars/` de l'espace, ou dans celui que désigne `--calendars`. `atlas run` charge chaque source depuis `<dossier>/<table>.csv` (ou `.parquet`) dans une base DuckDB en mémoire, puis exécute le SQL DuckDB. Spécification : `docs/plans/0007-*.md`, choix de forme : ADR 0010.
+
+`atlas compare` exécute le canonique, rebranché sur les sources de chaque déclinaison, puis la déclinaison, sur le scope choisi. Il compare ensuite les deux, cellule par cellule. Avec `--duckdb-data`, tout tourne dans DuckDB : chaque table se lit dans `<dossier>/<entité>/<table>.csv`. Sinon, chaque déclinaison passe par le point d'accès de son entité, avec les identifiants de l'utilisateur. Les résultats vont dans `atlas.duckdb`, schéma `results` (dans un fichier temporaire pour un dossier, sauf `--db`). Spécification : `docs/plans/0009-*.md`, choix : ADR 0012.
 
 ## API locale
 
@@ -94,3 +98,16 @@ curl -H "$H" -X DELETE $API/acme/connections/dbx-fr/token             # retire d
 ```
 
 L'OAuth utilise par défaut le client `databricks-cli`, dont la redirection est `http://localhost:8020` : le port doit être libre pendant la connexion (`oauth_port_busy` sinon). `oauth_client_id` et `oauth_redirect_port` se règlent par point d'accès. Sans trousseau utilisable, la réponse est `vault_unavailable` : Atlas ne range rien ailleurs. `ATLAS_VAULT=memory` remplace le trousseau par un coffre en mémoire du processus, pour les tests et les démonstrations. Le test réel contre un SQL warehouse ne tourne qu'avec `ATLAS_DATABRICKS_HOST`, `ATLAS_DATABRICKS_WAREHOUSE` et `ATLAS_DATABRICKS_TOKEN` : `uv run pytest -m databricks`. Voir `docs/plans/0008-*.md` et l'ADR 0011.
+
+Comparaisons chiffrées (plan 0009). Tout est préparé avant la première requête : un accès manquant répond 409 `needs_auth` avec la liste des points d'accès, sans rien exécuter. `ATLAS_COMPARE_DATA=<dossier>` fait tourner les comparaisons du serveur en local dans DuckDB, sans point d'accès ni coffre, pour les tests et les démonstrations :
+
+```sh
+curl -H "$H" -H "$J" -d '{"kpi_id":"revenu-net","variants":["nordis-de","nordis-fr"],"scope_id":"fy2026-mois-entite"}' $API/acme/comparisons   # 202 {id, status, alerts}
+curl -H "$H" -H "$J" -d '{"kpi_id":"revenu-net","variants":["nordis-de"],"scope":{"period":{"calendar_period":"FY2026_Q4"},"granularity":["entite"]},"tolerance":2}' $API/acme/comparisons
+curl -H "$H" $API/acme/comparisons/1                                  # progression, puis exécutions, synthèses, cellules
+curl -H "$H" -X POST $API/acme/comparisons/1/cancel                   # 409 not_running si elle est terminée
+curl -H "$H" "$API/acme/comparisons?kpi=revenu-net&limit=20"          # historique, sans les cellules
+curl -H "$H" "$API/acme/comparisons/matrix?domain=finance"            # dernier résultat par KPI × déclinaison
+```
+
+Tolérance : celle de la requête, sinon celle du KPI, sinon `tolerance.percent` de `governance.yaml`, sinon 1 %. Statuts : `running`, `done`, `partial`, `failed`, `cancelled`, et `interrupted` pour une comparaison restée en cours après l'arrêt du serveur. La colonne Convergence du catalogue en découle : `never_compared`, `converged` ou `divergences:n`.

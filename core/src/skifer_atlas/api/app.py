@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..repo import RepoError
-from .routes import catalog, connections, governance, proposals, workspaces
+from .routes import catalog, comparisons, connections, governance, proposals, workspaces
 
 # Code d'erreur métier → statut HTTP ; un code absent donne 500.
 ERROR_STATUS = {
@@ -37,6 +37,9 @@ ERROR_STATUS = {
     "access_expired": 409,
     "oauth_port_busy": 409,
     "query_canceled": 409,
+    "needs_auth": 409,
+    "not_running": 409,
+    "variant_outdated": 409,
     "invalid_remote": 422,
     "credentials_in_url": 422,
     "invalid_workspace": 422,
@@ -52,6 +55,16 @@ ERROR_STATUS = {
     "platform_not_supported": 422,
     "invalid_token": 422,
     "result_too_large": 422,
+    "invalid_scope": 422,
+    "unknown_scope": 422,
+    "scope_required": 422,
+    "not_compilable": 422,
+    "canonical_not_rebindable": 422,
+    "ambiguous_measure": 422,
+    "mixed_platforms": 422,
+    "no_access_point": 422,
+    "ambiguous_access_point": 422,
+    "access_point_mismatch": 422,
     "clone_failed": 502,
     "fetch_failed": 502,
     "push_failed": 502,
@@ -115,4 +128,5 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
     app.include_router(proposals.router, dependencies=protected)
     app.include_router(governance.router, dependencies=protected)
     app.include_router(connections.router, dependencies=protected)
+    app.include_router(comparisons.router, dependencies=protected)
     return app

@@ -1,5 +1,5 @@
 """CLI `atlas` : validation, contrôle, résolution, empreinte, diff, extraction,
-compilation et exécution locale.
+compilation, exécution locale et comparaison chiffrée.
 
 argparse seulement, sans chargement dynamique de sous-commandes (PyInstaller).
 """
@@ -10,6 +10,7 @@ import argparse
 import csv
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 import duckdb
@@ -33,7 +34,9 @@ from .model.io import dump_data, dump_document
 from .model.jsonschema import schema_text
 from .model.normalize import normalized_form
 from .model.resolve import ResolvedGraph, resolve
+from .repo.git import RepoError
 from .run import MissingData, run_local
+from .workspaces import get_workspace, index_path, repo_dir
 
 _SEVERITY = {"error": "erreur", "warning": "avertissement", "info": "info"}
 
@@ -365,6 +368,100 @@ def _run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _number(value: float | None, digits: int = 1) -> str:
+    return "—" if value is None else f"{value:.{digits}f}".replace(".", ",")
+
+
+def _compare_request(args: argparse.Namespace):
+    from .compare import CompareRequest
+
+    scope = None
+    if args.period or args.perimeter or args.by:
+        scope = {}
+        if args.period:
+            start, sep, end = args.period.partition("..")
+            scope["period"] = ({"from": start.strip(), "to": end.strip()} if sep
+                               else {"calendar_period": args.period})
+        if args.perimeter:
+            scope["perimeter"] = args.perimeter
+        if args.by:
+            scope["granularity"] = [d.strip() for d in args.by.split(",") if d.strip()]
+    return CompareRequest(kpi_id=args.kpi, variants=[
+        v.strip() for v in args.variants.split(",") if v.strip()], scope_id=args.scope,
+        scope=scope, tolerance=args.tolerance)
+
+
+def _compare_text(found: dict) -> str:
+    lines = [(f"{found['kpi_id']} v{found['kpi_version']} · scope {found['scope']['id']} · "
+              f"tolérance {_number(found['tolerance_pct'])} % · comparaison {found['id']} "
+              f"({found['status']})")]
+    if found["error"]:
+        lines.append(f"  erreur : {found['error']}")
+    for result in found["results"]:
+        lines.append(f"{result['entity']} ({result['platform']}) : "
+                     f"{_number(result['validation_pct'])} % de validation sur "
+                     f"{result['cell_count']} cellule(s), écart max "
+                     f"{_number(result['max_gap_pct'], 2)} %")
+        if result["divergent"]:
+            lines.append(f"  nœud divergent : {result['divergent']['node_id']} — "
+                         f"{result['divergent']['message']}")
+        if result["bypass_nodes"]:
+            lines.append(f"  contrôle de cardinalité contourné : "
+                         f"{', '.join(result['bypass_nodes'])}")
+        for cell in (c for c in result["cells"] if not c["within_tolerance"]):
+            dims = ", ".join(f"{k}={v}" for k, v in cell["dims"].items())
+            what = (f"absente du {'canonique' if cell['missing'] == 'canonical' else 'résultat'}"
+                    if cell["missing"] else f"écart {_number(cell['gap_pct'], 2)} %")
+            lines.append(f"  hors tolérance : {dims} : canonique {cell['canonical_value']}, "
+                         f"déclinaison {cell['variant_value']}, {what}")
+    return "\n".join(lines) + "\n"
+
+
+def _compare(args: argparse.Namespace) -> int:
+    from .compare import LocalRunner, service, store
+    from .compare.orchestrate import start
+
+    local = Path(args.duckdb_data) if args.duckdb_data else None
+    workspace = get_workspace(args.workspace)
+    folder = Path(args.workspace)
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            request = _compare_request(args)
+            if workspace is not None:
+                prepared = service.prepare_in(repo_dir(workspace.id), request, workspace.id,
+                                              local is not None)
+                if local is None:
+                    service.check_access(workspace.id, prepared)
+                db = Path(args.db) if args.db else index_path(workspace.id)
+                account = workspace.account or None
+                runner = LocalRunner(local) if local else service.remote_runner(workspace.id)
+            elif folder.is_dir() and local is not None:
+                prepared = service.prepare_in(folder, request, None, True)
+                db = Path(args.db) if args.db else Path(scratch) / "atlas.duckdb"
+                account, runner = None, LocalRunner(local)
+            else:
+                print(f"« {args.workspace} » n'est pas un espace du registre local ; un dossier "
+                      "ne se compare qu'en local (--duckdb-data).", file=sys.stderr)
+                return 1
+            found = store.get(db, start(db, account, prepared, runner, wait=True).number)
+        except RepoError as error:
+            print(f"{error.code} : {error.message}", file=sys.stderr)
+            for issue in error.details or []:
+                print(f"  {issue}", file=sys.stderr)
+            return 1
+        except ValueError as error:  # validation du scope demandé
+            print(f"Requête invalide : {error}", file=sys.stderr)
+            return 1
+    if args.format == "json":
+        print(json.dumps(found, indent=2, ensure_ascii=False, default=str))
+    else:
+        sys.stdout.write(_compare_text(found))
+    if found["status"] not in ("done", "partial"):
+        return 1
+    within = all(r["validation_pct"] == 100 for r in found["results"])
+    return 0 if found["status"] == "done" and within else 2
+
+
 def _add_scope(command: argparse.ArgumentParser) -> None:
     command.add_argument("--with", dest="with_", action="append", default=[], metavar="fichier",
                          help="document référencé (kpi_ref) ou canonique d'une variante")
@@ -453,6 +550,26 @@ def build_parser() -> argparse.ArgumentParser:
                          help="un fichier <table>.csv ou .parquet par source")
     _add_scope(run_cmd)
     run_cmd.set_defaults(handler=_run)
+
+    compare_cmd = commands.add_parser(
+        "compare", help="comparaison chiffrée d'un KPI et de ses déclinaisons (0 tout dans la "
+        "tolérance, 2 écarts, 1 échec)")
+    compare_cmd.add_argument("workspace", metavar="espace",
+                             help="espace du registre local, ou dossier avec --duckdb-data")
+    compare_cmd.add_argument("kpi")
+    compare_cmd.add_argument("--variants", required=True, metavar="entités",
+                             help="entités séparées par des virgules, ex. nordis-de,nordis-fr")
+    compare_cmd.add_argument("--scope", metavar="id", help="scope déclaré avec le KPI")
+    compare_cmd.add_argument("--period", metavar="AAAA-MM-JJ..AAAA-MM-JJ|PÉRIODE")
+    compare_cmd.add_argument("--perimeter", action="append", default=[], metavar="condition")
+    compare_cmd.add_argument("--by", metavar="dimensions")
+    compare_cmd.add_argument("--tolerance", type=float, metavar="pourcentage")
+    compare_cmd.add_argument("--duckdb-data", metavar="dossier",
+                             help="tout en local dans DuckDB : <dossier>/<entité>/<table>.csv")
+    compare_cmd.add_argument("--db", metavar="fichier",
+                             help="base DuckDB des résultats ; par défaut celle de l'espace")
+    compare_cmd.add_argument("--format", choices=("text", "json"), default="text")
+    compare_cmd.set_defaults(handler=_compare)
 
     schema = commands.add_parser("schema", help="écrire le JSON Schema des documents")
     schema.add_argument("--kind", choices=("document", "diff"), default="document",

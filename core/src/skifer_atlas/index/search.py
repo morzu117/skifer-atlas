@@ -17,12 +17,21 @@ def _records(cursor: duckdb.DuckDBPyConnection) -> list[dict]:
     return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
 
 
-def _convergence(kind: str, variant_count: int) -> str | None:
-    """Sans résultat de comparaison (plan 0009), un KPI à variantes n'a jamais été
-    comparé ; un KPI sans variante converge par construction."""
+def _convergence(kind: str, variant_count: int, version: int | None,
+                 compared: list[dict]) -> str | None:
+    """Un KPI sans variante converge par construction. Sinon, d'après la dernière
+    comparaison chiffrée de chaque variante à la version courante du KPI (plan 0009) :
+    `divergences:n` si n variantes ont une cellule hors tolérance, `converged` si toutes
+    sont comparées sans écart, `never_compared` sinon."""
     if kind != "kpi":
         return None
-    return "converged" if variant_count == 0 else "never_compared"
+    if variant_count == 0:
+        return "converged"
+    current = [r for r in compared if r["kpi_version"] == version]
+    divergent = sum(r["validation_pct"] is None or r["validation_pct"] < 100 for r in current)
+    if divergent:
+        return f"divergences:{divergent}"
+    return "converged" if len(current) >= variant_count else "never_compared"
 
 
 def catalog(connection: duckdb.DuckDBPyConnection, q: str | None = None,
@@ -57,9 +66,15 @@ def catalog(connection: duckdb.DuckDBPyConnection, q: str | None = None,
         WHERE {" AND ".join(conditions)}
         ORDER BY rank, {label}, d.id
     """, parameters))
+    from ..compare.store import latest  # import tardif : `compare` lit l'index
+
+    compared: dict[str, list[dict]] = {}
+    for result in latest(connection):
+        compared.setdefault(result["kpi_id"], []).append(result)
     for row in rows:
         del row["rank"]
-        row["convergence"] = _convergence(row["kind"], row["variant_count"])
+        row["convergence"] = _convergence(row["kind"], row["variant_count"], row["version"],
+                                          compared.get(row["id"], []))
     return rows
 
 

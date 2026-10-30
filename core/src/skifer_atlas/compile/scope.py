@@ -102,7 +102,7 @@ def perimeter_filters(view: GraphView, scope: Scope) -> dict[str, list[str]]:
     return filters
 
 
-def _output_aggregate(view: GraphView) -> str:
+def output_aggregate(view: GraphView) -> str:
     node_id = view.output
     while True:
         node = view.by_id[node_id]
@@ -122,7 +122,7 @@ def apply_granularity(document: Any, scope: Scope, library: Library | None) -> A
     if scope.granularity is None:
         return document
     view = GraphView(document.graph)
-    target = _output_aggregate(view)
+    target = output_aggregate(view)
     schemas, _ = propagate(document, library)
     available = schemas.get(view.inputs(target)[0]) or {}
     attributes = _attribute_columns(view)

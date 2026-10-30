@@ -55,12 +55,24 @@ class Member(_Model):
     roles: list[MemberRole] = Field(default_factory=list)
 
 
+class Tolerance(_Model):
+    percent: Annotated[float, Field(ge=0, le=100)]
+
+
+DEFAULT_TOLERANCE = 1.0  # sans tolérance déclarée dans l'espace (ADR 0012)
+
+
 class Governance(_Model):
     schema_version: Literal[1] = 1
     validators_required: ValidatorsRequired = Field(default_factory=ValidatorsRequired)
     domains: list[Domain] = Field(default_factory=list)
     members: list[Member] = Field(default_factory=list)
     allowed_platforms: list[Literal[PLATFORMS]] = Field(default_factory=list)
+    tolerance: Tolerance | None = None  # écart admis d'une comparaison chiffrée (plan 0009)
+
+    @property
+    def tolerance_percent(self) -> float:
+        return self.tolerance.percent if self.tolerance else DEFAULT_TOLERANCE
 
     def domain(self, domain_id: str | None) -> Domain | None:
         return next((d for d in self.domains if d.id == domain_id), None)

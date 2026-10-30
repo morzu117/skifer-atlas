@@ -88,6 +88,9 @@ def status(workspace_id: str, access_point_id: str, vault: Vault | None = None) 
     return found
 
 
+SUPPORTED_PLATFORMS = ("databricks",)  # Snowflake : plan 0018
+
+
 def authorize(workspace_id: str, access_point_id: str, vault: Vault | None = None,
               listen_seconds: float = oauth.LISTEN_SECONDS) -> dict:
     """Lance le flux OAuth ; l'UI ouvre l'URL rendue dans le navigateur système."""
@@ -137,6 +140,13 @@ def _usable(workspace_id: str, point: AccessPoint, vault: Vault) -> Credential:
     if credential.needs_refresh():
         credential = _refresh(workspace_id, point, credential, vault)
     return credential
+
+
+def ensure_usable(workspace_id: str, access_point_id: str, vault: Vault | None = None) -> None:
+    """Lève `not_connected` ou `access_expired` si mon accès ne permet pas d'exécuter ;
+    rafraîchit au passage un jeton OAuth près d'expirer."""
+    point = access_point(workspace_id, access_point_id)
+    _usable(workspace_id, point, vault or Vault())
 
 
 def _connector(point: AccessPoint, credential: Credential) -> Connector:

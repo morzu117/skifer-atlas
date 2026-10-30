@@ -1197,6 +1197,32 @@
         "graph": {
           "$ref": "#/$defs/Graph"
         },
+        "scopes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/KpiScope"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scopes"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tolerance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "extraction": {
           "anyOf": [
             {
@@ -1291,6 +1317,66 @@
         "version"
       ],
       "title": "KpiRef",
+      "type": "object"
+    },
+    "KpiScope": {
+      "additionalProperties": false,
+      "description": "Scope de comparaison déclaré avec le KPI (plan 0009, analyse Q5).",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "period": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScopePeriod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "perimeter": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*:(greater_than_equal|less_than_equal|greater_than|not_contains|is_not_null|not_between|notcontains|starts_with|not_equals|ends_with|less_than|contains|not_like|between|is_null|notlike|equals|not_in|like|gte|lte|!=|<=|>=|eq|gt|in|lt|ne|<|=|>)(:.*)?$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Perimeter"
+        },
+        "granularity": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Granularity"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "KpiScope",
       "type": "object"
     },
     "Metric": {
@@ -1788,6 +1874,53 @@
       "title": "Residue",
       "type": "object"
     },
+    "ScopePeriod": {
+      "additionalProperties": false,
+      "description": "Nom d'une période du calendrier du KPI, ou bornes ISO incluses.",
+      "properties": {
+        "calendar_period": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Calendar Period"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To"
+        }
+      },
+      "title": "ScopePeriod",
+      "type": "object"
+    },
     "Semantics": {
       "additionalProperties": false,
       "properties": {
@@ -2090,6 +2223,22 @@
         "timezone"
       ],
       "title": "ToDate",
+      "type": "object"
+    },
+    "Tolerance": {
+      "additionalProperties": false,
+      "properties": {
+        "percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Percent",
+          "type": "number"
+        }
+      },
+      "required": [
+        "percent"
+      ],
+      "title": "Tolerance",
       "type": "object"
     },
     "UnionColumn": {
