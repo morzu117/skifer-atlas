@@ -1,6 +1,6 @@
 // Accès à l'API locale. Dans l'app, Tauri fournit le port et le token de
 // session ; dans un simple navigateur (dev sans Tauri), on retombe sur le
-// port par défaut du serveur, sans token.
+// port par défaut du serveur, sans token (serveur lancé avec ATLAS_DEV_NO_TOKEN=1).
 
 export type ServerInfo = { baseUrl: string; token: string };
 
@@ -40,6 +40,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const api = {
   health: () => request<{ status: string; version: string }>("/health"),
   workspaces: () => request<Workspace[]>("/api/workspaces"),
-  createWorkspace: (ws: Omit<Workspace, "role_label">) =>
+  createWorkspace: (ws: Pick<Workspace, "id" | "name" | "sector" | "entities">) =>
     request<Workspace>("/api/workspaces", { method: "POST", body: JSON.stringify(ws) }),
 };

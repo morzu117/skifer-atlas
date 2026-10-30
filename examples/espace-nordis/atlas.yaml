@@ -1,0 +1,6 @@
+schema_version: 1
+id: groupe-nordis
+name: Groupe Nordis
+sector: Distribution
+entities: [nordis-fr, nordis-de, nordis-es]
+main_branch: main

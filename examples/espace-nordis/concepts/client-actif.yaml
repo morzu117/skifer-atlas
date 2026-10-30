@@ -1,0 +1,33 @@
+schema_version: 1
+kind: concept
+data_product:
+  id: client-actif
+  version: 3
+  owner: marc.d
+  domain: ventes
+  description: Client ayant passé au moins une commande sur les douze derniers mois glissants.
+label: Client actif
+synonyms: [active customer]
+entity:
+  key: [client_id]
+  attributes:
+    - {name: client_id, type: string}
+    - {name: entite, type: string}
+graph:
+  nodes:
+    - id: n01
+      type: source
+      label: Clients
+      platform: databricks
+      table: gold.ventes.dim_client
+      owner: marc.d
+      columns:
+        - {name: client_id, type: string}
+        - {name: entite, type: string}
+        - {name: actif_12m, type: boolean}
+    - id: n02
+      type: filter
+      inputs: [n01]
+      condition: actif_12m:equals:true
+      nulls: drop
+  output: n02

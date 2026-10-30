@@ -1,0 +1,3 @@
+schema_version: 1
+domains: [finance, ventes, supply, marketing]
+referents: [julien.h]

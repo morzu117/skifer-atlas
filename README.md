@@ -39,6 +39,8 @@ cd core && uv sync && uv run pytest
 cd app && npm install && npm run tauri dev
 ```
 
+Le serveur refuse de démarrer sans le token que Tauri lui passe. Pour travailler sur l'interface dans un simple navigateur, sans Tauri : `cd core && ATLAS_DEV_NO_TOKEN=1 uv run skifer-atlas-server`, puis `cd app && npm run dev`. Les routes et un exemple avec `curl` sont dans [`core/README.md`](core/README.md) ; un espace de démonstration est dans [`examples/espace-nordis/`](examples/espace-nordis/).
+
 ## Build d'une version installable
 
 ```bash
