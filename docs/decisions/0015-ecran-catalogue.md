@@ -55,7 +55,7 @@ Le plan 0011 branche l'écran 10.1 sur l'index et ajoute deux routes : les facet
   - Les règles flex de la maquette sont reprises telles quelles :
     - tableau `flex: 999 1 520px`, `min-width: 560px` dans un conteneur qui défile ;
     - aperçu `flex: 1 1 300px`, `max-width: 340px`.
-  - L'aperçu passe sous le tableau dès que la zone principale ne peut plus contenir les deux, ce qui vaut sous 900 px de large.
+  - L'aperçu passe sous le tableau dès que la zone principale ne peut plus contenir les deux (520 + 20 + 300 px). Avec la barre latérale et les marges, cela arrive sous environ 1136 px de fenêtre, donc bien sous 900 px comme le veut le guide. Entre 960 et 1136 px, l'aperçu est déjà sous le tableau.
   - Les cinq nouvelles mesures sont des tokens : `--atlas-search-basis`, `--atlas-table-basis`, `--atlas-table-min-w`, `--atlas-preview-basis` et `--atlas-preview-w`.
 
 ## Conséquences
