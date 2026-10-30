@@ -17,11 +17,12 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..repo import RepoError
-from .routes import catalog, governance, proposals, workspaces
+from .routes import catalog, connections, governance, proposals, workspaces
 
 # Code d'erreur métier → statut HTTP ; un code absent donne 500.
 ERROR_STATUS = {
     "not_found": 404,
+    "platform_not_found": 404,
     "forbidden": 403,
     "workspace_exists": 409,
     "sync_conflict": 409,
@@ -32,6 +33,10 @@ ERROR_STATUS = {
     "merge_conflict": 409,
     "merge_refused": 409,
     "branch_protected": 409,
+    "not_connected": 409,
+    "access_expired": 409,
+    "oauth_port_busy": 409,
+    "query_canceled": 409,
     "invalid_remote": 422,
     "credentials_in_url": 422,
     "invalid_workspace": 422,
@@ -41,6 +46,12 @@ ERROR_STATUS = {
     "host_rejected": 422,
     "no_remote": 422,
     "unsupported_host": 422,
+    "invalid_access_point": 422,
+    "invalid_access_points": 422,
+    "platform_not_allowed": 422,
+    "platform_not_supported": 422,
+    "invalid_token": 422,
+    "result_too_large": 422,
     "clone_failed": 502,
     "fetch_failed": 502,
     "push_failed": 502,
@@ -49,8 +60,14 @@ ERROR_STATUS = {
     "host_forbidden": 502,
     "host_unreachable": 502,
     "host_failed": 502,
+    "oauth_unavailable": 502,
+    "oauth_failed": 502,
+    "platform_forbidden": 502,
+    "query_failed": 502,
     "git_missing": 503,
+    "vault_unavailable": 503,
     "git_timeout": 504,
+    "query_timeout": 504,
 }
 
 
@@ -97,4 +114,5 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
     app.include_router(catalog.router, dependencies=protected)
     app.include_router(proposals.router, dependencies=protected)
     app.include_router(governance.router, dependencies=protected)
+    app.include_router(connections.router, dependencies=protected)
     return app

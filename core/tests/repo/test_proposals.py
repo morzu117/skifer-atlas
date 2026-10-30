@@ -287,3 +287,39 @@ def test_governance_without_referent_is_refused(client, joined, as_):
     assert code(response) == (422, "invalid_governance")
     assert "no_referent" in [i["code"] for i in response.json()["detail"]["issues"]]
     assert branches(joined[0]) == []
+
+
+def test_access_point_is_declared_by_proposal(client, joined, as_, monkeypatch):
+    """Plan 0008, critère 7 : plateforme hors `allowed_platforms` refusée à la déclaration ;
+    le registre `access_points.yaml` passe par une proposition, sans aucun secret."""
+    bare, _ = joined
+    monkeypatch.setenv("ATLAS_VAULT", "memory")
+    connections = f"{WS}/connections"
+    point = {"id": "dbx-fr", "platform": "databricks",
+             "host": "https://adb-1.2.azuredatabricks.net", "warehouse_id": "abc123",
+             "schema": "gold.finance", "entity": "nordis-fr", "owner": "claire.m"}
+    as_("claire.m")
+    refused = client.post(connections, json={"access_point": {**point, "platform": "bigquery"},
+                                             "justification": "BigQuery."})
+    assert code(refused) == (422, "invalid_access_point")
+    assert [i["code"] for i in refused.json()["detail"]["issues"]] == ["platform_not_allowed"]
+    as_("inconnu.z")
+    assert code(client.post(connections, json={"access_point": point,
+                                               "justification": "x"})) == (403, "forbidden")
+
+    as_("julien.h")
+    created = client.post(connections, json={"access_point": point,
+                                             "justification": "Entrepôt France."})
+    assert created.status_code == 201, created.text
+    proposal = created.json()
+    assert (proposal["nature"], proposal["ready_to_merge"], proposal["merge_mode"],
+            proposal["branch"]) == ("access_points", True, "no_other_eligible",
+                                    "prop/access-point-dbx-fr-1")
+    assert client.get(connections).json() == []
+    merged = client.post(f"{PROPOSALS}/{proposal['id']}/merge").json()
+    assert merged["tag"] is None
+    stored = git(bare, "show", "main:access_points.yaml")
+    assert "dbx-fr" in stored and "token" not in stored
+    [listed] = client.get(connections).json()
+    assert (listed["access_point"], listed["allowed"], listed["my_access"]) == (
+        "dbx-fr", True, "never")

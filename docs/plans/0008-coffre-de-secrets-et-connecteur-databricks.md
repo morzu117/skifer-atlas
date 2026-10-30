@@ -57,3 +57,52 @@ Proposé seulement si l'OAuth échoue ou est indisponible pour ce point d'accès
 
 ## Estimation
 **L**. Incertitudes : client OAuth à utiliser chez chaque client (application déclarée par leur admin) ; politique sur les tokens personnels ; comportement de keyring en binaire figé, sous Linux surtout.
+## Mise en œuvre (30 octobre 2026)
+- **Paquets** (`core/src/skifer_atlas/`) :
+  - `vault/` :
+    - `model.py` : `Credential`, avec ses états `connected` et `expired`, et une marge de rafraîchissement de 60 s ;
+    - `keyring_vault.py` : `Vault`, `system_keyring()` (backend explicite par système, sinon `vault_unavailable`) et `MemoryKeyring` (`ATLAS_VAULT=memory`).
+  - `connectors/` :
+    - `access_points.py` : le modèle et la validation d'`access_points.yaml` ;
+    - `oauth.py` : découverte, PKCE, échange, rafraîchissement, révocation, et les flux en cours avec leur serveur de rappel ;
+    - `databricks.py` : l'API *Statement Execution* ;
+    - `base.py` : l'interface `Connector` et `QueryResult` ;
+    - `http.py` : le client HTTP.
+  - `connections.py` : le service. Il rend les états, rafraîchit, retente une fois sur un 401, teste, révoque et exécute.
+  - `proposals/create.py` : `create_access_point_proposal`, de nature `access_points`. La gouvernance et le registre partagent le contrôle de base (`base_digest`) ; `base_governance` reste lu pour les propositions déjà ouvertes.
+  - CODEOWNERS attribue `/access_points.yaml` aux référents d'espace.
+
+  Les choix qui s'écartent du plan, ou qu'il ne fixait pas, sont dans l'**ADR 0011** :
+  - API REST d'exécution plutôt que `databricks-sql-connector`, et `QueryResult` plutôt qu'une table Arrow ;
+  - port de redirection fixe 8020, celui qu'accepte le client `databricks-cli` ;
+  - registre `{schema_version, access_points}` ;
+  - déclaration toujours par proposition ;
+  - expiration d'un token personnel connue seulement si l'utilisateur la fournit ;
+  - plateformes autorisées contrôlées à la déclaration et à l'usage, pas à la lecture.
+- **API** (`/api/workspaces/{ws}/connections`) :
+  - `GET` : points d'accès et mon accès ;
+  - `POST` : proposition de point d'accès, 201 ;
+  - `GET /{ap}/status` : état, flux OAuth en cours, erreur de rafraîchissement ;
+  - `POST /{ap}/authorize` : `{authorize_url}` ;
+  - `PUT /{ap}/token` : token personnel ;
+  - `DELETE /{ap}/token` : `{revoked, remote_revoked}` ;
+  - `POST /{ap}/test` : `{ok, latency_ms, error}`.
+- **Tests** :
+  - `core/tests/connections/` : un faux Databricks local (`fake_databricks.py`) couvre l'OIDC, PKCE, le rafraîchissement refusable, la révocation et les requêtes, en blocs ou en attente.
+  - `test_connections.py` couvre :
+    - les critères 1 à 8 ;
+    - un rappel à `state` étranger, un port occupé, l'expiration du flux ;
+    - le délai, l'annulation, l'échec d'une requête ;
+    - un 401 suivi d'un rafraîchissement ;
+    - un coffre absent.
+  - Le critère 3 sur un warehouse réel est marqué `databricks` : `ATLAS_DATABRICKS_HOST`, `ATLAS_DATABRICKS_WAREHOUSE`, `ATLAS_DATABRICKS_TOKEN`, puis `uv run pytest -m databricks`.
+  - `tests/repo/test_proposals.py` couvre la déclaration par proposition et le critère 7.
+  - 26 tests ajoutés.
+- **Binaire figé** (critère 9) :
+  - `build-sidecar.sh` embarque les backends de `keyring`.
+  - Sous macOS arm64, le binaire fait **39 Mo**. Il répond sur `/health` et `/api/workspaces/{ws}/connections`, et refuse sans token.
+  - Avec le vrai trousseau, un token personnel factice est rangé (`security find-generic-password` le trouve), puis supprimé. Il n'apparaît ni dans les journaux ni dans le dossier de données.
+- **Reste à faire** :
+  - OAuth réel et requête agrégée sur un espace Databricks de test ;
+  - vérifier le binaire sous Windows et sous Linux, où Secret Service doit être actif ;
+  - champ masqué et vidé après envoi, à l'écran Connexions (plan 0016).

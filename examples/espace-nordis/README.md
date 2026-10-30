@@ -1,4 +1,4 @@
-# Démonstration : l'espace Groupe Nordis (plans 0005, 0006 et 0007)
+# Démonstration : l'espace Groupe Nordis (plans 0005 à 0008)
 
 Le dépôt d'un espace Atlas, tel qu'on le clone : sept documents canoniques et trois variantes, sur le modèle des maquettes.
 
@@ -76,3 +76,22 @@ Ce qu'on doit voir :
   - `chk_n07_right` vérifie que la date comptable est unique par jour ;
   - `chk_n04_calendar` vérifie que chaque date tombe dans le calendrier.
 - **Exécution** : le revenu net par mois et par entité. La facture du 31 octobre compte en novembre, mois de sa date comptable.
+
+## Déclarer un point d'accès et s'y connecter (plan 0008)
+
+L'espace ne déclare encore aucun point d'accès. Serveur lancé comme plus haut, avec en plus `ATLAS_VAULT=memory` pour ne rien écrire dans le trousseau de la machine :
+
+```sh
+AP='{"id":"dbx-fr","platform":"databricks","host":"https://adb-1234567890123456.7.azuredatabricks.net","warehouse_id":"abc123","schema":"gold.finance","entity":"nordis-fr","owner":"claire.m","freshness":"quotidienne, 6 h"}'
+curl -H "$H" -H "$J" -d "{\"access_point\":$AP,\"justification\":\"Entrepôt France.\"}" $API/groupe-nordis/connections
+curl -H "$H" -X POST $API/groupe-nordis/proposals/2/merge             # numéro rendu par la proposition
+curl -H "$H" $API/groupe-nordis/connections
+curl -H "$H" -X PUT -H "$J" -d '{"token":"dapi-factice"}' $API/groupe-nordis/connections/dbx-fr/token
+curl -H "$H" -X POST $API/groupe-nordis/connections/dbx-fr/test
+```
+
+Ce qu'on doit voir :
+
+- **Déclaration** : une proposition de nature `access_points`, branche `prop/access-point-dbx-fr-…`. `julien.h` est le seul référent d'espace : elle est prête sans revue, et sa fusion ajoute `access_points.yaml`, sans aucun secret, sur `main`. Une plateforme absente d'`allowed_platforms` (`bigquery`, par exemple) est refusée : `invalid_access_point`, diagnostic `platform_not_allowed`.
+- **Connexions** : `dbx-fr` avec `my_access: never`, puis `connected` et `auth: pat` après le token personnel ; le token n'apparaît dans aucune réponse.
+- **Test** : l'hôte de la démonstration n'existe pas, donc `{"ok": false, "error": {"code": "host_unreachable", …}}`. Avec un vrai hôte et `POST …/dbx-fr/authorize`, l'URL rendue ouvre la connexion Databricks dans le navigateur.

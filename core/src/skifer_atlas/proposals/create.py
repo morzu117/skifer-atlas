@@ -12,6 +12,13 @@ import hashlib
 import re
 from typing import Any
 
+from ..connectors.access_points import FILE as ACCESS_POINTS_FILE
+from ..connectors.access_points import (
+    AccessPoint,
+    dump_access_points,
+    parse_access_points,
+    validate_access_points,
+)
 from ..diff import DiffContext, diff
 from ..governance.codeowners import PATH as CODEOWNERS_PATH
 from ..governance.codeowners import OwnedDocument, generate
@@ -33,6 +40,8 @@ from .common import (
     render_body,
 )
 
+# Fichiers partagés de l'espace, approuvés par un référent d'espace et sans version.
+SHARED_FILES = {"governance": GOVERNANCE_FILE, "access_points": ACCESS_POINTS_FILE}
 MAX_DIFFERENCES = 200  # au-delà, seul le résumé figure dans le corps de la PR
 
 
@@ -228,10 +237,44 @@ def create_governance_proposal(workspace_id: str, governance_data: dict,
         "target": {"kind": "governance", "id": "governance", "path": GOVERNANCE_FILE,
                    "entity": None, "kpi_id": None},
         "nature": "governance", "domain": None, "base_version": None, "version": None,
-        "base_governance": _digest(current), "mention": None, "diff": None,
+        "base_digest": _digest(current), "mention": None, "diff": None,
         "warnings": _issues([i for i in issues if i.severity != "error"]),
     }
     return _open_pull(context, "governance", commit, title, justification, block)
+
+
+def create_access_point_proposal(workspace_id: str, access_point: dict,
+                                 justification: str) -> dict:
+    """Ajoute ou remplace un point d'accès dans `access_points.yaml` (sans secret)."""
+    context = open_context(workspace_id, sync=True)
+    context.require("contributeur")
+    current = context.show(ACCESS_POINTS_FILE) or ""
+    registry, issues = parse_access_points(current, None)
+    if registry is None:
+        raise RepoError("invalid_access_points", f"{ACCESS_POINTS_FILE} de la branche "
+                        "principale est invalide.", _issues(issues))
+    point_id = access_point.get("id") if isinstance(access_point, dict) else None
+    points = [p.model_dump(mode="json", by_alias=True, exclude_none=True)
+              for p in registry.access_points if p.id != point_id]
+    raw = {"schema_version": 1, "access_points": [*points, access_point]}
+    proposed, issues = validate_access_points(raw, context.governance)
+    if proposed is None:
+        raise RepoError("invalid_access_point", "Le point d'accès est refusé.", _issues(issues))
+    point: AccessPoint = proposed.get(point_id)
+    replaced = registry.get(point_id) is not None
+    title = f"Point d'accès {point.id} ({point.platform})"
+    commit = commit_files(context.repo, context.base,
+                          {ACCESS_POINTS_FILE: dump_access_points(proposed)},
+                          f"{title}\n\n{justification.strip()}")
+    block = {
+        "schema_version": 1,
+        "target": {"kind": "access_points", "id": point.id, "path": ACCESS_POINTS_FILE,
+                   "entity": point.entity, "kpi_id": None},
+        "nature": "access_points", "domain": None, "base_version": None, "version": None,
+        "base_digest": _digest(current), "mention": None, "diff": None,
+        "replaced": replaced, "warnings": [],
+    }
+    return _open_pull(context, f"access-point-{point.id}", commit, title, justification, block)
 
 
 def _digest(text: str) -> str:

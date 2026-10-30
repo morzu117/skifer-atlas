@@ -15,6 +15,7 @@ dependencies = [
     "platformdirs>=4.0",
     "skifer",
     "tzdata>=2024.1 ; sys_platform == 'win32'",
+    "keyring>=25.0",
 ]
 
 [project.scripts]
@@ -46,7 +47,10 @@ target-version = "py311"
 extend-exclude = ["tests/fixtures"]  # scripts et notebooks d'entrée de l'extraction
 
 [tool.pytest.ini_options]
-markers = ["github: test réel contre GitHub (ATLAS_GITHUB_TEST_REPO), hors CI"]
+markers = [
+    "github: test réel contre GitHub (ATLAS_GITHUB_TEST_REPO), hors CI",
+    "databricks: test réel contre un SQL warehouse Databricks (ATLAS_DATABRICKS_*), hors CI",
+]
 
 [tool.uv.sources]
 skifer = { git = "https://github.com/morzu117/skifer.git", rev = "v4.0.0" }
