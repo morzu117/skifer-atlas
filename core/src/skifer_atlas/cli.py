@@ -1,4 +1,4 @@
-"""CLI `atlas` : validation des documents et publication du JSON Schema.
+"""CLI `atlas` : validation, contrôle, résolution, empreinte et diff des documents.
 
 argparse seulement, sans chargement dynamique de sous-commandes (PyInstaller).
 """
@@ -10,6 +10,7 @@ import json
 import sys
 from pathlib import Path
 
+from .diff import RELATIONS, DiffContext, diff, diff_schema_text, report_text
 from .model import DocumentError, Issue, load_document, validate_file
 from .model.check import check_document, has_errors
 from .model.fingerprint import fingerprint
@@ -17,7 +18,7 @@ from .model.graph import Library
 from .model.io import dump_data, dump_document
 from .model.jsonschema import schema_text
 from .model.normalize import normalized_form
-from .model.resolve import resolve
+from .model.resolve import ResolvedGraph, resolve
 
 _SEVERITY = {"error": "erreur", "warning": "avertissement", "info": "info"}
 
@@ -161,8 +162,74 @@ def _fingerprint(args: argparse.Namespace) -> int:
     return status
 
 
+def _diff_side(path: str, library: Library) -> ResolvedGraph | None:
+    """Document prêt à comparer (variante résolue), ou None après avoir dit pourquoi."""
+    try:
+        document = load_document(Path(path))
+    except DocumentError as error:
+        _report_failure(path, error.issues)
+        return None
+    if document.kind == "variant":
+        canonical = library.kpi(document.variant_of.id, document.variant_of.version)
+        if canonical is None:
+            _report_failure(path, [Issue(
+                "/variant_of", None, "missing_canonical",
+                f"Canonique {document.variant_of.id} v{document.variant_of.version} "
+                "introuvable : le passer avec --canonical.",
+            )])
+            return None
+        resolved = resolve(document, canonical, library)
+    elif document.graph is None:
+        _report_failure(path, [Issue("/graph", None, "missing_field", "Ce document n'a pas de graphe.")])
+        return None
+    else:
+        resolved = ResolvedGraph(document, issues=check_document(document, library))
+    if not resolved.valid:
+        _report_failure(path, resolved.issues)
+        return None
+    return resolved
+
+
+def _report_failure(path: str, issues: list[Issue]) -> None:
+    print(f"{path} : à corriger d'abord (voir atlas check)", file=sys.stderr)
+    _print_issues([i for i in issues if i.severity == "error"], sys.stderr)
+
+
+def _relation(base: ResolvedGraph, other: ResolvedGraph) -> str:
+    variant = other.variant
+    product = base.document.data_product
+    if base.variant is None and variant is not None and (
+        (variant.variant_of.id, variant.variant_of.version) == (product.id, product.version)
+    ):
+        return variant.mode
+    if base.variant is None and variant is None and (
+        other.document.data_product.id == product.id
+    ):
+        return "version"
+    return "free"
+
+
+def _diff(args: argparse.Namespace) -> int:
+    paths = [*args.with_, *([args.canonical] if args.canonical else [])]
+    library = _library(paths)
+    for path in (args.base, args.other):
+        try:
+            library.add(load_document(Path(path)))
+        except DocumentError:
+            pass  # signalé ci-dessous
+    base = _diff_side(args.base, library)
+    other = _diff_side(args.other, library)
+    if base is None or other is None:
+        return 1
+    report = diff(base, other, DiffContext(args.relation or _relation(base, other), library))
+    sys.stdout.write(report.to_json() if args.format == "json" else report_text(report))
+    if report.identical:
+        return 0
+    return 3 if report.has_critical else 2
+
+
 def _schema(args: argparse.Namespace) -> int:
-    text = schema_text()
+    text = diff_schema_text() if args.kind == "diff" else schema_text()
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
     else:
@@ -203,7 +270,22 @@ def build_parser() -> argparse.ArgumentParser:
                                  metavar="fichier")
     fingerprint_cmd.set_defaults(handler=_fingerprint)
 
+    diff_cmd = commands.add_parser(
+        "diff", help="écarts entre deux graphes (0 identiques, 2 écarts, 3 écart critique)"
+    )
+    diff_cmd.add_argument("base", metavar="a")
+    diff_cmd.add_argument("other", metavar="b")
+    diff_cmd.add_argument("--canonical", metavar="fichier",
+                          help="canonique d'une variante, s'il n'est pas déjà a")
+    diff_cmd.add_argument("--with", dest="with_", action="append", default=[], metavar="fichier")
+    diff_cmd.add_argument("--relation", choices=RELATIONS,
+                          help="par défaut : déduite des deux documents")
+    diff_cmd.add_argument("--format", choices=("text", "json"), default="text")
+    diff_cmd.set_defaults(handler=_diff)
+
     schema = commands.add_parser("schema", help="écrire le JSON Schema des documents")
+    schema.add_argument("--kind", choices=("document", "diff"), default="document",
+                        help="document Atlas ou rapport de diff")
     schema.add_argument("--out", metavar="fichier")
     schema.set_defaults(handler=_schema)
     return parser

@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import jsonschema
+import pytest
 from conftest import DOCUMENTS, FIXTURES
 
 ATLAS = Path(sys.executable).with_name("atlas")
@@ -129,3 +131,52 @@ def test_fingerprint_is_stable_under_different_hash_seeds():
     prints = [line.split()[0] for line in output.splitlines()]
     assert len(set(prints)) == 3
     assert all(p.startswith("sha256:atlas1:") for p in prints)
+
+
+# --- diff (plan 0003) ---
+
+GOLDEN = FIXTURES / "diff"
+
+
+@pytest.mark.parametrize("variant", ["revenu-net--nordis-de", "revenu-net--nordis-es"])
+def test_diff_golden_reports(variant):
+    result = run("diff", CANONICAL, DOCS / f"{variant}.yaml", "--format", "json")
+    assert result.returncode == 3, result.stderr
+    golden = GOLDEN / f"{variant}.json"
+    if os.environ.get("ATLAS_UPDATE_GOLDEN"):
+        golden.write_text(result.stdout, encoding="utf-8")
+    assert result.stdout == golden.read_text(encoding="utf-8")
+    second = run("diff", CANONICAL, DOCS / f"{variant}.yaml", "--format", "json")
+    assert second.stdout == result.stdout
+
+
+def test_diff_reports_match_the_published_schema():
+    schema = json.loads((Path(__file__).parents[2] / "schemas" / "diff-report.v1.schema.json")
+                        .read_text(encoding="utf-8"))
+    assert run("schema", "--kind", "diff").stdout == json.dumps(
+        schema, indent=2, ensure_ascii=False) + "\n"
+    for golden in sorted(GOLDEN.glob("*.json")):
+        jsonschema.validate(json.loads(golden.read_text(encoding="utf-8")), schema)
+
+
+def test_diff_relation_is_deduced():
+    de = json.loads(run("diff", CANONICAL, DE, "--format", "json").stdout)
+    es = json.loads(run("diff", CANONICAL, ES, "--format", "json").stdout)
+    free = json.loads(run("diff", DE, ES, "--canonical", CANONICAL, "--format", "json").stdout)
+    assert (de["relation"], es["relation"], free["relation"]) == (
+        "override", "from_scratch", "free",
+    )
+
+
+def test_diff_exit_codes(tmp_path):
+    assert run("diff", CANONICAL, CANONICAL).returncode == 0
+    relabelled = tmp_path / "revenu-net.yaml"
+    relabelled.write_text(CANONICAL.read_text(encoding="utf-8").replace(
+        "label: Mois fiscal", "label: Mois de l'exercice"), encoding="utf-8")
+    result = run("diff", CANONICAL, relabelled)
+    assert result.returncode == 2, result.stdout
+    assert "cosmétique · info" in result.stdout
+    assert run("diff", CANONICAL, DE).returncode == 3
+    assert run("diff", CANONICAL, "absent.yaml").returncode == 1
+    missing = run("diff", DE, ES)
+    assert missing.returncode == 1 and "[missing_canonical]" in missing.stderr

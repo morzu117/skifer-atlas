@@ -1,0 +1,104 @@
+{
+  "identical": false,
+  "relation": "override",
+  "base": {
+    "id": "revenu-net",
+    "version": 4,
+    "fingerprint": "sha256:atlas1:3109b3f957137b44e0b1fcf39c7018f592ff0e86f92036e1bd01f96d7729d042"
+  },
+  "other": {
+    "id": "revenu-net--nordis-de",
+    "version": 3,
+    "fingerprint": "sha256:atlas1:3076c0d44e173593d81434c4d5cbbf53dc682e3d8b9af3468f26b961f1febec1"
+  },
+  "pairs": [
+    {
+      "base": "n01",
+      "other": "n01",
+      "score": null
+    },
+    {
+      "base": "n02",
+      "other": "n02",
+      "score": null
+    },
+    {
+      "base": "n03",
+      "other": "n03",
+      "score": null
+    },
+    {
+      "base": "n04",
+      "other": "n04",
+      "score": null
+    },
+    {
+      "base": "n05",
+      "other": "n05",
+      "score": null
+    }
+  ],
+  "differences": [
+    {
+      "kind": "modified",
+      "node_ref": {
+        "base": "n02",
+        "other": "n02"
+      },
+      "node_type": "filter",
+      "changes": [
+        {
+          "field": "condition",
+          "before": "statut:equals:validée",
+          "after": "statut:in:validée,expédiée"
+        },
+        {
+          "field": "label",
+          "before": "Factures validées",
+          "after": "Factures validées ou expédiées"
+        }
+      ],
+      "classification": "override_undeclared",
+      "severity": "critical",
+      "message": "Filtre « Factures validées » : condition, label modifié(s). Surcharge hors des points de variation déclarés : à examiner."
+    },
+    {
+      "kind": "modified",
+      "node_ref": {
+        "base": "n03",
+        "other": "n03"
+      },
+      "node_type": "compute",
+      "changes": [
+        {
+          "field": "expr",
+          "before": "montant_ttc - montant_taxes - avoirs",
+          "after": "montant_ttc / 1.19 - avoirs"
+        },
+        {
+          "field": "note",
+          "before": "Chaque pays remplace ce calcul par sa propre formule, sans table de paramètres.",
+          "after": null
+        }
+      ],
+      "classification": "override_declared",
+      "severity": "warn",
+      "message": "Calcul « déduction des taxes » : expr, note modifié(s). Surcharge d'un point de variation déclaré."
+    }
+  ],
+  "summary": {
+    "by_classification": {
+      "override_declared": 1,
+      "override_undeclared": 1,
+      "from_scratch": 0,
+      "critical": 0,
+      "cosmetic": 0,
+      "to_verify": 0
+    },
+    "by_severity": {
+      "info": 0,
+      "warn": 1,
+      "critical": 1
+    }
+  }
+}

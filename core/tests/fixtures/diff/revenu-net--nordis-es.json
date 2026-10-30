@@ -1,0 +1,258 @@
+{
+  "identical": false,
+  "relation": "from_scratch",
+  "base": {
+    "id": "revenu-net",
+    "version": 4,
+    "fingerprint": "sha256:atlas1:3109b3f957137b44e0b1fcf39c7018f592ff0e86f92036e1bd01f96d7729d042"
+  },
+  "other": {
+    "id": "revenu-net--nordis-es",
+    "version": 1,
+    "fingerprint": "sha256:atlas1:bff81b7b74e417f9e663ecb30e816794533588570634a5d906bfd05840ca4c91"
+  },
+  "pairs": [
+    {
+      "base": "n01",
+      "other": "n01",
+      "score": 4
+    },
+    {
+      "base": "n02",
+      "other": "n02",
+      "score": 5
+    },
+    {
+      "base": "n04",
+      "other": "n04",
+      "score": 3
+    },
+    {
+      "base": "n05",
+      "other": "n05",
+      "score": 9
+    }
+  ],
+  "differences": [
+    {
+      "kind": "modified",
+      "node_ref": {
+        "base": "n01",
+        "other": "n01"
+      },
+      "node_type": "source",
+      "changes": [
+        {
+          "field": "binding",
+          "before": null,
+          "after": {
+            "factura_id": "facture_id",
+            "sociedad": "entite"
+          }
+        },
+        {
+          "field": "columns",
+          "before": [
+            {
+              "name": "facture_id",
+              "type": "string"
+            },
+            {
+              "name": "entite",
+              "type": "string"
+            },
+            {
+              "name": "statut",
+              "type": "string"
+            },
+            {
+              "name": "date_facture",
+              "type": "date",
+              "timezone": "Europe/Paris",
+              "format": "yyyy-MM-dd"
+            },
+            {
+              "name": "montant_ttc",
+              "type": "decimal"
+            },
+            {
+              "name": "montant_taxes",
+              "type": "decimal"
+            },
+            {
+              "name": "avoirs",
+              "type": "decimal"
+            }
+          ],
+          "after": [
+            {
+              "name": "factura_id",
+              "type": "string"
+            },
+            {
+              "name": "sociedad",
+              "type": "string"
+            },
+            {
+              "name": "estado",
+              "type": "string"
+            },
+            {
+              "name": "fecha",
+              "type": "timestamp",
+              "timezone": "Europe/Madrid",
+              "format": "yyyy-MM-dd HH:mm:ss"
+            },
+            {
+              "name": "importe_neto",
+              "type": "decimal"
+            }
+          ]
+        },
+        {
+          "field": "concept",
+          "before": null,
+          "after": "facture"
+        },
+        {
+          "field": "platform",
+          "before": "databricks",
+          "after": "snowflake"
+        },
+        {
+          "field": "table",
+          "before": "gold.finance.fact_facturation",
+          "after": "FINANZAS.PUBLIC.FACTURAS"
+        },
+        {
+          "field": "label",
+          "before": "Factures",
+          "after": "Facturas"
+        },
+        {
+          "field": "owner",
+          "before": "claire.m",
+          "after": "sofia.r"
+        }
+      ],
+      "classification": "from_scratch",
+      "severity": "warn",
+      "message": "Source « Factures » : binding, columns, concept, platform, table, label, owner modifié(s). Variante from scratch : justifiée, à suivre."
+    },
+    {
+      "kind": "modified",
+      "node_ref": {
+        "base": "n02",
+        "other": "n02"
+      },
+      "node_type": "filter",
+      "changes": [
+        {
+          "field": "condition",
+          "before": "statut:equals:validée",
+          "after": "estado:equals:cerrada"
+        },
+        {
+          "field": "label",
+          "before": "Factures validées",
+          "after": null
+        }
+      ],
+      "classification": "from_scratch",
+      "severity": "critical",
+      "message": "Filtre « Factures validées » : condition, label modifié(s). Variante from scratch : justifiée, à suivre."
+    },
+    {
+      "kind": "removed",
+      "node_ref": {
+        "base": "n03",
+        "other": null
+      },
+      "node_type": "compute",
+      "changes": [],
+      "classification": "from_scratch",
+      "severity": "warn",
+      "message": "Calcul « déduction des taxes » : nœud retiré. Variante from scratch : justifiée, à suivre."
+    },
+    {
+      "kind": "modified",
+      "node_ref": {
+        "base": "n04",
+        "other": "n04"
+      },
+      "node_type": "temporal",
+      "changes": [
+        {
+          "field": "column",
+          "before": "date_facture",
+          "after": "fecha_local"
+        },
+        {
+          "field": "label",
+          "before": "Mois fiscal",
+          "after": null
+        }
+      ],
+      "classification": "from_scratch",
+      "severity": "warn",
+      "message": "Nœud temporel « Mois fiscal » : column, label modifié(s). Variante from scratch : justifiée, à suivre."
+    },
+    {
+      "kind": "modified",
+      "node_ref": {
+        "base": "n05",
+        "other": "n05"
+      },
+      "node_type": "aggregate",
+      "changes": [
+        {
+          "field": "measures",
+          "before": [
+            [
+              "montant_ht",
+              "revenu_net",
+              "sum"
+            ]
+          ],
+          "after": [
+            [
+              "importe_neto",
+              "revenu_net",
+              "sum"
+            ]
+          ]
+        }
+      ],
+      "classification": "from_scratch",
+      "severity": "critical",
+      "message": "Agrégation n05 : measures modifié(s). Variante from scratch : justifiée, à suivre."
+    },
+    {
+      "kind": "added",
+      "node_ref": {
+        "base": null,
+        "other": "n03"
+      },
+      "node_type": "temporal",
+      "changes": [],
+      "classification": "from_scratch",
+      "severity": "critical",
+      "message": "Nœud temporel « Date locale » : nœud ajouté. Variante from scratch : justifiée, à suivre."
+    }
+  ],
+  "summary": {
+    "by_classification": {
+      "override_declared": 0,
+      "override_undeclared": 0,
+      "from_scratch": 6,
+      "critical": 0,
+      "cosmetic": 0,
+      "to_verify": 0
+    },
+    "by_severity": {
+      "info": 0,
+      "warn": 3,
+      "critical": 3
+    }
+  }
+}

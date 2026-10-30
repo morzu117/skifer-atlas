@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DiffReport",
+  "$defs": {
+    "ChangeOut": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "before": {
+          "title": "Before"
+        },
+        "after": {
+          "title": "After"
+        }
+      },
+      "required": [
+        "field",
+        "before",
+        "after"
+      ],
+      "title": "ChangeOut",
+      "type": "object"
+    },
+    "Difference": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "modified",
+            "added",
+            "removed",
+            "reordered"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "node_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node_type": {
+          "title": "Node Type",
+          "type": "string"
+        },
+        "changes": {
+          "items": {
+            "$ref": "#/$defs/ChangeOut"
+          },
+          "title": "Changes",
+          "type": "array"
+        },
+        "classification": {
+          "enum": [
+            "override_declared",
+            "override_undeclared",
+            "from_scratch",
+            "critical",
+            "cosmetic",
+            "to_verify"
+          ],
+          "title": "Classification",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warn",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "node_ref",
+        "node_type",
+        "changes",
+        "classification",
+        "severity",
+        "message"
+      ],
+      "title": "Difference",
+      "type": "object"
+    },
+    "DocumentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        },
+        "fingerprint": {
+          "title": "Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "fingerprint"
+      ],
+      "title": "DocumentRef",
+      "type": "object"
+    },
+    "NodeRef": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Base"
+        },
+        "other": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Other"
+        }
+      },
+      "required": [
+        "base",
+        "other"
+      ],
+      "title": "NodeRef",
+      "type": "object"
+    },
+    "PairOut": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "title": "Base",
+          "type": "string"
+        },
+        "other": {
+          "title": "Other",
+          "type": "string"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Score"
+        }
+      },
+      "required": [
+        "base",
+        "other",
+        "score"
+      ],
+      "title": "PairOut",
+      "type": "object"
+    },
+    "Summary": {
+      "additionalProperties": false,
+      "properties": {
+        "by_classification": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "By Classification",
+          "type": "object"
+        },
+        "by_severity": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "By Severity",
+          "type": "object"
+        }
+      },
+      "required": [
+        "by_classification",
+        "by_severity"
+      ],
+      "title": "Summary",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "identical": {
+      "title": "Identical",
+      "type": "boolean"
+    },
+    "relation": {
+      "enum": [
+        "version",
+        "override",
+        "from_scratch",
+        "free"
+      ],
+      "title": "Relation",
+      "type": "string"
+    },
+    "base": {
+      "$ref": "#/$defs/DocumentRef"
+    },
+    "other": {
+      "$ref": "#/$defs/DocumentRef"
+    },
+    "pairs": {
+      "items": {
+        "$ref": "#/$defs/PairOut"
+      },
+      "title": "Pairs",
+      "type": "array"
+    },
+    "differences": {
+      "items": {
+        "$ref": "#/$defs/Difference"
+      },
+      "title": "Differences",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/Summary"
+    }
+  },
+  "required": [
+    "identical",
+    "relation",
+    "base",
+    "other",
+    "pairs",
+    "differences",
+    "summary"
+  ],
+  "type": "object"
+}
