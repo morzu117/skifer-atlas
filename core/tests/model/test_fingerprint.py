@@ -5,38 +5,12 @@ import sys
 
 import pytest
 from conftest import read_fixture
-from graphs import ENTITES, build, nodes, revenu_net
+from graphs import CONDITIONS, ENTITES, build, nodes, revenu_net, with_filters
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from skifer_atlas.model.fingerprint import fingerprint
 from skifer_atlas.model.normalize import normalized_form
-
-CONDITIONS = ["statut:equals:validée", "montant_ttc:greater_than:0", "entite:is_not_null"]
-
-
-def with_filters(conditions: list[str], join_after: int | None = None) -> dict:
-    """Revenu net dont n02 est remplacé par une suite de filtres (n11, n12…), avec, si
-    demandé, une jointure aux entités après le filtre de rang `join_after`."""
-    raw = revenu_net()
-    graph_nodes = [n for n in raw["graph"]["nodes"] if n["id"] != "n02"]
-    chain, previous = [], "n01"
-    for index, condition in enumerate(conditions):
-        chain.append({"id": f"n{index + 11}", "type": "filter", "inputs": [previous],
-                      "condition": condition, "nulls": "drop"})
-        previous = chain[-1]["id"]
-        if join_after == index:
-            chain.append(copy.deepcopy(ENTITES))
-            chain.append({
-                "id": "n10", "type": "join", "inputs": {"left": previous, "right": "n06"},
-                "how": "left", "keys": [["entite", "entite_id"]], "cardinality": "N:1",
-                "check": "required",
-            })
-            previous = "n10"
-    nodes_by_id = {n["id"]: n for n in graph_nodes}
-    nodes_by_id["n03"]["inputs"] = [previous]
-    raw["graph"]["nodes"] = [graph_nodes[0], *chain, *graph_nodes[1:]]
-    return raw
 
 
 def print_of(raw: dict) -> str:

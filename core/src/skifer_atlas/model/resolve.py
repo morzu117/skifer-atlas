@@ -31,6 +31,7 @@ class ResolvedGraph:
     document: KpiDocument | None
     overrides: list[ResolvedOverride] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
+    variant: Any = None  # la variante résolue, quand il y en a une
 
     @property
     def valid(self) -> bool:
@@ -49,6 +50,7 @@ def resolve(variant: Any, canonical: KpiDocument, library: Library | None = None
         result = _apply_overrides(variant, canonical)
     else:
         result = _from_scratch(variant, canonical)
+    result.variant = variant
     if result.document is not None:
         result.issues.extend(check_document(result.document, library))
     return result

@@ -41,6 +41,8 @@ def total(node_id: str, source: str, group_by: list, measure: list) -> dict:
             "measures": [measure]}
 
 
+CONDITIONS = ["statut:equals:validée", "montant_ttc:greater_than:0", "entite:is_not_null"]
+
 ENTITES = {
     "id": "n06", "type": "source", "platform": "databricks", "table": "gold.ref.entites",
     "owner": "claire.m",
@@ -58,4 +60,28 @@ def with_join(raw: dict, **join_fields) -> dict:
     join.update(join_fields)
     raw["graph"]["nodes"].insert(3, join)
     nodes(raw)["n03"]["inputs"] = ["n07"]
+    return raw
+
+
+def with_filters(conditions: list[str], join_after: int | None = None) -> dict:
+    """Revenu net dont n02 est remplacé par une suite de filtres (n11, n12…), avec, si
+    demandé, une jointure aux entités après le filtre de rang `join_after`."""
+    raw = revenu_net()
+    graph_nodes = [n for n in raw["graph"]["nodes"] if n["id"] != "n02"]
+    chain, previous = [], "n01"
+    for index, condition in enumerate(conditions):
+        chain.append({"id": f"n{index + 11}", "type": "filter", "inputs": [previous],
+                      "condition": condition, "nulls": "drop"})
+        previous = chain[-1]["id"]
+        if join_after == index:
+            chain.append(copy.deepcopy(ENTITES))
+            chain.append({
+                "id": "n10", "type": "join", "inputs": {"left": previous, "right": "n06"},
+                "how": "left", "keys": [["entite", "entite_id"]], "cardinality": "N:1",
+                "check": "required",
+            })
+            previous = "n10"
+    nodes_by_id = {n["id"]: n for n in graph_nodes}
+    nodes_by_id["n03"]["inputs"] = [previous]
+    raw["graph"]["nodes"] = [graph_nodes[0], *chain, *graph_nodes[1:]]
     return raw
