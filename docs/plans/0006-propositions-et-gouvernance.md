@@ -40,9 +40,10 @@ Règles : au moins un référent d'espace ; un domaine sans référent produit u
 - Variante avec au moins une surcharge `undeclared`, ou variante from scratch : `canonical`, avec la mention « validation canonique exigée ».
 - Modification de `governance.yaml` : 1 référent d'espace, au minimum.
 - Ne comptent que les approbations de comptes ayant le rôle `validateur` ou `referent` sur le domaine du document ; l'auteur ne compte jamais ; une approbation est invalidée par un nouveau commit sur la branche.
+- Exception (ADR 0008) : si aucun autre compte n'est habilité à approuver la proposition, d'après le `governance.yaml` de la branche principale, l'auteur peut fusionner sans approbation. Le nombre requis n'est jamais abaissé : dès qu'un autre compte est habilité, le décompte normal s'applique. Une telle fusion porte la mention « Fusionnée sans revue : aucun autre compte habilité » et le trailer `Atlas-Review: none (no other eligible approver)`.
 
 ### `CODEOWNERS` généré (garde-fou côté GitHub)
-`governance.yaml` reste l'unique source de vérité. À chaque proposition qui le modifie, Atlas régénère `.github/CODEOWNERS` dans la même branche : un domaine est un ensemble de fichiers (les documents dont `data_product.domain` vaut ce domaine, plus leurs variantes), auquel sont associés ses validateurs ; `governance.yaml` et `CODEOWNERS` sont associés aux référents de l'espace. Le fichier porte l'en-tête « généré par Atlas, ne pas modifier ». Un `CODEOWNERS` modifié à la main est signalé (`codeowners_drift`) au `sync`. L'écran d'administration (0017) rappelle d'activer la règle de branche GitHub « Require review from Code Owners » : une fusion faite directement sur GitHub ne peut alors plus contourner les validateurs. Le nombre de validations requises, qui varie selon la nature de la proposition, reste décompté par Atlas.
+`governance.yaml` reste l'unique source de vérité. À chaque proposition qui le modifie, Atlas régénère `.github/CODEOWNERS` dans la même branche : un domaine est un ensemble de fichiers (les documents dont `data_product.domain` vaut ce domaine, plus leurs variantes), auquel sont associés ses validateurs ; `governance.yaml` et `CODEOWNERS` sont associés aux référents de l'espace. Le fichier porte l'en-tête « généré par Atlas, ne pas modifier ». Un `CODEOWNERS` modifié à la main est signalé (`codeowners_drift`) au `sync`. L'écran d'administration (0017) rappelle d'activer, dès qu'il y a deux référents (ADR 0008), la règle de branche GitHub « Require review from Code Owners » : une fusion faite directement sur GitHub ne peut alors plus contourner les validateurs. Le nombre de validations requises, qui varie selon la nature de la proposition, reste décompté par Atlas.
 
 ### `GitHost`
 `create_pull_request(branch, title, body) -> pr`, `list_pull_requests(state)`, `get_reviews(pr)`, `submit_review(pr, approve|request_changes, body)`, `list_comments(pr)`, `add_comment(pr, body)`, `merge(pr)`, `current_account()`. Le token de l'hébergeur est lu dans le coffre (plan 0008 ; d'ici là, variable d'environnement en dev) et passé à git par `GIT_ASKPASS`. `LocalHost` stocke les PR dans `refs/atlas/proposals/*` et un fichier JSON par PR dans le dépôt nu, pour les tests et les démos hors ligne.
@@ -52,7 +53,7 @@ Corps : `{document_yaml, justification, base_version}`. Étapes : validation (00
 Un `base_version` qui n'est plus la version courante renvoie `stale_base` et ne crée rien.
 
 ### Statut et fusion
-`GET /api/workspaces/{ws}/proposals?domain=&kpi=&author=&entity=&status=` → `[{id, document_id, entity, nature, author, created_at, approvals: {obtained, required}, ready_to_merge}]` ; la `nature` ∈ {new_version, declared_point, undeclared, from_scratch}. Le tri met en tête les propositions des domaines de l'utilisateur courant. `POST …/merge` n'est accepté que si `ready_to_merge` : fusion, incrément de `data_product.version`, tag `doc/<id>/v<n>`, puis synchronisation et réindexation (0005).
+`GET /api/workspaces/{ws}/proposals?domain=&kpi=&author=&entity=&status=` → `[{id, document_id, entity, nature, author, created_at, approvals: {obtained, required}, ready_to_merge, merge_mode}]`, où `merge_mode` ∈ {reviewed, no_other_eligible} ; la `nature` ∈ {new_version, declared_point, undeclared, from_scratch}. Le tri met en tête les propositions des domaines de l'utilisateur courant. `POST …/merge` n'est accepté que si `ready_to_merge` : fusion, incrément de `data_product.version`, tag `doc/<id>/v<n>`, puis synchronisation et réindexation (0005).
 
 ## Critères d'acceptation
 1. Une proposition sur un canonique de domaine Finance exige 2 validations ; une surcharge déclarée, 1 ; une surcharge non déclarée ou une variante from scratch, 2, avec la mention.
@@ -66,6 +67,8 @@ Un `base_version` qui n'est plus la version courante renvoie `stale_base` et ne 
 9. Le token de l'hébergeur n'apparaît ni dans l'URL distante, ni dans `.git/config`, ni dans les journaux.
 10. `governance.yaml` sans référent est refusé ; un domaine sans référent produit un avertissement.
 11. Modifier `governance.yaml` régénère `CODEOWNERS` dans la même proposition, de façon déterministe ; une modification manuelle de `CODEOWNERS` est signalée au `sync`.
+12. Dans un espace à un seul référent, ce référent peut fusionner sans approbation une modification de `governance.yaml`, et l'unique compte habilité d'un domaine peut faire de même pour un document. La fusion porte la mention et le trailer. L'exception tombe dès qu'un deuxième habilité figure sur la branche principale, et une proposition qui retire les autres habilités n'en bénéficie pas.
+13. Avec GitHub, si une règle de protection empêche la fusion, l'erreur est `branch_protected`, sans contournement.
 
 ## Tests
 - Unitaires : règles de décompte (table de cas), validation de `governance.yaml`.
