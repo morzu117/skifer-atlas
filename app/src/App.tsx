@@ -1,86 +1,68 @@
-import { useEffect, useState } from "react";
-import { api, type Workspace } from "./api";
-import logo from "./assets/logo.png";
+import { useCallback, useEffect, useState } from "react";
+import { Banner } from "./components/Banner";
+import { Brand } from "./components/Brand";
+import { href, navigate, useRoute } from "./router";
+import { Home } from "./screens/Home";
+import { WorkspaceShell } from "./screens/WorkspaceShell";
+import { useServer, type Startup } from "./server";
 
-type Status = { kind: "starting" } | { kind: "ready"; version: string } | { kind: "error"; message: string };
+const STARTUP: Startup = { attempts: 20, delayMs: 500 };
 
-export default function App() {
-  const [status, setStatus] = useState<Status>({ kind: "starting" });
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+export default function App({ startup = STARTUP }: { startup?: Startup }) {
+  const server = useServer(startup);
+  const route = useRoute();
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const h = await api.health();
-        setWorkspaces(await api.workspaces());
-        setStatus({ kind: "ready", version: h.version });
-      } catch (e) {
-        setStatus({ kind: "error", message: String(e) });
-      }
-    })();
+    if (route.name === "workspace") setNotice(null);
+  }, [route]);
+
+  const unknownWorkspace = useCallback((id: string) => {
+    setNotice(`L'espace « ${id} » n'est pas dans votre registre local.`);
+    navigate(href.home());
   }, []);
 
-  return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="brand">
-          <img src={logo} alt="" width={36} height={36} />
-          <div>
-            <div className="brand-name">Skifer</div>
-            <div className="brand-sub">Atlas</div>
-          </div>
-        </div>
-        <div className="status">
-          {status.kind === "starting" && <span className="dot dot-wait" />}
-          {status.kind === "ready" && <span className="dot dot-ok" />}
-          {status.kind === "error" && <span className="dot dot-err" />}
-          {status.kind === "starting" && "Démarrage du serveur local…"}
-          {status.kind === "ready" && `Serveur local prêt · v${status.version}`}
-          {status.kind === "error" && `Serveur injoignable : ${status.message}`}
-        </div>
-      </header>
-
-      <main className="content">
-        <div className="page-head">
-          <div>
-            <h1>Vos espaces de travail</h1>
-            <p className="muted">
-              Un espace par client. Chaque espace a son dépôt Git, ses utilisateurs, sa gouvernance et ses
-              connexions : rien ne traverse d'un espace à l'autre.
-            </p>
-          </div>
-          <button className="btn-primary" disabled={status.kind !== "ready"}>+ Créer un espace</button>
-        </div>
-
-        {status.kind === "ready" && workspaces.length === 0 && (
-          <div className="empty">
-            <strong>Aucun espace pour l'instant.</strong>
-            <span className="muted">Créez le premier espace pour relier un dépôt Git de définitions.</span>
-          </div>
-        )}
-
-        <div className="grid">
-          {workspaces.map((ws) => (
-            <a key={ws.id} className="card" href={`#/${ws.id}`}>
-              <div className="card-top">
-                <span className="avatar">{ws.name.slice(0, 2).toUpperCase()}</span>
-                <span className={`pill pill-${ws.role}`}>{ws.role_label}</span>
-              </div>
-              <div className="card-title">{ws.name}</div>
-              <div className="muted small">
-                {[ws.sector, `${ws.entities.length} entité(s)`, `${ws.domains.length} domaine(s)`]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
-            </a>
-          ))}
-        </div>
-
-        <div className="note">
-          Vos tokens d'accès sont stockés chiffrés sur cette machine, rangés par espace. Ils ne quittent jamais
-          votre poste.
-        </div>
-      </main>
+  const banner = server.state === "unreachable" && (
+    <div className="server-banner">
+      <Banner
+        tone="bad"
+        title="Serveur local injoignable"
+        action={
+          <button type="button" className="btn btn-neutral btn-dense" onClick={server.retry} disabled={server.retrying}>
+            {server.retrying ? "Nouvelle tentative…" : "Réessayer"}
+          </button>
+        }
+      >
+        Le serveur de Skifer Atlas ne répond pas. Réessayez ; si le problème persiste, relancez l'application.
+      </Banner>
     </div>
+  );
+
+  if (server.version === null) {
+    // Jamais joint : rien à afficher derrière le démarrage ou le bandeau.
+    return (
+      <div className="boot">
+        {banner}
+        <div className="boot-card">
+          <Brand />
+          {server.state === "starting" && (
+            <p className="muted" role="status">
+              Démarrage du serveur local…
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {banner}
+      {route.name === "home" ? (
+        <Home key={server.generation} notice={notice} onDismissNotice={() => setNotice(null)} />
+      ) : (
+        <WorkspaceShell key={server.generation} wsId={route.ws} view={route.view} onUnknown={unknownWorkspace} />
+      )}
+    </>
   );
 }

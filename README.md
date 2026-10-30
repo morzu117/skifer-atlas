@@ -39,7 +39,17 @@ cd core && uv sync && uv run pytest
 cd app && npm install && npm run tauri dev
 ```
 
-Le serveur refuse de démarrer sans le token que Tauri lui passe. Pour travailler sur l'interface dans un simple navigateur, sans Tauri : `cd core && ATLAS_DEV_NO_TOKEN=1 uv run skifer-atlas-server`, puis `cd app && npm run dev`. Les routes et un exemple avec `curl` sont dans [`core/README.md`](core/README.md) ; un espace de démonstration est dans [`examples/espace-nordis/`](examples/espace-nordis/).
+Le serveur refuse de démarrer sans le token que Tauri lui passe. Pour travailler sur l'interface dans un simple navigateur, sans Tauri : `cd core && ATLAS_DEV_NO_TOKEN=1 uv run skifer-atlas-server`, puis `cd app && npm run dev`. Hors Tauri, l'interface appelle `http://127.0.0.1:8765`, ou l'adresse donnée par `VITE_ATLAS_API`.
+
+Tests de l'interface, depuis `app/` :
+
+```bash
+npm test                          # Vitest + Testing Library : composants, routes, tokens
+npx playwright install chromium   # une fois
+npm run e2e                       # Playwright : l'app Vite contre un serveur Python sur un dossier temporaire
+```
+
+`npm run e2e` lance lui-même Vite (port 1420) et le serveur (port 8799, `ATLAS_DEV_NO_TOKEN=1`, `ATLAS_VAULT=memory`) ; les deux ports doivent être libres. Couleurs et tailles passent par `app/src/tokens.css`, copie exacte de `docs/design/tokens.css` : un test refuse toute valeur `#…` ou `…px` ailleurs dans `app/src`. Les routes et un exemple avec `curl` sont dans [`core/README.md`](core/README.md) ; un espace de démonstration est dans [`examples/espace-nordis/`](examples/espace-nordis/).
 
 ## Build d'une version installable
 

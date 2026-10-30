@@ -41,3 +41,46 @@ Brief 5.3, 10.0 ; guide 1, 2, 3.1 à 3.4, 5 (10.0), 6, 7 (formulaires et états 
 
 ## Estimation
 **M**. Incertitudes : forme définitive du formulaire de création (non maquetté) ; mise en place de Playwright avec le serveur Python.
+
+## Mise en œuvre (30 octobre 2026)
+- **API** (`core/`) :
+  - `GET /api/workspaces` ajoute `counts {kpi, concept, open_proposals}`, calculés sans réseau côté Git (index du clone, dernier fetch) ; un compteur indisponible vaut `null`.
+  - Chaque proposition ouverte porte `awaiting_me` ; `GET …/proposals?for_me=true` ne rend que celles qui attendent ma revue.
+  - `open_context(fetch=False)` lit la gouvernance du dernier fetch.
+- **Interface** (`app/src/`) :
+  - `router.ts` : routage par hash ;
+  - `api.ts` : le token, les erreurs typées (`ApiError`, `UnreachableError`) et l'adresse `VITE_ATLAS_API` hors Tauri ;
+  - `server.ts` : démarrage, serveur injoignable, « Réessayer » ;
+  - `messages.ts` : codes d'erreur traduits (`git_missing`, `sync_conflict`, `clone_failed`…) ;
+  - `screens/Home.tsx` : accueil 10.0 ;
+  - `screens/CreateWorkspace.tsx`, `screens/JoinWorkspace.tsx` : panneaux latéraux ;
+  - `screens/WorkspaceShell.tsx` : coque, sélecteur, navigation selon le rôle, compteur des propositions, emplacements des écrans 0011 à 0017 ;
+  - `components/` : `Banner`, `Brand`, `Drawer`, `Field`, `Icon`.
+  - Polices dans `assets/fonts/`, `@font-face` dans `fonts.css`.
+  - `styles.css` n'utilise que des tokens.
+
+  Les choix qui s'écartent du plan ou du guide, ou qu'ils ne fixaient pas, sont dans l'**ADR 0013** :
+  - compteurs et `awaiting_me` ;
+  - « + Créer un espace » toujours visible, et « Rejoindre un espace » à côté ;
+  - focus au titre à chaque vue ;
+  - tokens ajoutés, valeurs arrondies à la base de 4 px ;
+  - écart de contraste du guide, à arbitrer.
+- **Tests** :
+  - `core/tests/repo/test_proposals.py` : `awaiting_me`, `for_me` et les compteurs (2 tests).
+  - Vitest et Testing Library, `npm test`, 32 tests :
+    - `Home.test.tsx` : critères 1 à 4, erreurs d'API et de clonage traduites, Échap ;
+    - `App.test.tsx` : critères 5 à 7, démarrage, espace inconnu ;
+    - `tokens.test.ts` : critère 8, plus l'identité des deux `tokens.css` et l'absence de Google Fonts ;
+    - `format.test.ts` : initiales, pluriels, identifiant dérivé, routes.
+  - Playwright, `npm run e2e`, 5 tests contre Vite et un vrai serveur Python sur un dossier temporaire :
+    - registre vide ;
+    - polices locales avec le réseau coupé (critère 9) ;
+    - création, puis 409 ;
+    - adhésion au dépôt de démonstration en contributrice, sans Administration ;
+    - deux cartes ;
+    - navigation au clavier et axe-core sur l'accueil, la coque et le panneau (critère 10) ;
+    - bandeau du serveur injoignable puis « Réessayer » (critère 5), simulé en coupant les requêtes vers le serveur.
+- **Reste à faire** :
+  - arbitrer l'écart de contraste du guide (`--atlas-warn` et `--atlas-mid`, ADR 0013) ;
+  - vérifier à la main sous Tauri : `npm run tauri dev`, création, ouverture, bascule entre deux espaces ;
+  - invitation d'utilisateurs (plan 0017).
