@@ -1,0 +1,49 @@
+schema_version: 1
+kind: concept
+status: draft
+data_product:
+  id: 06-gold-margin-v1
+  version: 1
+  owner: TODO
+  domain: TODO
+label: gold.margin_v1
+entity: TODO
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: databricks
+      table: silver.orders_enriched
+      owner: TODO
+      columns:
+        - {name: order_id, type: TODO}
+        - {name: amount, type: TODO}
+        - {name: product_id, type: TODO}
+    - id: n02
+      type: source
+      platform: databricks
+      table: bronze.products_raw
+      owner: TODO
+      columns:
+        - {name: cost, type: TODO}
+        - {name: product_id, type: TODO}
+    - id: n03
+      type: join
+      inputs: {left: n01, right: n02}
+      how: inner
+      keys: [[product_id, product_id]]
+      cardinality: TODO
+      check: required
+    - id: n04
+      type: compute
+      inputs: [n03]
+      column: net_margin
+      expr: amount - cost
+  output: n04
+extraction:
+  source_file: 06_gold_margin_v1.sql
+  line: 5
+  dialect: databricks
+  sql_sha256: 68f3427d97852d0b99700ab228c100cee3e6f12dead6148a73f7615cba418a52
+  residues:
+    - {code: cardinality_unknown, message: 'Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).', blocking: false, sql_excerpt_hash: e9d34e087c6a7437}

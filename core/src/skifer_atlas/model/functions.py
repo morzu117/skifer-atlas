@@ -60,6 +60,12 @@ def parse_sql(text: str) -> exp.Expression:
     return tree
 
 
+def is_function(node: exp.Expression) -> bool:
+    """Vrai pour un appel de fonction. AND, OR et XOR héritent de `exp.Func` dans SQLGlot
+    mais restent des opérateurs logiques, admis comme les comparaisons."""
+    return isinstance(node, exp.Func) and not isinstance(node, exp.Connector)
+
+
 def function_name(func: exp.Func) -> str:
     return (func.name if isinstance(func, exp.Anonymous) else func.sql_name()).upper()
 
@@ -83,7 +89,7 @@ def expression_problems(tree: exp.Expression) -> list[ExpressionProblem]:
                 f"« {function_name(node)} » est une agrégation : utiliser un nœud d'agrégation.",
             ))
         elif (
-            isinstance(node, exp.Func)
+            is_function(node)
             and type(node) not in ALLOWED_FUNCTIONS
             and node.find_ancestor(exp.Window) is None
         ):

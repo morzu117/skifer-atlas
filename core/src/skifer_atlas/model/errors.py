@@ -17,7 +17,9 @@ NODE_ID_RE = re.compile(r"^n[0-9]{2,4}$")
 # Discriminants des unions : pydantic les insère dans `loc`, ils ne sont pas des clés du YAML.
 DISCRIMINATOR_KEYS = ("type", "kind", "mode", "operation")
 # Branches des unions à discriminant calculé (voir nodes.py et variants.py).
-BRANCH_TAGS = frozenset({"condition-text", "condition-expr", "value-calendar", "value-text"})
+BRANCH_TAGS = frozenset({
+    "condition-text", "condition-expr", "value-calendar", "value-text", "value", "todo",
+})
 
 _TYPE_NAMES = {
     "string_type": "une chaîne de caractères",

@@ -1,0 +1,103 @@
+schema_version: 1
+kind: kpi
+status: needs_curation
+data_product:
+  id: 08-kpi-monthly
+  version: 1
+  owner: TODO
+  domain: TODO
+label: 08_kpi_monthly
+semantics: {calendar: TODO, timezone: TODO}
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: databricks
+      table: silver.order_snapshots
+      owner: TODO
+      columns:
+        - {name: order_id, type: TODO}
+        - {name: amount, type: TODO}
+        - {name: order_month, type: TODO}
+        - {name: snapshot_date, type: TODO}
+    - id: n02
+      type: deduplicate
+      inputs: [n01]
+      keys: [order_id]
+      keep:
+        order_by: [[snapshot_date, desc]]
+    - id: n03
+      type: source
+      platform: databricks
+      table: silver.stg_refunds
+      owner: TODO
+      columns:
+        - {name: discount, type: TODO}
+        - {name: order_id, type: TODO}
+    - id: n04
+      type: join
+      inputs: {left: n02, right: n03}
+      how: inner
+      keys: [[order_id, order_id]]
+      cardinality: TODO
+      check: required
+    - id: n05
+      type: compute
+      inputs: [n04]
+      column: total_discount__arg
+      expr: COALESCE(discount, 0)
+    - id: n06
+      type: aggregate
+      inputs: [n05]
+      group_by: [order_month]
+      measures: [[amount, total_amount, sum], [total_discount__arg, total_discount, sum]]
+      having: ['total_amount:greater_than:1000']
+    - id: n07
+      type: compute
+      inputs: [n06]
+      column: total_amount_with_vat
+      expr: total_amount * 1.21
+    - id: n08
+      type: aggregate
+      inputs: [n06]
+      group_by: []
+      measures: [[total_amount, total_amount, sum], [total_discount, total_discount, sum]]
+    - id: n09
+      type: metric_op
+      inputs: [n08]
+      order: aggregate_first
+      metrics:
+        - {name: total_amount_with_vat, expr: total_amount * 1.21}
+    - id: n10
+      type: compute
+      inputs: [n09]
+      column: order_month
+      expr: '''YTD'''
+    - id: n11
+      type: compute
+      inputs: [n10]
+      column: prev_month_amount
+      expr: 'NULL'
+    - id: n12
+      type: union
+      inputs: [n07, n11]
+      mode: all
+      columns:
+        - name: order_month
+          from: {n07: order_month, n11: order_month}
+        - name: total_amount
+          from: {n07: total_amount, n11: total_amount}
+        - name: total_amount_with_vat
+          from: {n07: total_amount_with_vat, n11: total_amount_with_vat}
+        - name: total_discount
+          from: {n07: total_discount, n11: total_discount}
+  output: n12
+extraction:
+  source_file: 08_kpi_monthly.sql
+  line: 13
+  dialect: databricks
+  sql_sha256: 8fe82861fabe5dd288c3138507b8fc99565638ccd380f9bf5aab38985cd6c19d
+  residues:
+    - {code: cardinality_unknown, message: 'Cardinalité de la jointure inconnue : la renseigner (1:1, N:1 ou 1:N).', blocking: false, sql_excerpt_hash: 43db894455040ac1}
+    - {code: window_function, message: 'Fonction de fenêtre sans équivalent dans le graphe (LAG) : la reprendre à la main.', blocking: true, sql_excerpt_hash: cb817079eaffa517}
+    - {code: unsupported_construct, message: Construction SQL non traduite (sous-requête dans une expression)., blocking: true, sql_excerpt_hash: e85f893efc90881d}

@@ -1,4 +1,4 @@
-"""CLI `atlas` : validation, contrôle, résolution, empreinte et diff des documents.
+"""CLI `atlas` : validation, contrôle, résolution, empreinte, diff et extraction.
 
 argparse seulement, sans chargement dynamique de sous-commandes (PyInstaller).
 """
@@ -10,6 +10,7 @@ import json
 import sys
 from pathlib import Path
 
+from . import extract
 from .diff import RELATIONS, DiffContext, diff, diff_schema_text, report_text
 from .model import DocumentError, Issue, load_document, validate_file
 from .model.check import check_document, has_errors
@@ -36,13 +37,18 @@ def _validate(args: argparse.Namespace) -> int:
         print(json.dumps(reports, indent=2, ensure_ascii=False))
     else:
         for report in reports:
+            issues = report["errors"]
+            errors = sum(issue["severity"] == "error" for issue in issues)
+            others = len(issues) - errors
             if report["valid"]:
-                print(f"{report['file']} : valide")
-                continue
-            print(f"{report['file']} : {len(report['errors'])} erreur(s)")
-            for error in report["errors"]:
-                node = f" ({error['node_id']})" if error["node_id"] else ""
-                print(f"  {error['path'] or '/'}{node} [{error['code']}] {error['message']}")
+                extra = f", {others} avertissement(s)" if others else ""
+                print(f"{report['file']} : valide{extra}")
+            else:
+                print(f"{report['file']} : {errors} erreur(s)")
+            for issue in issues:
+                node = f" ({issue['node_id']})" if issue["node_id"] else ""
+                marker = "" if issue["severity"] == "error" else f"{_SEVERITY[issue['severity']]} "
+                print(f"  {marker}{issue['path'] or '/'}{node} [{issue['code']}] {issue['message']}")
     return 0 if all(report["valid"] for report in reports) else 1
 
 
@@ -228,6 +234,39 @@ def _diff(args: argparse.Namespace) -> int:
     return 3 if report.has_critical else 2
 
 
+def _extract(args: argparse.Namespace) -> int:
+    results: list[extract.FileExtraction] = []
+    for name in args.files:
+        path = Path(name)
+        if not path.is_file() or path.suffix not in extract.SUFFIXES:
+            print(f"{name} : fichier introuvable ou extension non prise en charge "
+                  f"({', '.join(extract.SUFFIXES)})", file=sys.stderr)
+            return 1
+        results.append(extract.extract_file(path, args.dialect, name))
+    drafts = [draft for result in results for draft in result.drafts]
+    ids = [draft.id for draft in drafts]
+    if len(set(ids)) != len(ids):
+        twice = sorted({i for i in ids if ids.count(i) > 1})
+        print(f"Brouillons de même identifiant : {', '.join(twice)} (fichiers de même nom ?)",
+              file=sys.stderr)
+        return 1
+    report = (extract.report_json if args.format == "json" else extract.report_text)(results)
+    if args.out:
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        for draft in drafts:
+            (out / f"{draft.id}.yaml").write_text(draft.text(), encoding="utf-8")
+        sys.stdout.write(report)
+    else:
+        sys.stdout.write("---\n".join(draft.text() for draft in drafts))
+        sys.stderr.write(report)
+    extractions = [e for result in results for e in result.extractions]
+    if any(e.blocking for e in extractions):
+        return 3
+    residues = any(e.draft.residues for e in extractions) or any(r.residues for r in results)
+    return 2 if residues else 0
+
+
 def _schema(args: argparse.Namespace) -> int:
     text = diff_schema_text() if args.kind == "diff" else schema_text()
     if args.out:
@@ -282,6 +321,19 @@ def build_parser() -> argparse.ArgumentParser:
                           help="par défaut : déduite des deux documents")
     diff_cmd.add_argument("--format", choices=("text", "json"), default="text")
     diff_cmd.set_defaults(handler=_diff)
+
+    extract_cmd = commands.add_parser(
+        "extract", help="brouillons Atlas depuis du SQL existant (0 tout traduit, 2 résidus "
+        "à revoir, 3 brouillon à reprendre)",
+    )
+    extract_cmd.add_argument("files", nargs="+", metavar="fichier",
+                             help="script .sql, notebook .py ou .ipynb")
+    extract_cmd.add_argument("--dialect", choices=extract.DIALECTS, required=True)
+    extract_cmd.add_argument("--out", metavar="dossier",
+                             help="un fichier YAML par brouillon ; sinon sur la sortie standard")
+    extract_cmd.add_argument("--format", choices=("text", "json"), default="text",
+                             help="format du rapport")
+    extract_cmd.set_defaults(handler=_extract)
 
     schema = commands.add_parser("schema", help="écrire le JSON Schema des documents")
     schema.add_argument("--kind", choices=("document", "diff"), default="document",

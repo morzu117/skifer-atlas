@@ -80,7 +80,10 @@ def logical_graph(document: Any) -> LogicalGraph:
     if not view.is_dag():
         raise ValueError("Le graphe doit être un DAG sans entrée inconnue pour être normalisé.")
     semantics = getattr(document, "semantics", None)
-    calendar = semantics.calendar.model_dump(exclude_none=True) if semantics else None
+    calendar = None
+    if semantics is not None:
+        calendar = semantics.calendar
+        calendar = calendar if isinstance(calendar, str) else calendar.model_dump(exclude_none=True)
     useful = view.ancestors_of_output()
 
     # Suites de filtres : chaque filtre rejoint le groupe de son entrée si celle-ci est un

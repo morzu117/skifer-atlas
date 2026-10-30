@@ -20,6 +20,7 @@ import sqlglot
 from .errors import Issue
 from .functions import expression_problems, infer_type, parse_sql, referenced_columns
 from .graph import GraphView, Library, node_inputs
+from .nodes import TODO
 
 _COUNT_FUNCTIONS = {"count", "count_distinct", "approx_count_distinct"}
 _DOUBLE_FUNCTIONS = {"avg", "stddev", "variance"}
@@ -29,7 +30,7 @@ _DOUBLE_FUNCTIONS = {"avg", "stddev", "variance"}
 class Column:
     name: str
     type: str | None
-    zoned: bool = False
+    zoned: bool | None = False  # None : type encore à compléter (brouillon)
 
 
 Schema = dict[str, Column]
@@ -104,7 +105,11 @@ class _Propagation:
             self.schemas[node_id] = getattr(self, f"_{node.type}")(node, *inputs)
 
     def _source(self, node: Any) -> Schema:
-        return {c.name: Column(c.name, c.type, c.type == "date") for c in node.columns}
+        return {
+            c.name: Column(c.name, None, None) if c.type == TODO
+            else Column(c.name, c.type, c.type == "date")
+            for c in node.columns
+        }
 
     def _filter(self, node: Any, schema: Schema) -> Schema:
         self.condition(node.condition, schema, node.id, "condition")
@@ -184,7 +189,7 @@ class _Propagation:
         elif node.operation == "to_date":
             out[node.target] = Column(node.target, "date", True)
         elif node.operation == "period":
-            if column is not None and not column.zoned:
+            if column is not None and column.zoned is False:
                 self.issues.append(Issue(
                     self.view.path(node.id, "column"), node.id, "implicit_timezone_conversion",
                     f"« {node.column} » ({column.type}) n'a pas de fuseau explicite : ajouter un "

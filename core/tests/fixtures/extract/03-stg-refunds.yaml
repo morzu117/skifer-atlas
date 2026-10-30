@@ -1,0 +1,41 @@
+schema_version: 1
+kind: concept
+status: draft
+data_product:
+  id: 03-stg-refunds
+  version: 1
+  owner: TODO
+  domain: TODO
+label: silver.stg_refunds
+entity: TODO
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: databricks
+      table: bronze.refunds_raw
+      owner: TODO
+      columns:
+        - {name: refund_id, type: TODO}
+        - {name: order_id, type: TODO}
+        - {name: status, type: TODO}
+        - {name: reason, type: TODO}
+        - {name: discount, type: TODO}
+    - id: n02
+      type: filter
+      note: 'nulls déduit du SQL : une condition indéterminée (valeur nulle) écarte la ligne.'
+      inputs: [n01]
+      condition: reason:not_in:DUPLICATE,FRAUD
+      nulls: drop
+    - id: n03
+      type: compute
+      inputs: [n02]
+      column: discount
+      expr: COALESCE(discount, 0)
+  output: n03
+extraction:
+  source_file: 03_stg_refunds.sql
+  line: 7
+  dialect: databricks
+  sql_sha256: 075a7090470f3fc58dca59453fa7f93b8e07270ef2b66fdab4ef1356c6b7e9a3
+  residues: []

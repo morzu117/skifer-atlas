@@ -69,3 +69,77 @@ Pour chaque extraction sans résidu bloquant, on recompile le graphe (plan 0007 
 
 ## Estimation
 **L**. Incertitudes : variété du SQL réel (macros, paramètres `${}`, dialectes mêlés) ; déduction des types sans accès au catalogue ; frontière entre résidu bloquant et non bloquant à calibrer sur de vrais scripts.
+
+## Mise en œuvre (30 octobre 2026)
+- **Paquet** `core/src/skifer_atlas/extract/` :
+  - `parse.py` découpe via `skifer.analyzer.frontends` (`.sql`, notebooks `.py` et `.ipynb`), puis analyse chaque instruction avec `sqlglot.parse_one(dialect=…)`. `parser.parse_script` du moteur n'est pas réutilisé : il lève une seule erreur pour tout le script, alors qu'ici une instruction illisible devient un résidu `parse_error` sans bloquer les autres ;
+  - `translate.py` passe de l'AST aux nœuds ;
+  - `draft.py` assemble et contrôle le brouillon ;
+  - `oracle.py` porte l'oracle de fidélité ;
+  - `residues.py` définit les codes et messages des résidus.
+  
+  Les brouillons (statut, `TODO`, bloc `extraction`) sont décidés dans l'**ADR 0006**.
+- **Traduction**, en écart ou en précision par rapport au tableau :
+  - les colonnes d'une source sont celles que le SQL cite, dans l'ordre du texte. L'ordre de l'AST varie d'un dialecte à l'autre, et l'empreinte en dépend ;
+  - une table sans schéma devient `TODO.<table>` (résidu `unqualified_table`) ;
+  - une même table lue deux fois n'est qu'une source ;
+  - Atlas ne projette pas : un flux garde toutes ses colonnes. La liste du `SELECT` ne sert qu'à aligner les branches d'une union, par position. Une colonne refusée garde sa place mais ne passe pas l'union ;
+  - jointures : clés tirées de `ON a = b` (dans les deux sens) et de `USING`. Un prédicat de `ON` d'une autre forme devient un `filter` après une jointure interne ; sur une jointure externe, il est bloquant ;
+  - `WHERE` : chaque conjonction devient un filtre, en grammaire `col:op:val` quand c'est possible, sinon `{expr}`. Le filtre porte une `note` qui justifie `nulls`. L'info `nulls_inferred` est dans le rapport, pas dans le document ;
+  - dédoublonnage : `QUALIFY ROW_NUMBER() … = 1`, ou une colonne `ROW_NUMBER()` filtrée par `= 1` plus haut. Le `deduplicate` se place là où `ROW_NUMBER` est calculé, ce qui est équivalent puisque le rang est calculé avant le filtre ;
+  - un calcul qui remplace une colonne existante passe après les autres, qui lisent encore la valeur d'origine, comme en SQL ;
+  - expressions de date reconnues au premier niveau d'une colonne du `SELECT` :
+    - `DATE_TRUNC` donne `period` ;
+    - `TO_DATE`, `CAST(… AS DATE)` et `::DATE` donnent `to_date`, avec un fuseau `TODO` ;
+    - `FROM_UTC_TIMESTAMP` et `CONVERT_TIMEZONE` donnent `convert_timezone`, avec une note sur le fuseau d'origine.
+    
+    Une conversion imbriquée (`TO_DATE(FROM_UTC_TIMESTAMP(…))`) reste un calcul refusé : il faut une étape par CTE ;
+  - regroupement :
+    - `GROUP BY` par nom, par position ou par alias ;
+    - une expression regroupée est calculée avant l'agrégation ;
+    - un agrégat dont l'argument n'est pas une colonne reçoit un calcul `<mesure>__arg` (`AVG(a/b)`) ;
+    - une expression sur des agrégats donne des mesures `<nom>__<k>` et un `metric_op` (`SUM(a)/SUM(b)`) ;
+    - deux agrégats identiques partagent une mesure, et `HAVING` les réutilise ;
+  - résidus non prévus par le tableau :
+    - bloquants : `SELECT *`, `LIMIT`, `DISTINCT`, `EXCEPT`/`INTERSECT`, `LATERAL`, `PIVOT`, sous-requête dans une expression, fonction hors liste blanche (nommée seulement si SQLGlot la connaît), `invalid_draft` (le brouillon échoue au contrôle du modèle) ;
+    - non bloquants : `unqualified_table`, `ambiguous_column_origin`, `unnamed_expression` (nom `col_<n>`), `ignored_clause` (`ORDER BY` sans `LIMIT`) ;
+    - au niveau du fichier, sans brouillon : `unsupported_statement` (`UPDATE`, `MERGE`…) et `notebook_cell_unreadable`.
+- **Limite connue** : le modèle refuse deux colonnes de même nom après une jointure (`ambiguous_column`, plan 0002). Un SQL qui cite `o.id` et `c.id` de part et d'autre d'une jointure sur `c.id = o.client_id` donne donc `invalid_draft`. Il faudra un moyen de renommer à la source, à calibrer sur de vrais scripts.
+- **Correction du plan 0002** : SQLGlot 30 fait hériter `AND`, `OR` et `XOR` de `exp.Func`. La liste blanche les refusait donc dans `compute` et `filter.expr`. `functions.is_function` les exclut, et un test le couvre.
+- **Brouillon** :
+  - identifiant : le nom du fichier, plus `-<n>` s'il contient plusieurs requêtes ;
+  - libellé : la table créée, sinon le nom du fichier ;
+  - `kind: kpi` si la sortie est agrégée au sens du plan 0002 (union de flux agrégés comprise), sinon `concept` avec `entity: TODO`.
+  
+  Le brouillon est contrôlé comme un document curé (`validate_data` puis `check_document`). Toute erreur autre que `todo` devient un résidu bloquant `invalid_draft`, dont le détail donne le code et le nœud. Dans le corpus, cela arrive par exemple avec un `DATE_TRUNC` dans un concept (`missing_calendar`).
+- **Oracle** : il compare des traits relus dans l'AST source, indépendamment de la traduction :
+  - les tables lues, hors CTE ;
+  - le nombre de prédicats (`WHERE`, `QUALIFY`, `ON` hors clés), face au nombre de filtres et de dédoublonnages ;
+  - les paires de clés de jointure ;
+  - le nombre de colonnes de regroupement ;
+  - les fonctions d'agrégat, chaque agrégat distinct comptant une fois par `SELECT`.
+  
+  Le rapport donne `verified`, `differs` (avec la liste des traits en cause) ou `skipped` (résidu bloquant).
+- **CLI** :
+  - les fichiers sont traités dans l'ordre donné. Sans `--out`, les brouillons vont sur la sortie standard, séparés par `---`, et le rapport sur la sortie d'erreur ;
+  - deux brouillons de même identifiant donnent le code 1 ;
+  - le rapport JSON est une liste `{file, residues, statements: [{id, line, kind, status, roundtrip, residues, infos}]}`.
+- **Critère 1** :
+  - 01, 02, 03, 04 et 06 donnent un brouillon `draft`, fidélité `verified` ;
+  - 05 (CTE partagée et `UNION ALL`) aussi ;
+  - 07 est `needs_curation` à cause de sa sous-requête scalaire ;
+  - 08 est `needs_curation`, avec `window_function` (LAG) et la sous-requête scalaire. Son `UNION ALL` devient le nœud de sortie, et son `ROW_NUMBER` un `deduplicate`.
+  
+  Brouillons et rapport « golden » sont dans `core/tests/fixtures/extract/` ; les régénérer avec `ATLAS_UPDATE_GOLDEN=1`.
+- **Critère 5, écart** : l'empreinte inclut la plateforme et la table de chaque source (plan 0002). Le même KPI extrait de Databricks et de Snowflake ne peut donc pas avoir la même empreinte tant que les sources diffèrent. Le test vérifie deux choses :
+  - avant alignement, le diff des deux brouillons complétés ne montre que `platform` et `table` sur la source ;
+  - une fois la source alignée, comme le ferait un curateur qui rattache les deux implémentations à la même table, les empreintes sont égales.
+  
+  Les deux scripts n'utilisent pas les mêmes fonctions de date : `FROM_UTC_TIMESTAMP` et `TO_DATE` d'un côté, `CONVERT_TIMEZONE` et `::DATE` de l'autre.
+- **Banc d'essai**, sur un MacBook (Apple Silicon), contrôle des brouillons compris :
+  - un script de 2 016 lignes (42 copies de `08_kpi_monthly.sql`) s'extrait en **0,09 s** ;
+  - 2 760 lignes de brouillons valides (120 copies de `04_…`) en 0,16 s.
+  
+  La cible est < 2 s ; le test échoue au-delà.
+- **Démonstration** : `examples/extraction/` (voir son README). Le diff des deux marges donne un `compute` `to_verify` (formule) ; celui du Revenu net Databricks/Snowflake donne un `filter` `critical`.
+- **À la main** : l'extraction d'un vrai script de production anonymisé reste à faire.
