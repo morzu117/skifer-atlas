@@ -15,6 +15,9 @@ Brief 5, 10.7 ; guide 5 (10.7), 7 ; `screens/10.7-administration.html` ; ADR 000
 - Sections en grille de 2 colonnes : Domaines métier (liste, « + Domaine », alerte orange si un domaine n'a pas de référent) ; Validateurs requis (canonique et déclinaisons, min 1, surcharges par domaine, rappel « une surcharge hors des points déclarés exige toujours le nombre canonique ») ; Utilisateurs et rôles (tableau Nom / Entité / Rôle / Domaines, « + Inviter ») ; Dépôt Git (URL en mono, branche principale, dernière synchronisation, « Synchroniser ») ; Plateformes autorisées (cases avec le mode d'auth).
 - « Enregistrer les paramètres » calcule le nouveau `governance.yaml` (et `allowed_platforms`), le valide, puis crée une proposition « Gouvernance » (1 référent requis, 0006). Bouton libellé « Enregistrer et créer la proposition », conformément au guide 3.2. « Annuler » restaure l'état lu.
 - Renommer un domaine change son `label`, jamais son `id` (aucun fichier déplacé).
+- Référent seul (ADR 0008) :
+  - tant que la branche principale ne compte qu'un référent, un bandeau permanent indique que ses modifications de gouvernance sont fusionnées sans revue. Le bouton devient « Enregistrer et fusionner », avec la même mention sur la proposition créée ;
+  - le rappel « Require review from Code Owners » n'apparaît qu'à partir de deux référents.
 
 ## Critères d'acceptation
 1. Un non-référent n'accède ni à l'écran ni à l'API (403).
@@ -24,6 +27,7 @@ Brief 5, 10.7 ; guide 5 (10.7), 7 ; `screens/10.7-administration.html` ; ADR 000
 5. Renommer un domaine ne modifie que son libellé.
 6. Aucun champ ni texte de token sur l'écran.
 7. « Synchroniser » met à jour la date et réindexe.
+8. Avec un seul référent, le bandeau est affiché, l'enregistrement fusionne directement avec la mention, et le bandeau disparaît après l'ajout d'un deuxième référent.
 
 ## Tests
 - Composants : formulaires et validations.
@@ -34,4 +38,4 @@ Brief 5, 10.7 ; guide 5 (10.7), 7 ; `screens/10.7-administration.html` ; ADR 000
 0006, 0010.
 
 ## Estimation
-**M**. Incertitude : ergonomie de « l'enregistrement = proposition » pour un référent seul dans un espace (auto-approbation interdite : le cas d'un espace à un seul référent est à trancher, recommandation : autoriser la fusion directe quand l'espace n'a qu'un seul référent, avec la mention).
+**M**. Le cas du référent seul est tranché par l'ADR 0008 (fusion sans revue tracée, tant qu'aucun autre compte n'est habilité) ; ce choix est à revoir à l'usage.
