@@ -8,6 +8,7 @@ cd "$ROOT/core"
 uv sync --group build
 uv run pyinstaller --noconfirm --onefile --name "$NAME" \
   --collect-all duckdb --collect-all sqlglot \
+  --collect-submodules keyring.backends --copy-metadata keyring \
   --hidden-import skifer_atlas.server \
   sidecar.py
 mkdir -p "$ROOT/app/src-tauri/binaries"

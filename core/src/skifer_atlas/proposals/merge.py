@@ -11,11 +11,10 @@ import hashlib
 
 from ..governance.rules import decide
 from ..repo.git import RepoError, run_git
-from ..repo.layout import GOVERNANCE_FILE
 from ..repo.sync import sync_workspace
 from ..repo.versions import tag_name
 from .common import open_context, parse_body, push
-from .create import _current_version
+from .create import SHARED_FILES, _current_version
 
 
 def merge_proposal(workspace_id: str, number: int) -> dict:
@@ -33,10 +32,12 @@ def merge_proposal(workspace_id: str, number: int) -> dict:
                       context.host.get_reviews(number), pull.head)
     if not decision.ready_to_merge:
         raise RepoError("not_ready", decision.explanation or "Validations insuffisantes.")
-    if target["kind"] == "governance":
-        current = context.show(GOVERNANCE_FILE) or ""
-        if hashlib.sha256(current.encode("utf-8")).hexdigest() != block.get("base_governance"):
-            raise RepoError("stale_base", "La gouvernance a changé depuis la proposition : "
+    if target["kind"] in SHARED_FILES:
+        current = context.show(target["path"]) or ""
+        # `base_governance` : propositions de gouvernance créées avant le plan 0008.
+        base = block.get("base_digest", block.get("base_governance"))
+        if hashlib.sha256(current.encode("utf-8")).hexdigest() != base:
+            raise RepoError("stale_base", f"{target['path']} a changé depuis la proposition : "
                             "la reproposer.")
     elif _current_version(context, target["path"]) != block.get("base_version"):
         raise RepoError("stale_base", f"« {target['id']} » a changé depuis la proposition : "
@@ -48,7 +49,7 @@ def merge_proposal(workspace_id: str, number: int) -> dict:
     merged = context.host.merge(number, pull.head, f"Fusion de la proposition #{number} : "
                                 f"{pull.title}", message)
     tag = None
-    if target["kind"] != "governance":
+    if target["kind"] not in SHARED_FILES:
         tag = tag_name(target["id"], block["version"])
         run_git(["fetch", "--quiet", "origin"], context.repo, error_code="fetch_failed",
                 token=context.token)

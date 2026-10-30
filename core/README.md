@@ -80,3 +80,17 @@ L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/�
 - `ATLAS_ACCOUNT` : l'identité de l'utilisateur avec un dépôt local. À défaut, c'est le nom Git de l'utilisateur.
 
 Une erreur métier répond `{"detail": {"code", "message"}}`, plus `issues` quand il y a des diagnostics (`workspace_exists`, `sync_conflict`, `credentials_in_url`, `stale_base`, `not_ready`, `invalid_document`, `branch_protected`, `git_missing`…). Le dépôt d'un espace (`src/skifer_atlas/repo/`) et son index (`src/skifer_atlas/index/`) suivent `docs/plans/0005-*.md` et l'ADR 0007 ; la gouvernance, les hébergeurs et les propositions (`governance/`, `githost/`, `proposals/`) suivent `docs/plans/0006-*.md` et les ADR 0008 et 0009. Le test réel contre GitHub ne tourne qu'avec `ATLAS_GITHUB_TEST_REPO=owner/repo` et `ATLAS_GITHUB_TOKEN` : `uv run pytest -m github`. Démonstration : `examples/espace-nordis/`.
+
+Connexions aux plateformes (plan 0008). Les points d'accès, sans secret, sont dans `access_points.yaml` à la racine du dépôt de l'espace ; les identifiants de l'utilisateur sont dans le trousseau de l'OS, service `skifer-atlas`, compte `<espace>/<point d'accès>`. Aucune route ne renvoie de jeton :
+
+```sh
+curl -H "$H" $API/acme/connections                                    # points d'accès, my_access: connected|expired|never
+curl -H "$H" -H "$J" -d '{"access_point":{"id":"dbx-fr","platform":"databricks","host":"https://adb-….azuredatabricks.net","warehouse_id":"…","schema":"gold.finance","owner":"claire.m"},"justification":"…"}' $API/acme/connections   # proposition
+curl -H "$H" -X POST $API/acme/connections/dbx-fr/authorize           # {authorize_url} à ouvrir dans le navigateur
+curl -H "$H" $API/acme/connections/dbx-fr/status                      # état, flux OAuth en cours ; rafraîchit au besoin
+curl -H "$H" -X PUT -H "$J" -d '{"token":"dapi…"}' $API/acme/connections/dbx-fr/token   # repli : token personnel
+curl -H "$H" -X POST $API/acme/connections/dbx-fr/test                # {ok, latency_ms, error}
+curl -H "$H" -X DELETE $API/acme/connections/dbx-fr/token             # retire du coffre, révoque côté Databricks
+```
+
+L'OAuth utilise par défaut le client `databricks-cli`, dont la redirection est `http://localhost:8020` : le port doit être libre pendant la connexion (`oauth_port_busy` sinon). `oauth_client_id` et `oauth_redirect_port` se règlent par point d'accès. Sans trousseau utilisable, la réponse est `vault_unavailable` : Atlas ne range rien ailleurs. `ATLAS_VAULT=memory` remplace le trousseau par un coffre en mémoire du processus, pour les tests et les démonstrations. Le test réel contre un SQL warehouse ne tourne qu'avec `ATLAS_DATABRICKS_HOST`, `ATLAS_DATABRICKS_WAREHOUSE` et `ATLAS_DATABRICKS_TOKEN` : `uv run pytest -m databricks`. Voir `docs/plans/0008-*.md` et l'ADR 0011.

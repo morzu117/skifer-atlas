@@ -188,7 +188,8 @@ def test_codeowners_is_deterministic_and_ordered():
     assert "/kpis/revenu-net.yaml @claire.m @julien.h @marc.d" in lines
     assert "/variants/revenu-net/ @claire.m @julien.h @marc.d" in lines
     assert "/concepts/commande.yaml @julien.h @marc.d" in lines
-    assert lines[-2:] == ["/governance.yaml @julien.h", "/.github/CODEOWNERS @julien.h"]
+    assert lines[-3:] == ["/governance.yaml @julien.h", "/access_points.yaml @julien.h",
+                          "/.github/CODEOWNERS @julien.h"]
 
 
 def test_codeowners_drift():

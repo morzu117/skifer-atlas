@@ -46,7 +46,8 @@ def _body(governance: Governance, documents: list[OwnedDocument]) -> str:
         if document.kind == "kpi":
             kpi_id = document.path.rsplit("/", 1)[-1].removesuffix(".yaml")
             lines.append(_line(f"/variants/{kpi_id}/", owners))
-    lines += [_line("/governance.yaml", referents), _line(f"/{PATH}", referents)]
+    lines += [_line("/governance.yaml", referents), _line("/access_points.yaml", referents),
+              _line(f"/{PATH}", referents)]
     return "\n".join(line for line in lines if line) + "\n"
 
 

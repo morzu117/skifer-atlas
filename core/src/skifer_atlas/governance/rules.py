@@ -11,9 +11,10 @@ from typing import Literal
 
 from .model import Governance, domain_approvers, space_referents
 
-Nature = Literal["new_version", "declared_point", "undeclared", "from_scratch", "governance"]
+Nature = Literal["new_version", "declared_point", "undeclared", "from_scratch", "governance",
+                 "access_points"]
 NATURES: tuple[str, ...] = ("new_version", "declared_point", "undeclared", "from_scratch",
-                            "governance")
+                            "governance", "access_points")
 CANONICAL_MENTION = "Validation canonique exigée"
 NO_REVIEW_MENTION = "Fusionnée sans revue : aucun autre compte habilité"
 
@@ -55,7 +56,7 @@ class Decision:
 
 
 def requirement(governance: Governance, nature: str, domain_id: str | None) -> Requirement:
-    if nature == "governance":
+    if nature in ("governance", "access_points"):
         return Requirement(1, frozenset(space_referents(governance)))
     domain = governance.domain(domain_id)
     levels = (domain.validators_required if domain and domain.validators_required
