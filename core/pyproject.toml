@@ -3,6 +3,7 @@ name = "skifer-atlas"
 version = "0.0.1"
 description = "Skifer Atlas — définitions canoniques et déclinaisons des KPI, comparaison structurelle et chiffrée."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "pyyaml>=6.0",
