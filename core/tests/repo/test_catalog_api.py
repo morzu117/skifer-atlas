@@ -110,6 +110,44 @@ def test_document_versions_and_dependencies(client, joined):
     assert variant["variant"]["kpi_id"] == "revenu-net"
 
 
+def test_facets_list_index_values_with_labels(client, joined):
+    """Plan 0011 : filtres alimentés par l'index, libellés de la gouvernance."""
+    facets = client.get(f"{WS}/catalog/facets").json()
+    assert facets["domain"] == [{"value": "finance", "label": "Finance"},
+                                {"value": "supply", "label": "Supply chain"},
+                                {"value": "ventes", "label": "Ventes"}]
+    assert {"value": "claire.m", "label": "Claire M."} in facets["owner"]
+    assert (facets["status"], facets["kind"]) == (["validated"], ["concept", "kpi"])
+
+
+def test_summary_aggregates_index_governance_and_comparisons(client, joined):
+    """Plan 0011, critère 4 : références et points de variation dans l'aperçu."""
+    found = client.get(f"{WS}/documents/revenu-net/summary").json()
+    assert {k: found[k] for k in ("label", "domain_label", "version", "owner_name")} == {
+        "label": "Revenu net", "domain_label": "Finance", "version": 4,
+        "owner_name": "Claire M."}
+    assert [p["node_id"] for p in found["variation_points"]] == ["n03", "n04"]
+    assert found["variation_points"][0]["label"] == "déduction des taxes"
+    assert [(v["entity"], v["mode"]) for v in found["variants"]] == [
+        ("nordis-de", "override"), ("nordis-es", "from_scratch"), ("nordis-fr", "override")]
+    assert [r["label"] for r in found["referenced_by"]] == ["Marge brute", "Panier moyen"]
+    assert found["last_comparison"] is None
+    concept = client.get(f"{WS}/documents/commande/summary").json()
+    assert concept["variation_points"] == [] and concept["last_comparison"] is None
+    assert "Revenu net" in [r["label"] for r in concept["referenced_by"]]
+    assert client.get(f"{WS}/documents/absent/summary").status_code == 404
+
+
+def test_index_state_says_when_the_catalog_will_rebuild(client, joined):
+    assert client.get(f"{WS}/index").json() == {"fresh": False}  # clone neuf, pas d'index
+    client.get(f"{WS}/catalog")
+    assert client.get(f"{WS}/index").json() == {"fresh": True}
+    clone = repo_dir("groupe-nordis")
+    (clone / "note.md").write_text("Note.\n")
+    commit_all(clone, "Note")
+    assert client.get(f"{WS}/index").json() == {"fresh": False}
+
+
 @pytest.mark.parametrize("path", [
     "/api/workspaces/inconnu/catalog",
     "/api/workspaces/inconnu/sync",
@@ -120,6 +158,9 @@ def test_document_versions_and_dependencies(client, joined):
     f"{WS}/documents/..%2F..%2Fatlas/versions",
     f"{WS}/documents/revenu-net--..%2Fx/versions/1",
     f"{WS}/documents/absent/dependencies",
+    f"{WS}/documents/%2E%2E/summary",
+    "/api/workspaces/inconnu/catalog/facets",
+    "/api/workspaces/inconnu/index",
 ])
 def test_unknown_workspace_or_dot_dot_is_404(client, joined, path):
     """Critère 9."""

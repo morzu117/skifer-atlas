@@ -36,3 +36,47 @@ Brief 10.1, 5.3 ; guide 3.4 (badges, convergence), 3.5, 5 (10.1) ; `screens/10.1
 
 ## Estimation
 **S**. Peu d'incertitude ; l'agrégation `summary` dépend de la disponibilité de 0006 et 0009 (champs vides tolérés).
+
+## Mise en œuvre (30 octobre 2026)
+- **API** (`core/`) :
+  - `GET …/catalog/facets` : valeurs des filtres présentes dans l'index ; domaines et propriétaires avec leur libellé de gouvernance.
+  - `GET …/documents/{id}/summary` (`index/summary.py`) : ligne d'index, libellés, points de variation avec le libellé de leur nœud, déclinaisons et leur mode, « référencé par », dernière comparaison.
+  - `GET …/index` : `{fresh}`, sans reconstruire.
+  - La convergence produit enfin `candidates:n`. Un écart sur une déclinaison from scratch la laisse candidate ; un écart sur une surcharge est une divergence, et les divergences priment.
+- **Interface** (`app/src/`) :
+  - `screens/Catalogue.tsx` : recherche temporisée, quatre filtres, tableau, squelette, états vides, aperçu, navigation au clavier ;
+  - `router.ts` : paramètres dans l'adresse (`setParams`, `replace`), adresses de la fiche et de l'éditeur ;
+  - `screens/WorkspaceShell.tsx` : branche le catalogue et les emplacements de la fiche (0012) et de l'éditeur (0013) ;
+  - `format.ts` : convergence, statuts, pourcentage, ancienneté ;
+  - tokens ajoutés : `--atlas-search-basis`, `--atlas-table-basis`, `--atlas-table-min-w`, `--atlas-preview-basis`, `--atlas-preview-w`.
+
+  Les choix qui s'écartent du plan ou du guide, ou qu'ils ne fixaient pas, sont dans l'**ADR 0015** :
+  - candidates et divergences ;
+  - recherche et sélection qui remplacent l'entrée d'historique, filtres qui en ajoutent une ;
+  - le focus sélectionne la ligne, Entrée ouvre la fiche ;
+  - texte en `--atlas-ink` sur la ligne sélectionnée ;
+  - concepts sans convergence ni déclinaisons (« — »).
+- **Tests** :
+  - `core/tests/repo/test_catalog_api.py` :
+    - facettes et leurs libellés ;
+    - aperçu de Revenu net et de Commande (critère 4) ;
+    - état de l'index ;
+    - 404 des nouvelles routes.
+  - `core/tests/repo/test_index.py` : les sept cas de convergence (candidates, divergences, version antérieure).
+  - `core/tests/repo/test_comparisons_api.py` : dernière comparaison dans l'aperçu après une comparaison.
+  - Vitest, `npm test`, 48 tests. Nouveaux :
+    - `Catalogue.test.tsx` (9 tests) : critères 1 à 5, clavier, squelette et reconstruction, états vides, erreur ;
+    - `format.test.ts` : convergence, pourcentage, ancienneté et nouvelles routes.
+  - Playwright, `npm run e2e`, `e2e/catalogue.spec.ts` (7 tests) sur l'espace de démonstration :
+    - tableau identique à l'index (critère 1) ;
+    - « CA net » (critère 2) ;
+    - filtres, adresse et retour arrière (critère 3) ;
+    - aperçu, clavier et retour de la fiche (critère 4) ;
+    - lecteur sans « + Nouveau » (critère 5) ;
+    - aperçu sous le tableau à 880 px (critère 6) ;
+    - « Jamais comparé », puis « 1 divergence » et la dernière comparaison après une vraie comparaison locale (critère 7).
+
+    axe-core passe sans exception, ligne sélectionnée comprise. `e2e/demo.ts` regroupe le dépôt de démonstration et le contrôle axe, partagés avec `accueil.spec.ts`.
+- **Reste à faire** :
+  - à la main : recherche avec accents, puis navigation au clavier sous Tauri ;
+  - la fiche (0012) et l'éditeur (0013), aujourd'hui des emplacements.

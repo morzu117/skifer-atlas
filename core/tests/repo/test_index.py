@@ -10,6 +10,7 @@ from workspace_helpers import EXAMPLE, REVENU_NET, atlas_env, commit_all, git, r
 
 from skifer_atlas.index import build_index, catalog, dependencies, document, ensure_index
 from skifer_atlas.index.schema import connect
+from skifer_atlas.index.search import _convergence
 
 __all__ = ["atlas_env", "remote"]  # fixtures importées
 
@@ -282,3 +283,26 @@ def test_rebuild_of_a_thousand_documents_is_fast(repo, tmp_path):
     build_index(repo, tmp_path / "atlas.duckdb")
     elapsed = time.perf_counter() - start
     assert elapsed < 5, f"{elapsed:.2f} s"
+
+
+VARIANTS = [{"id": "k--de", "mode": "override"}, {"id": "k--es", "mode": "from_scratch"}]
+
+
+def _result(variant_id, pct, version=4):
+    return {"variant_id": variant_id, "kpi_version": version, "validation_pct": pct}
+
+
+@pytest.mark.parametrize(("compared", "expected"), [
+    ([], "never_compared"),
+    ([_result("k--de", 100)], "never_compared"),  # une variante pas encore comparée
+    ([_result("k--de", 100), _result("k--es", 100)], "converged"),
+    ([_result("k--de", 100), _result("k--es", 94)], "candidates:1"),  # from scratch
+    ([_result("k--de", 94), _result("k--es", 94)], "divergences:1"),  # surcharge d'abord
+    ([_result("k--de", None), _result("k--es", 100)], "divergences:1"),
+    ([_result("k--de", 94, version=3), _result("k--es", 100)], "never_compared"),
+])
+def test_convergence_separates_candidates_from_divergences(compared, expected):
+    """Plan 0011, ADR 0015 : un écart sur une variante from scratch la laisse candidate."""
+    assert _convergence("kpi", VARIANTS, 4, compared) == expected
+    assert _convergence("kpi", [], 4, compared) == "converged"
+    assert _convergence("concept", VARIANTS, 4, compared) is None

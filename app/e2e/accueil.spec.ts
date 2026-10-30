@@ -1,40 +1,15 @@
-import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { API, demoRemote, seriousViolations } from "./demo";
 
 // Plan 0010 de bout en bout. Un seul serveur pour tout le fichier : les tests se suivent
 // (registre vide, création, adhésion, puis deux cartes).
 test.describe.configure({ mode: "serial" });
 
-const EXAMPLE = fileURLToPath(new URL("../../examples/espace-nordis", import.meta.url));
-const API = "http://127.0.0.1:8799";
 let bare = "";
 
 test.beforeAll(() => {
-  // Le dépôt de démonstration, en dépôt nu « distant » (examples/espace-nordis/README.md).
-  const root = mkdtempSync(join(tmpdir(), "atlas-demo-"));
-  const work = join(root, "travail");
-  cpSync(EXAMPLE, work, { recursive: true });
-  const git = (cwd: string, ...args: string[]) =>
-    execFileSync("git", ["-c", "user.name=Démo", "-c", "user.email=demo@exemple.invalid", ...args], { cwd });
-  git(work, "init", "-q", "-b", "main");
-  git(work, "add", "-A");
-  git(work, "commit", "-qm", "Espace Groupe Nordis");
-  bare = join(root, "distant.git");
-  git(root, "clone", "-q", "--bare", work, bare);
+  bare = demoRemote();
 });
-
-// Toute violation sérieuse, contraste compris (ADR 0014).
-async function seriousViolations(page: Page) {
-  const { violations } = await new AxeBuilder({ page }).analyze();
-  return violations
-    .filter((v) => v.impact === "serious" || v.impact === "critical")
-    .map((v) => ({ id: v.id, nodes: v.nodes.map((node) => node.html) }));
-}
 
 test("registre vide : carte vide, polices locales, accessibilité (critères 2, 9, 10)", async ({ page }) => {
   const external: string[] = [];

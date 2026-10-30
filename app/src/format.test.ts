@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { initials, plural, slugify, WORKSPACE_ID } from "./format";
-import { parse } from "./router";
+import { ago, convergence, initials, percent, plural, slugify, WORKSPACE_ID } from "./format";
+import { href, parse } from "./router";
 
 describe("formats", () => {
   it("initiales", () => {
@@ -24,14 +24,54 @@ describe("formats", () => {
   });
 });
 
+describe("catalogue", () => {
+  it("convergence", () => {
+    expect(
+      ["converged", "candidates:1", "candidates:2", "divergences:1", "divergences:3", "never_compared"].map(
+        (value) => convergence(value),
+      ),
+    ).toEqual([
+      { tone: "ok", label: "Convergé" },
+      { tone: "warn", label: "1 candidate" },
+      { tone: "warn", label: "2 candidates" },
+      { tone: "bad", label: "1 divergence" },
+      { tone: "bad", label: "3 divergences" },
+      { tone: "none", label: "Jamais comparé" },
+    ]);
+    expect(convergence(null)).toBeNull();
+  });
+
+  it("pourcentage et ancienneté", () => {
+    expect([percent(93.75), percent(99.9), percent(100)]).toEqual(["93 %", "99 %", "100 %"]);
+    const now = new Date("2026-10-30T12:00:00Z");
+    expect(
+      ["2026-10-30T11:59:40", "2026-10-30T11:15:00", "2026-10-30T07:00:00Z", "2026-10-27T10:00:00+00:00"].map((t) =>
+        ago(t, now),
+      ),
+    ).toEqual(["à l'instant", "il y a 45 min", "il y a 5 h", "il y a 3 j"]);
+  });
+});
+
 describe("routes", () => {
+  const ws = { name: "workspace", ws: "groupe-nordis", params: {} };
   it.each([
     ["", { name: "home" }],
     ["#/", { name: "home" }],
-    ["#/w/groupe-nordis", { name: "workspace", ws: "groupe-nordis", view: "catalogue" }],
-    ["#/w/groupe-nordis/propositions", { name: "workspace", ws: "groupe-nordis", view: "propositions" }],
-    ["#/w/groupe-nordis/inconnue", { name: "workspace", ws: "groupe-nordis", view: "catalogue" }],
+    ["#/w/groupe-nordis", { ...ws, view: "catalogue" }],
+    ["#/w/groupe-nordis/propositions", { ...ws, view: "propositions" }],
+    ["#/w/groupe-nordis/inconnue", { ...ws, view: "catalogue" }],
+    ["#/w/groupe-nordis/catalogue?q=ca%20net&kind=kpi", { ...ws, view: "catalogue", params: { q: "ca net", kind: "kpi" } }],
+    ["#/w/groupe-nordis/fiche/revenu-net", { ...ws, view: "fiche", doc: "revenu-net" }],
+    ["#/w/groupe-nordis/fiche", { ...ws, view: "catalogue" }],
+    ["#/w/groupe-nordis/editeur", { ...ws, view: "editeur" }],
   ])("%s", (hash, route) => {
     expect(parse(hash)).toEqual(route);
+  });
+
+  it("paramètres vides absents de l'adresse", () => {
+    expect(href.view("groupe-nordis", "catalogue", { q: "", domain: "finance" })).toBe(
+      "#/w/groupe-nordis/catalogue?domain=finance",
+    );
+    expect(href.view("groupe-nordis")).toBe("#/w/groupe-nordis/catalogue");
   });
 });

@@ -23,3 +23,40 @@ export function slugify(name: string): string {
 }
 
 export const WORKSPACE_ID = /^[a-z0-9][a-z0-9-]{1,63}$/;
+
+export type Tone = "ok" | "warn" | "bad" | "none";
+
+/** Pastille et libellé de convergence (guide 3.4) ; null pour un concept. */
+export function convergence(value: string | null): { tone: Tone; label: string } | null {
+  if (value === null) return null;
+  const [kind, count] = value.split(":");
+  const n = Number(count);
+  if (kind === "converged") return { tone: "ok", label: "Convergé" };
+  if (kind === "candidates") return { tone: "warn", label: plural(n, "candidate") };
+  if (kind === "divergences") return { tone: "bad", label: plural(n, "divergence") };
+  return { tone: "none", label: "Jamais comparé" };
+}
+
+export const STATUS_LABELS: Record<string, string> = {
+  validated: "Validé",
+  draft: "Brouillon",
+  needs_curation: "À curer",
+  invalid: "Invalide",
+};
+
+export const KIND_LABELS: Record<string, string> = { concept: "Concept", kpi: "KPI" };
+
+/** 93.75 → « 93 % » : arrondi vers le bas, 100 % n'est affiché que s'il est atteint. */
+export function percent(value: number): string {
+  return `${Math.floor(value)} %`;
+}
+
+/** Horodatage UTC du serveur (sans fuseau) → « il y a 3 j ». */
+export function ago(timestamp: string, now: Date = new Date()): string {
+  const utc = /Z|[+-]\d\d:?\d\d$/.test(timestamp) ? timestamp : `${timestamp}Z`;
+  const minutes = Math.max(0, Math.floor((now.getTime() - new Date(utc).getTime()) / 60000));
+  if (minutes < 1) return "à l'instant";
+  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 60 * 24) return `il y a ${Math.floor(minutes / 60)} h`;
+  return `il y a ${Math.floor(minutes / (60 * 24))} j`;
+}

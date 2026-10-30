@@ -1,12 +1,15 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 // Bout en bout : l'app Vite contre un vrai serveur Python, sur un dossier de données
 // temporaire. Le dossier est créé une fois par le lanceur ; les workers en héritent.
 process.env.ATLAS_E2E_DATA ??= mkdtempSync(join(tmpdir(), "atlas-e2e-"));
 const API_PORT = 8799;
+// Comparaisons chiffrées en local dans DuckDB, sans plateforme (plan 0009).
+const COMPARE_DATA = fileURLToPath(new URL("../core/tests/fixtures/compare/revenu-net", import.meta.url));
 
 export default defineConfig({
   testDir: "e2e",
@@ -27,6 +30,7 @@ export default defineConfig({
         ATLAS_ACCOUNT: "anna.k", // contributrice de Groupe Nordis, référente des espaces qu'elle crée
         ATLAS_VAULT: "memory",
         ATLAS_LOG_LEVEL: "warning",
+        ATLAS_COMPARE_DATA: COMPARE_DATA,
       },
     },
     {

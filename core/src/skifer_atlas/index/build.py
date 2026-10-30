@@ -280,3 +280,15 @@ def ensure_index(repo: Path, db: Path) -> duckdb.DuckDBPyConnection:
         connection.close()
         build_index(repo, db)
         return connect(db)
+
+
+def index_fresh(repo: Path, db: Path) -> bool:
+    """Vrai si l'index porte sur le commit courant : la prochaine lecture ne le
+    reconstruira pas."""
+    if not db.exists():
+        return False
+    connection = connect(db)
+    try:
+        return index_state(connection) == (head(repo), SCHEMA_VERSION)
+    finally:
+        connection.close()

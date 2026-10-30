@@ -1,28 +1,61 @@
 import { useEffect, useState } from "react";
 
-// Routage par hash, sans serveur : `#/` (accueil), `#/w/<espace>/<vue>`.
+// Routage par hash, sans serveur : `#/` (accueil), `#/w/<espace>/<vue>?<paramètres>`,
+// `#/w/<espace>/fiche/<document>` et `#/w/<espace>/editeur`.
 
 export const VIEWS = ["catalogue", "propositions", "comparaison", "connexions", "administration"] as const;
-export type View = (typeof VIEWS)[number];
+export type NavView = (typeof VIEWS)[number];
+export type View = NavView | "fiche" | "editeur";
 
-export type Route = { name: "home" } | { name: "workspace"; ws: string; view: View };
+export type Params = Record<string, string>;
+
+export type Route =
+  | { name: "home" }
+  | { name: "workspace"; ws: string; view: View; params: Params; doc?: string };
 
 export function parse(hash: string): Route {
-  const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
-  if (parts[0] === "w" && parts[1]) {
-    const view = (VIEWS as readonly string[]).includes(parts[2]) ? (parts[2] as View) : "catalogue";
-    return { name: "workspace", ws: parts[1], view };
-  }
-  return { name: "home" };
+  const [path, search = ""] = hash.replace(/^#\/?/, "").split("?", 2);
+  const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
+  if (parts[0] !== "w" || !parts[1]) return { name: "home" };
+  const params = Object.fromEntries(new URLSearchParams(search));
+  const ws = parts[1];
+  if (parts[2] === "fiche" && parts[3]) return { name: "workspace", ws, view: "fiche", params, doc: parts[3] };
+  if (parts[2] === "editeur") return { name: "workspace", ws, view: "editeur", params };
+  const view = (VIEWS as readonly string[]).includes(parts[2]) ? (parts[2] as NavView) : "catalogue";
+  return { name: "workspace", ws, view, params };
+}
+
+function query(params: Params = {}): string {
+  const kept = Object.entries(params).filter(([, value]) => value !== "");
+  return kept.length > 0 ? `?${new URLSearchParams(kept)}` : "";
 }
 
 export const href = {
   home: () => "#/",
-  view: (ws: string, view: View = "catalogue") => `#/w/${encodeURIComponent(ws)}/${view}`,
+  view: (ws: string, view: NavView = "catalogue", params?: Params) =>
+    `#/w/${encodeURIComponent(ws)}/${view}${query(params)}`,
+  document: (ws: string, id: string) => `#/w/${encodeURIComponent(ws)}/fiche/${encodeURIComponent(id)}`,
+  editor: (ws: string) => `#/w/${encodeURIComponent(ws)}/editeur`,
 };
 
 export function navigate(to: string) {
   window.location.hash = to;
+}
+
+/** Remplace l'entrée courante de l'historique : la recherche à la frappe ne l'encombre pas. */
+export function replace(to: string) {
+  window.history.replaceState(window.history.state, "", to);
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
+}
+
+/** Modifie des paramètres de la vue courante, lus au moment de l'appel. */
+export function setParams(change: Params, { push }: { push: boolean }) {
+  const route = parse(window.location.hash);
+  if (route.name !== "workspace" || route.view === "fiche" || route.view === "editeur") return;
+  const to = href.view(route.ws, route.view, { ...route.params, ...change });
+  if (to === window.location.hash) return;
+  if (push) navigate(to);
+  else replace(to);
 }
 
 export function useRoute(): Route {

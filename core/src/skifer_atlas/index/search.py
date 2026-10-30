@@ -17,21 +17,28 @@ def _records(cursor: duckdb.DuckDBPyConnection) -> list[dict]:
     return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
 
 
-def _convergence(kind: str, variant_count: int, version: int | None,
+def _convergence(kind: str, variants: list[dict], version: int | None,
                  compared: list[dict]) -> str | None:
     """Un KPI sans variante converge par construction. Sinon, d'après la dernière
-    comparaison chiffrée de chaque variante à la version courante du KPI (plan 0009) :
-    `divergences:n` si n variantes ont une cellule hors tolérance, `converged` si toutes
-    sont comparées sans écart, `never_compared` sinon."""
+    comparaison chiffrée de chaque variante à la version courante du KPI (plan 0009,
+    ADR 0015) : un écart sur une surcharge est une divergence (`divergences:n`), un écart
+    sur une variante from scratch la laisse candidate à la convergence (`candidates:n`).
+    Sans écart, `converged` si toutes les variantes sont comparées, `never_compared`
+    sinon."""
     if kind != "kpi":
         return None
-    if variant_count == 0:
+    if not variants:
         return "converged"
-    current = [r for r in compared if r["kpi_version"] == version]
-    divergent = sum(r["validation_pct"] is None or r["validation_pct"] < 100 for r in current)
+    current = {r["variant_id"]: r for r in compared if r["kpi_version"] == version}
+    gaps = [v for v in variants if v["id"] in current
+            and (current[v["id"]]["validation_pct"] is None
+                 or current[v["id"]]["validation_pct"] < 100)]
+    divergent = sum(v["mode"] != "from_scratch" for v in gaps)
     if divergent:
         return f"divergences:{divergent}"
-    return "converged" if len(current) >= variant_count else "never_compared"
+    if gaps:
+        return f"candidates:{len(gaps)}"
+    return "converged" if all(v["id"] in current for v in variants) else "never_compared"
 
 
 def catalog(connection: duckdb.DuckDBPyConnection, q: str | None = None,
@@ -71,11 +78,26 @@ def catalog(connection: duckdb.DuckDBPyConnection, q: str | None = None,
     compared: dict[str, list[dict]] = {}
     for result in latest(connection):
         compared.setdefault(result["kpi_id"], []).append(result)
+    variants: dict[str, list[dict]] = {}
+    for variant in _records(connection.execute(
+            'SELECT id, kpi_id, mode FROM "index".variants')):
+        variants.setdefault(variant["kpi_id"], []).append(variant)
     for row in rows:
         del row["rank"]
-        row["convergence"] = _convergence(row["kind"], row["variant_count"], row["version"],
-                                          compared.get(row["id"], []))
+        row["convergence"] = _convergence(row["kind"], variants.get(row["id"], []),
+                                          row["version"], compared.get(row["id"], []))
     return rows
+
+
+def facets(connection: duckdb.DuckDBPyConnection) -> dict[str, list[str]]:
+    """Valeurs présentes dans l'index pour chaque filtre du catalogue."""
+    found = {}
+    for column in ("domain", "owner", "status", "kind"):
+        found[column] = [value for (value,) in connection.execute(f"""
+            SELECT DISTINCT {column} FROM "index".documents
+            WHERE kind IN ('concept', 'kpi') AND {column} IS NOT NULL ORDER BY {column}
+        """).fetchall()]
+    return found
 
 
 def document(connection: duckdb.DuckDBPyConnection, document_id: str) -> dict | None:
