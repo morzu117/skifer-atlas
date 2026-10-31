@@ -51,6 +51,9 @@ EXPECTED = [("nordis-de", 80), ("nordis-fr", 120.5)]
 
 
 def _modules() -> dict[str, str]:
+    from .connectors.snowflake import prepare_environment
+
+    prepare_environment()  # comme avant chaque import du connecteur
     names = [*DYNAMIC_MODULES,
              KEYRING_BACKENDS.get(sys.platform, "keyring.backends.SecretService")]
     found = {}

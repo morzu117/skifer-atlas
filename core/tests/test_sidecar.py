@@ -53,6 +53,15 @@ def binary() -> Path:
     return found[0]
 
 
+def git_bash() -> str | None:
+    """Sous Windows, `bash` peut désigner celui de WSL : on prend celui de Git for Windows."""
+    if sys.platform != "win32":
+        return shutil.which("bash")
+    git = shutil.which("git")
+    candidates = [Path(git).parents[1] / "bin" / "bash.exe"] if git else []
+    return next((str(c) for c in candidates if c.exists()), None)
+
+
 def free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -179,9 +188,10 @@ def test_frozen_binary_refuses_to_start_without_token(folders):
 def test_frozen_binary_works_offline(folders, tmp_path):
     """Espace local (le dépôt de démonstration, en dépôt nu sur le disque), catalogue,
     compilation du graphe de Revenu net vers Databricks et Snowflake."""
-    if shutil.which("bash") is None:
+    bash = git_bash()
+    if bash is None:
         pytest.skip("bash requis pour examples/depot-nordis.sh")
-    made = subprocess.run(["bash", str(ROOT / "examples" / "depot-nordis.sh"),
+    made = subprocess.run([bash, str(ROOT / "examples" / "depot-nordis.sh"),
                            (tmp_path / "demo").as_posix()], capture_output=True, text=True,
                           check=False)
     assert made.returncode == 0, made.stdout + made.stderr

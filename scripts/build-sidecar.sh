@@ -9,7 +9,15 @@ NAME="skifer-atlas-server-${TRIPLE}"
 EXT=""
 case "$TRIPLE" in *windows*) EXT=".exe" ;; esac
 cd "$ROOT/core"
-uv sync --group build
+SYNC=(uv sync --group build)
+# cryptography n'a plus de wheel macOS x86_64 : uv la compile. Liée dynamiquement à
+# l'OpenSSL de Homebrew, elle heurterait le libssl du Python embarqué (même nom, autre
+# version) ; on la lie en statique, et on ignore une compilation dynamique en cache.
+if [ "$TRIPLE" = "x86_64-apple-darwin" ] && [ -z "${OPENSSL_DIR:-}" ] && command -v brew > /dev/null; then
+  export OPENSSL_DIR="$(brew --prefix openssl@3)" OPENSSL_STATIC=1
+  SYNC+=(--reinstall-package cryptography --refresh-package cryptography)
+fi
+"${SYNC[@]}"
 ATLAS_SIDECAR_NAME="$NAME" uv run pyinstaller --noconfirm --clean skifer-atlas-server.spec
 mkdir -p "$ROOT/app/src-tauri/binaries"
 cp "dist/$NAME$EXT" "$ROOT/app/src-tauri/binaries/$NAME$EXT"
