@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS results.summaries (
 );
 """
 
-_lock = threading.Lock()
+_lock = threading.RLock()  # `connect` le reprend sous `create` et `finish`
 
 
 def now() -> datetime:
@@ -84,7 +84,8 @@ def now() -> datetime:
 def connect(db: Path) -> duckdb.DuckDBPyConnection:
     db.parent.mkdir(parents=True, exist_ok=True)
     connection = duckdb.connect(str(db))
-    connection.execute(DDL)
+    with _lock:  # deux DDL simultanés : « Catalog write-write conflict »
+        connection.execute(DDL)
     return connection
 
 

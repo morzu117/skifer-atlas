@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { relay } from "./isolation";
 import { API, demoRemote, seriousViolations } from "./demo";
 
 // Plan 0010 de bout en bout. Un seul serveur pour tout le fichier : les tests se suivent
 // (registre vide, création, adhésion, puis deux cartes).
 test.describe.configure({ mode: "serial" });
+
+test.beforeEach(async ({ page }) => { await relay(page, "http://127.0.0.1:8791"); });
 
 let bare = "";
 
@@ -11,7 +14,7 @@ test.beforeAll(() => {
   bare = demoRemote();
 });
 
-test("registre vide : carte vide, polices locales, accessibilité (critères 2, 9, 10)", async ({ page }) => {
+test("[S-0010-02] [S-0010-09] [S-0010-10] registre vide : carte vide, polices locales, accessibilité (critères 2, 9, 10)", async ({ page }) => {
   const external: string[] = [];
   await page.route("**/*", (route) => {
     const { hostname } = new URL(route.request().url());
@@ -30,7 +33,7 @@ test("registre vide : carte vide, polices locales, accessibilité (critères 2, 
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("créer un espace l'ouvre, un identifiant pris donne l'erreur sous le champ (critères 3, 6)", async ({ page }) => {
+test("[S-0005-01] [S-0010-03] [S-0010-06] créer un espace l'ouvre, un identifiant pris donne l'erreur sous le champ (critères 3, 6)", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Créer un espace" }).click();
   const dialog = page.getByRole("dialog", { name: "Créer un espace" });
@@ -56,7 +59,7 @@ test("créer un espace l'ouvre, un identifiant pris donne l'erreur sous le champ
   await expect(dialog.getByLabel(/^Identifiant/)).toHaveAccessibleDescription(/Un espace porte déjà cet identifiant/);
 });
 
-test("rejoindre le dépôt de démonstration le clone et l'ouvre (critères 4, 7)", async ({ page }) => {
+test("[S-0005-02] [S-0010-04] [S-0010-07] rejoindre le dépôt de démonstration le clone et l'ouvre (critères 4, 7)", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Rejoindre un espace" }).click();
   const dialog = page.getByRole("dialog", { name: "Rejoindre un espace" });
@@ -71,7 +74,7 @@ test("rejoindre le dépôt de démonstration le clone et l'ouvre (critères 4, 7
   await expect(page.getByText("Contributeur")).toBeVisible();
 });
 
-test("deux espaces, deux cartes ; navigation au clavier (critères 1, 10)", async ({ page }) => {
+test("[S-0010-01] [S-0010-10] deux espaces, deux cartes ; navigation au clavier (critères 1, 10)", async ({ page }) => {
   await page.goto("/");
   const cards = page.getByRole("list", { name: "Espaces" }).getByRole("link");
   await expect(cards).toHaveCount(2);
@@ -107,7 +110,7 @@ test("deux espaces, deux cartes ; navigation au clavier (critères 1, 10)", asyn
   await expect(page.getByRole("heading", { name: "Vos espaces de travail" })).toBeFocused();
 });
 
-test("serveur arrêté : bandeau, puis Réessayer après redémarrage (critère 5)", async ({ page }) => {
+test("[S-0010-05] serveur arrêté : bandeau, puis Réessayer après redémarrage (critère 5)", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("list", { name: "Espaces" })).toBeVisible();
   await page.route(`${API}/**`, (route) => route.abort("connectionrefused"));
@@ -117,6 +120,7 @@ test("serveur arrêté : bandeau, puis Réessayer après redémarrage (critère 
   await banner.getByRole("button", { name: "Réessayer" }).click();
   await expect(banner).toBeVisible(); // toujours arrêté
   await page.unroute(`${API}/**`);
+  await relay(page, "http://127.0.0.1:8791");
   await banner.getByRole("button", { name: "Réessayer" }).click();
   await expect(banner).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Catalogue" })).toBeVisible();

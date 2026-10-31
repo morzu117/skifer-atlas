@@ -14,7 +14,7 @@ test.beforeAll(async ({ request }) => {
 });
 
 
-test(`éditeur sur ${COUNT} nœuds : cartes visibles seulement, sélection et déplacement`, async ({ page, request }) => {
+test(`[S-0024-03] [S-0024-04] éditeur sur ${COUNT} nœuds : cartes visibles seulement, sélection et déplacement`, async ({ page, request }) => {
   test.setTimeout(60_000);
   const opened = (await (await request.get(`${EDITOR}/documents/revenu-net`)).json()) as { document: Raw; highest: number };
   const id = `graphe-${COUNT}-e2e-${Date.now().toString(36)}`;

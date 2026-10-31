@@ -12,7 +12,7 @@ test.beforeAll(async ({ request }) => {
   await ensureNordis(request);
 });
 
-test("lancement, progression, matrice à 94 % / 6,1 % pour Revenu net × DE, ES à 75 % (critères 1, 3 et 5 ; plan 0022)", async ({ page }) => {
+test("[S-0009-01] [S-0022-01] [S-0022-06] [S-0015-01] lancement, progression, matrice à 94 % / 6,1 % pour Revenu net × DE, ES à 75 % (critères 1, 3 et 5 ; plan 0022)", async ({ page }) => {
   await page.goto(COMPARISON);
   await expect(page.getByRole("heading", { level: 1, name: "Comparaison" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "KPI" })).toHaveValue("revenu-net");
@@ -38,7 +38,7 @@ test("lancement, progression, matrice à 94 % / 6,1 % pour Revenu net × DE, ES 
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("détail : Sept. 2026 hors tolérance, le nœud divergent ouvre le diff au canonique (critères 2 et 6)", async ({ page }) => {
+test("[S-0015-02] [S-0015-06] détail : Sept. 2026 hors tolérance, le nœud divergent ouvre le diff au canonique (critères 2 et 6)", async ({ page }) => {
   await page.goto(COMPARISON);
   await page.getByRole("link", { name: /Revenu net × nordis-de : 94 %/ }).click();
   const detail = page.getByRole("region", { name: /Détail · Revenu net · nordis-de · par Mois fiscal × Entité/ });
@@ -57,7 +57,7 @@ test("détail : Sept. 2026 hors tolérance, le nœud divergent ouvre le diff au 
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("historique : « Tout voir », filtre par utilisateur (critère 7)", async ({ page }) => {
+test("[S-0015-07] historique : « Tout voir », filtre par utilisateur (critère 7)", async ({ page }) => {
   await page.goto(COMPARISON);
   const strip = page.getByRole("region", { name: "Dernières comparaisons" });
   await expect(strip.getByRole("link", { name: /n° \d+ · Revenu net/ }).first()).toBeVisible();

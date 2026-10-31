@@ -14,7 +14,7 @@ test.beforeAll(async ({ request }) => {
 const table = (page: Page) => page.getByRole("table", { name: "Concepts et KPI" });
 const row = (page: Page, name: string) => table(page).getByRole("row").filter({ has: page.getByRole("link", { name }) });
 
-test("le tableau reprend l'index : versions et déclinaisons exactes (critère 1)", async ({ page, request }) => {
+test("[S-0011-01] le tableau reprend l'index : versions et déclinaisons exactes (critère 1)", async ({ page, request }) => {
   const index = (await (await request.get(`${API}/api/workspaces/groupe-nordis/catalog`)).json()) as {
     label: string;
     kind: string;
@@ -34,7 +34,7 @@ test("le tableau reprend l'index : versions et déclinaisons exactes (critère 1
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("« CA net » trouve « Revenu net » (critère 2)", async ({ page }) => {
+test("[S-0005-03] [S-0011-02] « CA net » trouve « Revenu net » (critère 2)", async ({ page }) => {
   await page.goto(CATALOGUE);
   await page.getByRole("searchbox", { name: "Rechercher dans le catalogue" }).fill("CA net");
   await expect(page).toHaveURL(/catalogue\?q=CA\+net$/);
@@ -44,7 +44,7 @@ test("« CA net » trouve « Revenu net » (critère 2)", async ({ page }) => {
   await expect(page.getByText("Aucun concept ou KPI ne correspond")).toBeVisible();
 });
 
-test("filtres combinés, gardés dans l'adresse, retour arrière (critère 3)", async ({ page }) => {
+test("[S-0005-04] [S-0011-03] filtres combinés, gardés dans l'adresse, retour arrière (critère 3)", async ({ page }) => {
   await page.goto(CATALOGUE);
   await expect(table(page).getByRole("row")).toHaveCount(8);
   await page.getByRole("combobox", { name: "Domaine" }).selectOption({ label: "Finance" });
@@ -60,7 +60,7 @@ test("filtres combinés, gardés dans l'adresse, retour arrière (critère 3)", 
   await expect(page.getByRole("combobox", { name: "Domaine" })).toHaveValue("finance");
 });
 
-test("une ligne ouvre l'aperçu : références et points de variation (critère 4) ; clavier", async ({ page }) => {
+test("[S-0011-04] une ligne ouvre l'aperçu : références et points de variation (critère 4) ; clavier", async ({ page }) => {
   await page.goto(CATALOGUE);
   await row(page, "Revenu net").getByRole("cell").nth(2).click();
   const preview = page.getByRole("complementary", { name: "Revenu net" });
@@ -83,7 +83,7 @@ test("une ligne ouvre l'aperçu : références et points de variation (critère 
   await expect(page.getByRole("complementary", { name: "Taux de service" })).toBeVisible(); // sélection gardée
 });
 
-test("« + Nouveau » absent pour un lecteur (critère 5)", async ({ page }) => {
+test("[S-0011-05] « + Nouveau » absent pour un lecteur (critère 5)", async ({ page }) => {
   await page.route(`${API}/api/workspaces`, async (route) => {
     const response = await route.fetch();
     const listed = (await response.json()) as { role: string; role_label: string }[];
@@ -94,7 +94,7 @@ test("« + Nouveau » absent pour un lecteur (critère 5)", async ({ page }) => 
   await expect(page.getByRole("link", { name: "Nouveau concept ou KPI" })).toHaveCount(0);
 });
 
-test("sous 900 px, l'aperçu passe sous le tableau (critère 6)", async ({ page }) => {
+test("[S-0011-06] sous 900 px, l'aperçu passe sous le tableau (critère 6)", async ({ page }) => {
   await page.goto(`${CATALOGUE}?sel=revenu-net`);
   const preview = page.getByRole("complementary", { name: "Revenu net" });
   await expect(preview).toBeVisible();
@@ -110,7 +110,7 @@ test("sous 900 px, l'aperçu passe sous le tableau (critère 6)", async ({ page 
     .toBe(true);
 });
 
-test("« Jamais comparé », puis mis à jour après une comparaison (critère 7)", async ({ page, request }) => {
+test("[S-0011-07] « Jamais comparé », puis mis à jour après une comparaison (critère 7)", async ({ page, request }) => {
   await page.goto(CATALOGUE);
   const convergence = row(page, "Revenu net").getByRole("cell").nth(5);
   await expect(convergence).toHaveText("Jamais comparé");

@@ -29,7 +29,7 @@ async function authorizeIn(page: Page, click: () => Promise<void>) {
   await window.close();
 }
 
-test("liste, se connecter par OAuth, tester, révoquer (critères 1, 2, 3, 5 et 6)", async ({ page }) => {
+test("[S-0016-01] [S-0016-02] [S-0016-03] [S-0016-05] [S-0016-06] liste, se connecter par OAuth, tester, révoquer (critères 1, 2, 3, 5 et 6)", async ({ page }) => {
   await page.goto(CONNECTIONS);
   await expect(page.getByRole("heading", { level: 1, name: "Mes connexions" })).toBeVisible();
   const table = page.getByRole("table", { name: "Points d'accès de l'espace" });
@@ -57,7 +57,7 @@ test("liste, se connecter par OAuth, tester, révoquer (critères 1, 2, 3, 5 et 
   await expectNoSecret(page);
 });
 
-test("nouveau point d'accès : OAuth et test avant de le proposer", async ({ page }) => {
+test("[S-0008-07] nouveau point d'accès : OAuth et test avant de le proposer", async ({ page }) => {
   await page.goto(CONNECTIONS);
   await page.getByRole("button", { name: "Ajouter un point d'accès" }).click();
   const panel = page.getByRole("complementary", { name: "Nouveau point d'accès" });
@@ -85,7 +85,7 @@ test("nouveau point d'accès : OAuth et test avant de le proposer", async ({ pag
   await expect(page.getByRole("heading", { name: /dbx-de/ }).first()).toBeVisible();
 });
 
-test("Snowflake : SSO puis paire de clés, tester, révoquer (plan 0018)", async ({ page }) => {
+test("[S-0018-02] Snowflake : SSO puis paire de clés, tester, révoquer (plan 0018)", async ({ page }) => {
   await page.goto(CONNECTIONS);
   const table = page.getByRole("table", { name: "Points d'accès de l'espace" });
 
@@ -117,4 +117,27 @@ test("Snowflake : SSO puis paire de clés, tester, révoquer (plan 0018)", async
   await expect(de).toContainText("Jamais connecté");
   await es.getByRole("button", { name: "Révoquer Snowflake · snow-es" }).click();
   await expect(es).toContainText("Jamais connecté");
+});
+
+test("[S-0016-04] Changer d'espace remplace la liste des points d'accès", async ({ page }) => {
+  const name = `Connexions ${Date.now().toString(36)}`;
+  await page.goto(CONNECTIONS);
+  // Le tableau nomme l'entité et le mode d'accès ; l'identifiant (dbx-fr) est dans le nom des actions.
+  const table = page.getByRole("table", { name: "Points d'accès de l'espace" });
+  await expect(table).toContainText("nordis-fr · OAuth");
+  await expect(table.getByRole("button", { name: /· dbx-fr$/ }).first()).toBeVisible();
+  await page.getByRole("link", { name: /Espace\s*Groupe Nordis/ }).click();
+  await page.getByRole("button", { name: "Créer un espace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Créer un espace" });
+  await dialog.getByLabel(/^Nom/).fill(name);
+  await dialog.getByRole("button", { name: "Créer l'espace" }).click();
+  await page.getByRole("navigation", { name: "Navigation de l'espace" }).getByRole("link", { name: "Connexions" }).click();
+  await expect(page.getByText(/ne déclare encore aucun point d'accès/)).toBeVisible();
+  await expect(page.getByRole("table", { name: "Points d'accès de l'espace" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /· (dbx-fr|snow-de|snow-es)$/ })).toHaveCount(0);
+  await page.getByRole("link", { name: new RegExp(`Espace\\s*${name}`) }).click();
+  await page.getByRole("list", { name: "Espaces" }).getByRole("link").filter({ hasText: "Groupe Nordis" }).click();
+  await page.getByRole("navigation", { name: "Navigation de l'espace" }).getByRole("link", { name: "Connexions" }).click();
+  await expect(table).toContainText("nordis-fr · OAuth");
+  await expect(table.getByRole("button", { name: /· dbx-fr$/ }).first()).toBeVisible();
 });

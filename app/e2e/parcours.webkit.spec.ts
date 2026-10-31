@@ -17,7 +17,7 @@ async function move(page: Page, card: Locator) {
   await expect.poll(async () => (await card.boundingBox())!.y).toBeGreaterThan(before.y + 12);
 }
 
-test("accueil : création, ouverture et bascule entre deux espaces", async ({ page }) => {
+test("[S-0026-01] [S-0026-09] [S-RAF-02] accueil : création, ouverture et bascule entre deux espaces", async ({ page }) => {
   const name = `WebKit ${Date.now().toString(36)}`;
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Vos espaces de travail" })).toBeVisible();
@@ -38,7 +38,7 @@ test("accueil : création, ouverture et bascule entre deux espaces", async ({ pa
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("catalogue : recherche avec et sans accents, navigation au clavier", async ({ page }) => {
+test("[S-0026-02] [S-RAF-03] catalogue : recherche avec et sans accents, navigation au clavier", async ({ page }) => {
   await page.goto(`${ROOT}/catalogue`);
   const table = page.getByRole("table", { name: "Concepts et KPI" });
   const search = page.getByRole("searchbox", { name: "Rechercher dans le catalogue" });
@@ -57,7 +57,7 @@ test("catalogue : recherche avec et sans accents, navigation au clavier", async 
   await expect(page).toHaveURL(/fiche\/taux-de-service$/);
 });
 
-test("fiche : graphe en lecture, onglets au clavier et diff de versions", async ({ page }) => {
+test("[S-0026-03] [S-RAF-04] fiche : graphe en lecture, onglets au clavier et diff de versions", async ({ page }) => {
   await page.goto(`${ROOT}/fiche/revenu-net`);
   const graph = page.getByRole("figure", { name: "Graphe de Revenu net" });
   await expect(graph.locator(".graph-card")).toHaveCount(7);
@@ -81,7 +81,7 @@ test("fiche : graphe en lecture, onglets au clavier et diff de versions", async 
 });
 
 for (const count of [7, 200]) {
-  test(`éditeur : Revenu net, ${count} nœuds, sélection et déplacement${count === 7 ? ", suppression annulée au clavier" : ", cartes visibles seulement"}`, async ({ page, request }) => {
+  test(`${count === 7 ? "[S-0026-04]" : "[S-0026-05]"} [S-RAF-05] éditeur : Revenu net, ${count} nœuds, sélection et déplacement${count === 7 ? ", suppression annulée au clavier" : ", cartes visibles seulement"}`, async ({ page, request }) => {
     test.setTimeout(60_000);
     const response = await request.get(`${EDITOR}/documents/revenu-net`);
     expect(response.ok()).toBe(true);
@@ -128,7 +128,7 @@ for (const count of [7, 200]) {
   });
 }
 
-test("propositions : file, proposition et diff en lecture seule", async ({ page }) => {
+test("[S-0026-06] [S-RAF-06] propositions : file, proposition et diff en lecture seule", async ({ page }) => {
   const writes: string[] = [];
   page.on("request", (request) => {
     if (request.url().startsWith(API) && !["GET", "OPTIONS"].includes(request.method())) writes.push(request.url());
@@ -148,7 +148,7 @@ test("propositions : file, proposition et diff en lecture seule", async ({ page 
   expect(writes).toEqual([]);
 });
 
-test("comparaison : lancement et ouverture du détail", async ({ page }) => {
+test("[S-0026-07] [S-RAF-07] comparaison : lancement et ouverture du détail", async ({ page }) => {
   await page.goto(`${ROOT}/comparaison`);
   await expect(page.getByRole("combobox", { name: "KPI" })).toHaveValue("revenu-net");
   expect(await seriousViolations(page)).toEqual([]);
@@ -165,7 +165,7 @@ test("comparaison : lancement et ouverture du détail", async ({ page }) => {
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("connexions : popup OAuth vers le faux Databricks et retour local", async ({ page, context }) => {
+test("[S-0026-08] [S-RAF-08] connexions : popup OAuth vers le faux Databricks et retour local", async ({ page, context }) => {
   await page.goto(`${ROOT}/connexions`);
   await page.getByRole("button", { name: "Ajouter un point d'accès" }).click();
   const panel = page.getByRole("complementary", { name: "Nouveau point d'accès" });

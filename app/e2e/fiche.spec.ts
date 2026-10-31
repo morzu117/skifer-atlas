@@ -14,7 +14,7 @@ const graph = (page: Page, name = "Graphe de Revenu net") => page.getByRole("fig
 const card = (page: Page, id: string, name?: string) =>
   graph(page, name).locator(".graph-card").filter({ has: page.locator(".graph-card-id", { hasText: new RegExp(`^${id}$`) }) });
 
-test("catalogue → fiche : en-tête, compteurs, graphe et points de variation (critères 1 et 2)", async ({ page }) => {
+test("[S-0012-01] [S-0012-02] catalogue → fiche : en-tête, compteurs, graphe et points de variation (critères 1 et 2)", async ({ page }) => {
   await page.goto("/#/w/groupe-nordis/catalogue");
   await page.getByRole("table", { name: "Concepts et KPI" }).getByRole("link", { name: "Revenu net" }).click();
   await expect(page).toHaveURL(/#\/w\/groupe-nordis\/fiche\/revenu-net$/);
@@ -42,7 +42,7 @@ test("catalogue → fiche : en-tête, compteurs, graphe et points de variation (
   await expect(page.getByRole("complementary", { name: "Revenu net" })).toBeVisible(); // retour sur la ligne
 });
 
-test("deux chargements donnent la même disposition (critère 6)", async ({ page }) => {
+test("[S-0012-06] deux chargements donnent la même disposition (critère 6)", async ({ page }) => {
   const boxes = async () => {
     await page.goto(FICHE);
     await expect(card(page, "n07")).toBeVisible();
@@ -55,7 +55,7 @@ test("deux chargements donnent la même disposition (critère 6)", async ({ page
   expect(await boxes()).toEqual(first);
 });
 
-test("versions : diff de v3 à v4, classé et coloré (critère 3)", async ({ page }) => {
+test("[S-0012-03] versions : diff de v3 à v4, classé et coloré (critère 3)", async ({ page }) => {
   await page.goto(FICHE);
   await page.getByRole("navigation", { name: "Onglets de la fiche" }).getByRole("link", { name: /Versions/ }).click();
   const table = page.getByRole("table");
@@ -89,7 +89,7 @@ test("versions : diff de v3 à v4, classé et coloré (critère 3)", async ({ pa
   await expect(page.locator(".diff-item")).toHaveCount(3);
 });
 
-test("implémentations : extraire le SQL et le comparer au canonique (critère 4)", async ({ page }) => {
+test("[S-0004-01] [S-0012-04] implémentations : extraire le SQL et le comparer au canonique (critère 4)", async ({ page }) => {
   await page.goto(`${FICHE}?tab=implementations`);
   const section = page.getByRole("region", { name: "nordis-fr · Databricks" });
   await expect(section).toContainText("implementations/revenu-net/nordis-fr/databricks.sql");
@@ -103,7 +103,7 @@ test("implémentations : extraire le SQL et le comparer au canonique (critère 4
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("déclinaisons, dépendances, scope", async ({ page }) => {
+test("[S-0005-08] [S-0009-02] déclinaisons, dépendances, scope", async ({ page }) => {
   await page.goto(`${FICHE}?tab=declinaisons`);
   const de = page.getByRole("row").filter({ hasText: "nordis-de" });
   await expect(de).toContainText("Surcharge · 3");
@@ -125,7 +125,7 @@ test("déclinaisons, dépendances, scope", async ({ page }) => {
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("« Proposer une modification » ouvre une copie en v5, en brouillon (critère 5)", async ({ page }) => {
+test("[S-0012-05] « Proposer une modification » ouvre une copie en v5, en brouillon (critère 5)", async ({ page }) => {
   await page.goto(FICHE);
   await page.getByRole("link", { name: "Proposer une modification" }).click();
   await expect(page).toHaveURL(/#\/w\/groupe-nordis\/editeur\?from=revenu-net$/);
@@ -134,7 +134,7 @@ test("« Proposer une modification » ouvre une copie en v5, en brouillon (crit�
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("une fiche de concept masque les onglets propres aux KPI (critère 7)", async ({ page }) => {
+test("[S-0012-07] une fiche de concept masque les onglets propres aux KPI (critère 7)", async ({ page }) => {
   await page.goto("/#/w/groupe-nordis/fiche/commande");
   await expect(page.getByRole("heading", { level: 1, name: "Commande" })).toBeVisible();
   const tabs = page.getByRole("navigation", { name: "Onglets de la fiche" }).getByRole("link");

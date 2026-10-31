@@ -200,7 +200,7 @@ describe("comparaison", () => {
     expect(screen.getByRole("link", { name: /Revenu net × nordis-de/ })).toHaveAttribute("aria-current", "true");
   });
 
-  it("panneau de lancement : déclinaison non comparable, alerte de bypass avant tout lancement (critère 3)", async () => {
+  it("[S-0015-03] [S-0009-05] panneau de lancement : déclinaison non comparable, alerte de bypass avant tout lancement (critère 3)", async () => {
     const server = comparisonServer();
     render(<Harness />);
     const es = await screen.findByRole("checkbox", { name: /nordis-es/ });
@@ -264,7 +264,7 @@ describe("comparaison", () => {
     expect(await screen.findByRole("button", { name: "Relancer" }, { timeout: 3000 })).toBeInTheDocument();
   });
 
-  it("progression par plateforme, Annuler, statut annulée (critère 5)", async () => {
+  it("[S-0015-05] progression par plateforme, Annuler, statut annulée (critère 5)", async () => {
     let cancelled = false;
     const server = comparisonServer(({ method, path }) => {
       if (path === API && method === "POST") return { json: { id: 8, status: "running", alerts: [] } };

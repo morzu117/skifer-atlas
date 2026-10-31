@@ -69,7 +69,7 @@ describe("Canvas sur un grand graphe (plan 0024)", () => {
   const nodes = chain(LARGE_GRAPH);
   const base = props(nodes);
 
-  it("déplacer un nœud ne redessine que sa carte", () => {
+  it("[S-0024-01] déplacer un nœud ne redessine que sa carte", () => {
     const { rerender, container } = render(view(base));
     expect(container.querySelectorAll("[data-node-id]")).toHaveLength(LARGE_GRAPH);
     vi.mocked(summary).mockClear();
@@ -84,14 +84,14 @@ describe("Canvas sur un grand graphe (plan 0024)", () => {
     expect(redrawn()).toEqual([]);
   });
 
-  it("changer la sélection ne redessine que les deux cartes concernées", () => {
+  it("[S-0024-02] changer la sélection ne redessine que les deux cartes concernées", () => {
     const { rerender } = render(view({ ...base, selected: "n003" }));
     vi.mocked(summary).mockClear();
     rerender(view({ ...base, selected: "n004" }));
     expect(new Set(redrawn())).toEqual(new Set(["n003", "n004"]));
   });
 
-  it("une modification ne redessine que le nœud modifié", () => {
+  it("[S-0024-02] une modification ne redessine que le nœud modifié", () => {
     const { rerender } = render(view(base));
     vi.mocked(summary).mockClear();
     const edited = structuredClone(nodes);
