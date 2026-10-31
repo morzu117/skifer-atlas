@@ -24,6 +24,7 @@ uv run atlas compile revenu-net.yaml --period FY2026_Q1 --perimeter entite:in:FR
 uv run atlas compile revenu-net.yaml --compilability          # statut JSON par dialecte ; 2 si un dialecte est exclu
 uv run atlas run ../examples/espace-nordis/kpis/revenu-net.yaml --data tests/fixtures/compile/revenu-net   # CSV
 uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de,nordis-fr --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net   # 0 dans la tolérance, 2 écarts
+uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-es --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net   # from scratch, rebranchée par binding : 75 %
 uv run atlas compare groupe-nordis revenu-net --variants nordis-de --period FY2026_Q4 --by mois_fiscal,entite --format json   # espace du registre, sur ses points d'accès
 ```
 
@@ -35,7 +36,7 @@ Le modèle des documents (dix types de nœuds, concept, KPI, déclinaison) est d
 
 `atlas compile` produit le SQL Databricks, Snowflake ou DuckDB d'un document : une CTE par nœud, et des contrôles de cardinalité qui font échouer la requête en citant le nœud. Les calendriers fiscaux sont lus dans le dossier `calendars/` de l'espace, ou dans celui que désigne `--calendars`. `atlas run` charge chaque source depuis `<dossier>/<table>.csv` (ou `.parquet`) dans une base DuckDB en mémoire, puis exécute le SQL DuckDB. Spécification : `docs/plans/0007-*.md`, choix de forme : ADR 0010.
 
-`atlas compare` exécute le canonique, rebranché sur les sources de chaque déclinaison, puis la déclinaison, sur le scope choisi. Il compare ensuite les deux, cellule par cellule. Avec `--duckdb-data`, tout tourne dans DuckDB : chaque table se lit dans `<dossier>/<entité>/<table>.csv`. Sinon, chaque déclinaison passe par le point d'accès de son entité, avec les identifiants de l'utilisateur. Les résultats vont dans `atlas.duckdb`, schéma `results` (dans un fichier temporaire pour un dossier, sauf `--db`). Spécification : `docs/plans/0009-*.md`, choix : ADR 0012.
+`atlas compare` exécute le canonique, rebranché sur les sources de chaque déclinaison, puis la déclinaison, sur le scope choisi. Il compare ensuite les deux, cellule par cellule. Avec `--duckdb-data`, tout tourne dans DuckDB : chaque table se lit dans `<dossier>/<entité>/<table>.csv`. Sinon, chaque déclinaison passe par le point d'accès de son entité, avec les identifiants de l'utilisateur. Les résultats vont dans `atlas.duckdb`, schéma `results` (dans un fichier temporaire pour un dossier, sauf `--db`). En mode `from_scratch`, une colonne du canonique se retrouve par l'attribut de concept que lui donne son `binding` (sinon son nom). Seules les colonnes lues par le canonique ou rattachées au concept sont exigées, et une source sans équivalent dans la déclinaison reste commune. Sinon : `canonical_not_rebindable`, avec les colonnes manquantes. Spécification : `docs/plans/0009-*.md` et `docs/plans/0022-*.md`, choix : ADR 0012 et 0026.
 
 ## API locale
 

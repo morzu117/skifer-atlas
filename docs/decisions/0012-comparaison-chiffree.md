@@ -69,7 +69,7 @@ Le plan 0009 fixe le principe : le canonique est rebranché sur les sources de l
 ## Conséquences
 
 - Le schéma `results` partage `atlas.duckdb` avec l'index, qui ne supprime que son schéma `"index"` à la reconstruction. Les résultats survivent donc à une reconstruction de l'index.
-- Une déclinaison `from_scratch` sans colonnes correspondantes ne se compare pas. Nordis ES en est un exemple : il faudra des `binding` ou une source commune.
+- Une déclinaison `from_scratch` sans colonnes correspondantes ne se compare pas. Nordis ES en est un exemple : il faudra des `binding` ou une source commune. Fait par le plan 0022 : voir l'[ADR 0026](0026-comparaison-from-scratch.md).
 - Les résultats rapatriés ne sont bornés que par `MAX_ROWS` (`result_too_large`). Un scope trop fin échoue plutôt que de remplir la mémoire.
 - Le résultat dépend de l'arithmétique de chaque moteur. DuckDB laisse un bruit de virgule flottante (3960980.0000000005) qui ne pèse pas sur les écarts.
 - L'écran de comparaison (plan 0015) et Snowflake (plan 0018) se branchent sur ces routes et sur la même interface d'exécution.
