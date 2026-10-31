@@ -39,9 +39,8 @@ def test_setup_lists_variants_scopes_granularities_and_tolerances(client, local)
         ("nordis-de", "override", "databricks", False),
         ("nordis-es", "from_scratch", "snowflake", False),
         ("nordis-fr", "override", "databricks", False)]
-    unavailable = {v["entity"]: v["unavailable"] for v in setup["variants"]}
-    assert unavailable["nordis-de"] is None and unavailable["nordis-fr"] is None
-    assert "ne se rebranche pas" in unavailable["nordis-es"]
+    # nordis-es, from scratch, se rebranche par ses binding (plan 0022).
+    assert [v["unavailable"] for v in setup["variants"]] == [None, None, None]
     scope = setup["scopes"][0]
     assert scope["id"] == "fy2026-mois-entite"
     assert scope["period"] == {"from": "2026-02-01", "to": "2026-09-30"}

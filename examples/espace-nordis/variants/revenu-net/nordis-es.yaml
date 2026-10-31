@@ -20,10 +20,22 @@ graph:
         - {name: factura_id, type: string}
         - {name: sociedad, type: string}
         - {name: estado, type: string}
+        - {name: estado_grupo, type: string}
         - {name: fecha, type: timestamp, timezone: Europe/Madrid, format: 'yyyy-MM-dd HH:mm:ss'}
+        - {name: fecha_factura, type: date, timezone: Europe/Madrid, format: yyyy-MM-dd}
+        - {name: importe_bruto, type: decimal}
+        - {name: iva, type: decimal}
+        - {name: abonos, type: decimal}
         - {name: importe_neto, type: decimal}
       concept: commande
-      binding: {factura_id: commande_id, sociedad: entite}
+      binding:
+        abonos: avoirs
+        estado_grupo: statut
+        factura_id: commande_id
+        fecha_factura: date_facture
+        importe_bruto: montant_ttc
+        iva: montant_taxes
+        sociedad: entite
     - id: n02
       type: filter
       inputs: [n01]

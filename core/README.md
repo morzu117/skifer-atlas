@@ -24,6 +24,7 @@ uv run atlas compile revenu-net.yaml --period FY2026_Q1 --perimeter entite:in:FR
 uv run atlas compile revenu-net.yaml --compilability          # statut JSON par dialecte ; 2 si un dialecte est exclu
 uv run atlas run ../examples/espace-nordis/kpis/revenu-net.yaml --data tests/fixtures/compile/revenu-net   # CSV
 uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de,nordis-fr --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net   # 0 dans la tolérance, 2 écarts
+uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-es --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net   # from scratch, rebranchée par binding : 75 %
 uv run atlas compare groupe-nordis revenu-net --variants nordis-de --period FY2026_Q4 --by mois_fiscal,entite --format json   # espace du registre, sur ses points d'accès
 ```
 
@@ -35,7 +36,7 @@ Le modèle des documents (dix types de nœuds, concept, KPI, déclinaison) est d
 
 `atlas compile` produit le SQL Databricks, Snowflake ou DuckDB d'un document : une CTE par nœud, et des contrôles de cardinalité qui font échouer la requête en citant le nœud. Les calendriers fiscaux sont lus dans le dossier `calendars/` de l'espace, ou dans celui que désigne `--calendars`. `atlas run` charge chaque source depuis `<dossier>/<table>.csv` (ou `.parquet`) dans une base DuckDB en mémoire, puis exécute le SQL DuckDB. Pour un même résultat sur les trois moteurs, une division se calcule en `DOUBLE` et rend `NULL` sur un diviseur nul (`CAST(a AS DOUBLE) / NULLIF(b, 0)`), la semaine commence au lundi sans dépendre de `WEEK_START` en Snowflake, et la garde des contrôles est évaluée même sur une sortie vide. Spécification : `docs/plans/0007-*.md` et `0021-*.md`, choix de forme : ADR 0010 et 0025.
 
-`atlas compare` exécute le canonique, rebranché sur les sources de chaque déclinaison, puis la déclinaison, sur le scope choisi. Il compare ensuite les deux, cellule par cellule. Avec `--duckdb-data`, tout tourne dans DuckDB : chaque table se lit dans `<dossier>/<entité>/<table>.csv`. Sinon, chaque déclinaison passe par le point d'accès de son entité, avec les identifiants de l'utilisateur. Les résultats vont dans `atlas.duckdb`, schéma `results` (dans un fichier temporaire pour un dossier, sauf `--db`). Spécification : `docs/plans/0009-*.md`, choix : ADR 0012.
+`atlas compare` exécute le canonique, rebranché sur les sources de chaque déclinaison, puis la déclinaison, sur le scope choisi. Il compare ensuite les deux, cellule par cellule. Avec `--duckdb-data`, tout tourne dans DuckDB : chaque table se lit dans `<dossier>/<entité>/<table>.csv`. Sinon, chaque déclinaison passe par le point d'accès de son entité, avec les identifiants de l'utilisateur. Les résultats vont dans `atlas.duckdb`, schéma `results` (dans un fichier temporaire pour un dossier, sauf `--db`). En mode `from_scratch`, une colonne du canonique se retrouve par l'attribut de concept que lui donne son `binding` (sinon son nom). Seules les colonnes lues par le canonique ou rattachées au concept sont exigées, et une source sans équivalent dans la déclinaison reste commune. Sinon : `canonical_not_rebindable`, avec les colonnes manquantes. Spécification : `docs/plans/0009-*.md` et `docs/plans/0022-*.md`, choix : ADR 0012 et 0026.
 
 ## API locale
 
@@ -103,10 +104,21 @@ curl -H "$H" -H "$J" -d '{"governance":{…},"base_digest":"…"}' $API/acme/adm
 curl -H "$H" -H "$J" -d '{"remote_url":"/chemin/vers/depot.git"}' $API/acme/remote
 ```
 
-L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/…` ou SSH), ou un dépôt nu local (`LocalHost`, pour les tests et les démonstrations). Variables d'environnement, en attendant le coffre (plan 0008) :
+L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/…` ou SSH), ou un dépôt nu local (`LocalHost`, pour les tests et les démonstrations). Le jeton GitHub s'obtient par le device flow et va au coffre de l'espace (`<espace>/@github`, plan 0025, ADR 0029). Git le reçoit par un assistant d'identification, jamais dans l'URL ni dans `.git/config` (ADR 0009) :
 
-- `ATLAS_GITHUB_TOKEN` : le jeton GitHub. Git le reçoit par un assistant d'identification, jamais dans l'URL ni dans `.git/config` (ADR 0009) ;
-- `ATLAS_GITHUB_API_URL` : l'API de GitHub Enterprise, ou un faux serveur ;
+```bash
+curl -H "$H" $API/acme/github                                         # configured, applies, state, source, account : jamais de jeton
+curl -H "$H" -H "$J" -d '{"workspace":"acme"}' http://127.0.0.1:8765/api/github/device   # user_code et verification_uri à afficher ; sans espace : pour rejoindre un dépôt privé
+curl -H "$H" -X POST http://127.0.0.1:8765/api/github/device/<flow>   # pending, connected (jeton au coffre), denied, expired
+curl -H "$H" -X DELETE $API/acme/github                               # retire le jeton du coffre de ce poste
+curl -H "$H" -H "$J" -d '{"remote_url":"https://github.com/…","github_flow":"<flow>"}' http://127.0.0.1:8765/api/workspaces/join
+```
+
+Variables d'environnement :
+
+- `ATLAS_GITHUB_CLIENT_ID` : le client OAuth GitHub d'Atlas, avec le device flow activé. C'est un identifiant public : la build de release le fixe à la compilation de l'app Tauri, qui le passe au serveur. Sans lui, `github_not_configured` ;
+- `ATLAS_GITHUB_TOKEN` : repli sans coffre, pour les tests et l'intégration continue. Le jeton de l'espace au coffre passe avant ;
+- `ATLAS_GITHUB_URL` et `ATLAS_GITHUB_API_URL` : GitHub Enterprise, ou un faux serveur ;
 - `ATLAS_ACCOUNT` : l'identité de l'utilisateur avec un dépôt local. À défaut, c'est le nom Git de l'utilisateur.
 
 Les compteurs de la liste des espaces se calculent sans réseau : l'index du clone, et les propositions ouvertes qui attendent la revue de l'utilisateur d'après le dernier fetch (`awaiting_me` : un autre auteur, un compte habilité, pas encore d'avis sur le dernier commit). Un compteur indisponible vaut `null`.

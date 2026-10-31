@@ -87,6 +87,14 @@ fn stop_server(app: &AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Client OAuth GitHub d'Atlas (plan 0025, ADR 0029) : un identifiant public, fixé à la
+    // compilation par la build de release, que le serveur hérite de notre environnement.
+    // Une valeur déjà présente sur le poste garde la main. Avant tout fil d'exécution.
+    if let Some(id) = option_env!("ATLAS_GITHUB_CLIENT_ID") {
+        if std::env::var_os("ATLAS_GITHUB_CLIENT_ID").is_none() {
+            std::env::set_var("ATLAS_GITHUB_CLIENT_ID", id);
+        }
+    }
     let port = free_port();
     let token = uuid::Uuid::new_v4().to_string();
     let info = ServerInfo {

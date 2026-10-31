@@ -210,6 +210,23 @@ def test_request_validation(client, joined, local):
     assert client.post(COMPARISONS, json={**BODY, "tolerance": -1}).status_code == 422
     assert code(client.post(COMPARISONS, json={**BODY, "scope_id": "x"})) == (
         422, "unknown_scope")
-    assert code(client.post(COMPARISONS, json={**BODY, "variants": ["nordis-es"],
-                                               "scope_id": "fy2026-t4"})) == (
-        422, "canonical_not_rebindable")
+    es = repo_dir("groupe-nordis") / "variants" / "revenu-net" / "nordis-es.yaml"
+    original = es.read_text(encoding="utf-8")
+    es.write_text(original.replace("        abonos: avoirs\n", "").replace(
+        "        - {name: abonos, type: decimal}\n", ""), encoding="utf-8")
+    response = client.post(COMPARISONS, json={**BODY, "variants": ["nordis-es"],
+                                              "scope_id": "fy2026-t4"})
+    assert code(response) == (422, "canonical_not_rebindable")
+    assert "avoirs" in response.json()["detail"]["message"]
+    es.write_text(original, encoding="utf-8")
+
+
+def test_from_scratch_es_compares_through_the_api(client, joined, local):
+    """Plan 0022 : nordis-es, from scratch sur Snowflake, se compare en local."""
+    created = client.post(COMPARISONS, json={**BODY, "variants": ["nordis-es"]})
+    assert created.status_code == 202, created.text
+    found = finished(client, created.json()["id"])
+    assert found["status"] == "done"
+    [result] = found["results"]
+    assert (result["entity"], result["platform"], result["validation_pct"]) == (
+        "nordis-es", "snowflake", 75)

@@ -145,4 +145,4 @@ Un `base_version` qui n'est plus la version courante renvoie `stale_base` et ne 
 - **Reste à faire** :
   - poser le tag au `sync` quand une PR a été fusionnée directement sur GitHub ;
   - ajouter une route de révision d'une proposition, si l'écran 0014 en a besoin ;
-  - remplacer `ATLAS_GITHUB_TOKEN` par le coffre (plan 0008).
+  - remplacer `ATLAS_GITHUB_TOKEN` par le coffre (plan 0008) (fait : plan 0025).

@@ -55,8 +55,8 @@ def open_context(workspace_id: str, sync: bool = False, fetch: bool = True) -> C
         raise RepoError("not_found", f"Espace « {workspace_id} » inconnu.")
     repo = repo_dir(workspace_id)
     main_branch = read_meta(repo).main_branch
-    host = host_for(workspace.git_remote, main_branch)
-    token = remote_token(workspace.git_remote)
+    host = host_for(workspace.git_remote, main_branch, workspace.id)
+    token = remote_token(workspace.git_remote, workspace.id)
     if sync:
         sync_workspace(workspace_id)
     elif fetch:

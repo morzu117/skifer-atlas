@@ -115,5 +115,5 @@ Conservation : les tables d'extraction temporaires (`staging_*`) sont supprimée
   - 34 tests ajoutés.
 - **Reste à faire** :
   - comparaison réelle sur un espace Databricks de test, en même temps que l'OAuth réel du plan 0008 ;
-  - `binding` ou source commune pour que Nordis ES se compare ;
+  - `binding` ou source commune pour que Nordis ES se compare (fait : plan 0022) ;
   - l'écran de comparaison (plan 0015).

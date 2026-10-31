@@ -208,12 +208,127 @@ def test_bypassed_join_is_reported(space, db):
 
 # --- rebranchement du canonique -------------------------------------------------------------
 
-def test_canonical_not_rebindable_on_a_foreign_schema(db):
+ES_FILE = Path("variants") / "revenu-net" / "nordis-es.yaml"
+
+
+def edit_es_source(space, change):
+    """Modifie la source n01 de nordis-es dans la copie de l'espace."""
+    def apply(data):
+        source = data["graph"]["nodes"][0]
+        change(source)
+    edit_yaml(space / ES_FILE, apply)
+
+
+def drop_column(source, name):
+    source["columns"] = [c for c in source["columns"] if c["name"] != name]
+    source["binding"].pop(name, None)
+
+
+def test_from_scratch_es_compares_with_fr_and_de(db):
+    """Plan 0022, critère 1 : FR, DE et ES comparées ensemble ; ES a un vrai pourcentage."""
+    prepared, found = compare(EXAMPLE, db, "nordis-de", "nordis-fr", "nordis-es")
+    assert found["status"] == "done" and found["error"] is None
+    results = {r["entity"]: r for r in found["results"]}
+    assert (round(results["nordis-de"]["validation_pct"]),
+            results["nordis-fr"]["validation_pct"]) == (94, 100)
+    es = results["nordis-es"]
+    assert (es["platform"], es["cell_count"], es["validation_pct"],
+            round(es["max_gap_pct"], 2)) == ("snowflake", 8, 75, 2.93)
+    out = [(c["dims"]["mois_fiscal"], c["canonical_value"], c["variant_value"])
+           for c in es["cells"] if not c["within_tolerance"]]
+    # La facture du 30 juin, clôturée après minuit à Madrid : juillet côté ES.
+    assert out == [("2026-06-01", 2100000, 2040000), ("2026-07-01", 2050000, 2110000)]
+    assert es["divergent"] is None  # from scratch : écarts justifiés, pas de piste
+    plan = next(p for p in prepared.plans if p.entity == "nordis-es")
+    sql = plan.canonical.compiled.sql
+    assert "FROM FINANZAS.PUBLIC.FACTURAS" in sql and "importe_bruto AS montant_ttc" in sql
+    assert "estado_grupo AS statut" in sql and "sociedad AS entite" in sql
+    tables = {s.table: [c for c, _ in s.columns] for s in plan.canonical.compiled.sources}
+    # facture_id n'est lue par aucun nœud du canonique : retirée de la source rebranchée.
+    assert tables["FINANZAS.PUBLIC.FACTURAS"] == [
+        "factura_id", "sociedad", "estado_grupo", "fecha_factura", "importe_bruto", "iva",
+        "abonos"]
+    assert tables["gold.finance.dim_date"] == ["date_jour", "date_comptable"]  # commune
+
+
+def test_rebound_canonical_keeps_a_common_source(space):
+    """Date de référence : aucune source ES rattachée à ce concept, la table du canonique
+    reste, lue sur la plateforme de la déclinaison."""
+    from skifer_atlas.compare.rebind import rebind
+    from skifer_atlas.index.build import analyze
+    from skifer_atlas.model.resolve import resolve
+
+    analysis = analyze(space)
+    kpi = analysis.entry("revenu-net").document
+    variant = analysis.entry("revenu-net--nordis-es").document
+    found = rebind(kpi, resolve(variant, kpi, analysis.library), analysis.library)
+    nodes = {n.id: n for n in found.document.graph.nodes if n.type == "source"}
+    assert found.common == ["n06"]
+    assert (nodes["n06"].table, nodes["n06"].platform) == ("gold.finance.dim_date", "snowflake")
+    assert (nodes["n01"].table, nodes["n01"].platform) == ("FINANZAS.PUBLIC.FACTURAS",
+                                                           "snowflake")
+    assert found.renames["n01"]["avoirs"] == "abonos"
+    assert "facture_id" not in [c.name for c in nodes["n01"].columns]
+
+
+def test_canonical_not_rebindable_lists_missing_columns(space, db):
+    """Plan 0022, critère 2 : une colonne lue par le canonique manque vraiment."""
+    edit_es_source(space, lambda s: drop_column(s, "abonos"))
     with pytest.raises(RepoError) as error:
-        compare(EXAMPLE, db, "nordis-es", scope_id="fy2026-t4")
+        compare(space, db, "nordis-es")
     assert error.value.code == "canonical_not_rebindable"
-    assert "montant_ttc" in error.value.message
+    assert "colonnes de n01 introuvables dans FINANZAS.PUBLIC.FACTURAS" in error.value.message
+    assert error.value.message.endswith(": avoirs ; les rattacher au concept « commande » "
+                                        "par un binding.")
     assert not db.exists()  # rien n'a été enregistré ni exécuté
+
+
+def test_unread_columns_may_be_missing_but_bound_ones_may_not(space, db):
+    edit_es_source(space, lambda s: drop_column(s, "factura_id"))
+    with pytest.raises(RepoError) as error:  # commande_id : rattachée au concept
+        compare(space, db, "nordis-es")
+    assert error.value.message.endswith(": commande_id ; les rattacher au concept "
+                                        "« commande » par un binding.")
+
+
+def test_type_mismatch_is_named_and_integers_widen(space, db, tmp_path):
+    def retype(kind):
+        def change(source):
+            for column in source["columns"]:
+                if column["name"] == "iva":
+                    column["type"] = kind
+        return change
+    edit_es_source(space, retype("string"))
+    with pytest.raises(RepoError) as error:
+        compare(space, db, "nordis-es")
+    assert "montant_taxes (decimal attendu, string dans iva)" in error.value.message
+    # Un entier se lit sans perte là où le canonique attend un décimal.
+    edit_es_source(space, retype("integer"))
+    data = tmp_path / "donnees"
+    shutil.copytree(DATA / "nordis-es", data / "nordis-es")
+    path = data / "nordis-es" / "FINANZAS.PUBLIC.FACTURAS.csv"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    header = lines[0].split(",")
+    column = header.index("iva")
+    rows = [line.split(",") for line in lines[1:]]
+    for row in rows:
+        row[column] = row[column].removesuffix(".00")
+    path.write_text("\n".join([lines[0], *(",".join(r) for r in rows)]) + "\n",
+                    encoding="utf-8")
+    _, found = compare(space, db, "nordis-es", runner=LocalRunner(data))
+    assert found["results"][0]["validation_pct"] == 75
+
+
+def test_a_variant_sharing_no_concept_is_refused(space, db):
+    def detach(data):
+        data["graph"]["nodes"][0]["concept"] = "client-actif"
+        data["graph"]["nodes"][0]["binding"] = {"sociedad": "entite"}
+        data["concepts"] = ["client-actif"]
+    edit_yaml(space / ES_FILE, detach)
+    with pytest.raises(RepoError) as error:
+        compare(space, db, "nordis-es")
+    assert error.value.code == "canonical_not_rebindable"
+    assert "aucune de ses sources n'est rattachée à un concept" in error.value.message
 
 
 def test_from_scratch_variant_rebinds_by_concept_binding(space, db, tmp_path):
@@ -356,8 +471,9 @@ def test_cli_compare(capsys, db):
     assert found["scope"]["period"] == {"from": "2026-02-01", "to": "2026-09-30"}
 
 
-def test_cli_compare_errors(capsys):
-    assert main(["compare", str(EXAMPLE), "revenu-net", "--variants", "nordis-es",
+def test_cli_compare_errors(capsys, space):
+    edit_es_source(space, lambda s: drop_column(s, "abonos"))
+    assert main(["compare", str(space), "revenu-net", "--variants", "nordis-es",
                  "--scope", "fy2026-t4", "--duckdb-data", str(DATA)]) == 1
     assert "canonical_not_rebindable" in capsys.readouterr().err
     assert main(["compare", "espace-inconnu", "revenu-net", "--variants", "nordis-de",

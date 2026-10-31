@@ -12,18 +12,20 @@ test.beforeAll(async ({ request }) => {
   await ensureNordis(request);
 });
 
-test("lancement, progression, matrice à 94 % / 6,1 % pour Revenu net × DE (critères 1, 3 et 5)", async ({ page }) => {
+test("lancement, progression, matrice à 94 % / 6,1 % pour Revenu net × DE, ES à 75 % (critères 1, 3 et 5 ; plan 0022)", async ({ page }) => {
   await page.goto(COMPARISON);
   await expect(page.getByRole("heading", { level: 1, name: "Comparaison" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "KPI" })).toHaveValue("revenu-net");
   const es = page.getByRole("checkbox", { name: /nordis-es/ });
-  await expect(es).toBeDisabled(); // from scratch, ne se rebranche pas sur les sources ES
+  await expect(es).toBeEnabled(); // from scratch, rebranchée par ses binding (plan 0022)
+  await expect(es).toBeChecked();
   await expect(page.getByRole("checkbox", { name: /nordis-de/ })).toBeChecked();
   await expect(page.getByText("Surcharge hors des points déclarés")).toBeVisible(); // avant tout lancement
   expect(await seriousViolations(page)).toEqual([]);
 
   await page.getByRole("button", { name: /Lancer la comparaison|Relancer/ }).click();
   await expect(page.getByRole("progressbar", { name: "Databricks · nordis-de, nordis-fr" })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "Snowflake · nordis-es" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Relancer" })).toBeVisible({ timeout: 20_000 });
   await expect(page).toHaveURL(/id=\d+&variant=nordis-de/);
 
@@ -31,6 +33,8 @@ test("lancement, progression, matrice à 94 % / 6,1 % pour Revenu net × DE (cri
   await expect(de).toBeVisible();
   await expect(de).toHaveAttribute("aria-current", "true");
   await expect(page.getByRole("link", { name: /Revenu net × nordis-fr : 100 % de validation/ })).toBeVisible();
+  // La facture du 30 juin, clôturée après minuit à Madrid, compte en juillet côté ES.
+  await expect(page.getByRole("link", { name: "Revenu net × nordis-es : 75 % de validation, écart max 2,9 %" })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });
 
@@ -61,7 +65,7 @@ test("historique : « Tout voir », filtre par utilisateur (critère 7)", async 
   await expect(page.getByRole("heading", { level: 1, name: "Historique des comparaisons" })).toBeVisible();
   const rows = page.getByRole("table").getByRole("row");
   await expect(rows.nth(1)).toContainText("anna.k");
-  await expect(rows.nth(1)).toContainText("nordis-de 94 % · nordis-fr 100 %");
+  await expect(rows.nth(1)).toContainText("nordis-de 94 % · nordis-es 75 % · nordis-fr 100 %");
 
   await page.getByRole("combobox", { name: "Utilisateur" }).selectOption("anna.k");
   await expect(page).toHaveURL(/user=anna\.k/);
