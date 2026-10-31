@@ -59,6 +59,7 @@ ERROR_STATUS = {
     "not_a_variant": 422,
     "invalid_governance": 422,
     "no_change": 422,
+    "domain_in_use": 422,
     "cannot_review_own": 422,
     "host_rejected": 422,
     "no_remote": 422,
