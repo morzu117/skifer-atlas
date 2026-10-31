@@ -14,9 +14,10 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useMemo, type DragEvent } from "react";
+import { memo, useMemo, type DragEvent } from "react";
 import type { Issue } from "../api";
 import { Icon } from "../components/Icon";
+import { useStable } from "../stable";
 import { edgesOf, typeInfo, type NodeRaw, type NodeType, type Positions, type Side } from "./model";
 import { summary } from "./summary";
 
@@ -24,9 +25,11 @@ import { summary } from "./summary";
 // jointure et ses deux ports « gauche » / « droite »), arêtes orthogonales, trame de
 // 24 px, mini-carte. L'en-tête porte la couleur de famille en bandeau et en pastille,
 // avec un texte foncé : le blanc sur la couleur des lignes ne passerait pas 4,5:1 (ADR 0017).
+// Au-delà de LARGE_GRAPH nœuds, seuls ceux de la zone visible sont dessinés (ADR 0028).
 
 export type Tool = "select" | "pan" | "edge";
 export const DRAG_TYPE = "application/x-atlas-node";
+export const LARGE_GRAPH = 50;
 
 type CardData = {
   node: NodeRaw;
@@ -39,7 +42,8 @@ type CardData = {
 };
 type CardNode = Node<CardData, "card">;
 
-function Card({ data, selected }: NodeProps<CardNode>) {
+// Mémoïsée : une carte ne se redessine que si ses `data` ou sa sélection changent.
+const Card = memo(function Card({ data, selected }: NodeProps<CardNode>) {
   const { node, variation, output, issue, locked, overridden, pending } = data;
   const info = typeInfo(node.type);
   const text = summary(node);
@@ -87,9 +91,11 @@ function Card({ data, selected }: NodeProps<CardNode>) {
       <Handle type="source" position={Position.Right} className="port" />
     </div>
   );
-}
+});
 
 const NODE_TYPES = { card: Card };
+
+const nodeColor = (node: Node) => `var(--atlas-node-${typeInfo((node.data as CardData).node.type).family})`;
 
 export type CanvasProps = {
   nodes: NodeRaw[];
@@ -123,7 +129,7 @@ export function Canvas(props: CanvasProps) {
     return found;
   }, [issues]);
 
-  const flowNodes: CardNode[] = nodes.map((node) => ({
+  const flowNodes = useStable<CardNode>(nodes.map((node) => ({
     id: node.id,
     type: "card",
     position: positions[node.id] ?? { x: 0, y: 0 },
@@ -141,9 +147,9 @@ export function Canvas(props: CanvasProps) {
       overridden: overridden.includes(node.id),
       pending: node.id === pending,
     },
-  }));
+  })));
 
-  const flowEdges: FlowEdge[] = edgesOf(nodes).map((edge) => ({
+  const flowEdges = useStable<FlowEdge>(edgesOf(nodes).map((edge) => ({
     id: `${edge.source}-${edge.target}-${edge.side ?? "in"}`,
     source: edge.source,
     target: edge.target,
@@ -152,7 +158,7 @@ export function Canvas(props: CanvasProps) {
     deletable: !locked,
     data: { side: edge.side },
     markerEnd: { type: MarkerType.ArrowClosed, color: "var(--atlas-node-source)" },
-  }));
+  })));
 
   const onNodesChange = (changes: NodeChange<CardNode>[]) => {
     for (const change of changes) {
@@ -201,6 +207,7 @@ export function Canvas(props: CanvasProps) {
         snapGrid={[24, 24]}
         minZoom={0.25}
         maxZoom={2}
+        onlyRenderVisibleElements={nodes.length > LARGE_GRAPH}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         proOptions={{ hideAttribution: true }}
@@ -210,7 +217,7 @@ export function Canvas(props: CanvasProps) {
           pannable
           zoomable
           ariaLabel="Mini-carte du graphe"
-          nodeColor={(node) => `var(--atlas-node-${typeInfo((node.data as CardData).node.type).family})`}
+          nodeColor={nodeColor}
         />
       </ReactFlow>
     </div>
