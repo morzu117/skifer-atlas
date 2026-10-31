@@ -110,5 +110,8 @@ export function summary(node: NodeRaw): { main: string; meta: string } {
         main: list(node.metrics).filter(isRaw).map((m) => text(m.name)).join(", ") || "métriques ?",
         meta: node.order === "rows_first" ? "lignes d'abord" : node.order === "aggregate_first" ? "agrégation d'abord" : "",
       };
+    default:
+      // Type inconnu : la validation le signale ; la carte reste lisible.
+      return { main: text(node.type) || "type ?", meta: "type inconnu" };
   }
 }
