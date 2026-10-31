@@ -409,7 +409,8 @@ def test_generated_sql_parses_in_its_dialect(dialect):
     for sql in (compiled(document, dialect, library=library),
                 compiled(revenue, dialect, calendars=calendars)):
         tree = reparse(sql, dialect)
-        assert isinstance(tree, sqlglot.exp.Select)
+        # Avec des contrôles, la requête finale est une union (garde évaluée, plan 0021).
+        assert isinstance(tree, sqlglot.exp.Query)
         assert tree.sql(dialect=dialect)
 
 

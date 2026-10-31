@@ -2,13 +2,15 @@
 
 SQLGlot traduit l'AST ; ce module dit seulement où sa traduction ne serait pas fidèle
 (`NotCompilable`) et fournit les quelques expressions qu'on écrit à la main : agrégats,
-tri explicite des nulls, échec volontaire d'une requête.
+tri explicite des nulls, échec volontaire d'une requête, division et début de semaine
+identiques d'un moteur à l'autre (plan 0021, ADR 0025).
 """
 
 from __future__ import annotations
 
 from sqlglot import exp
 
+from ..model.functions import infer_type
 from .errors import NotCompilable
 
 DIALECTS = ("databricks", "snowflake", "duckdb")
@@ -49,6 +51,50 @@ def fail(dialect: str, message: exp.Expression) -> exp.Expression:
     # Snowflake n'a pas de fonction d'erreur en SQL : un cast de texte en nombre échoue
     # en citant le texte. Le message dépend des données, il n'est pas plié à la compilation.
     return exp.Cast(this=message, to=exp.DataType.build("int"))
+
+
+def _zero(node: exp.Expression) -> bool:
+    return isinstance(node, exp.Literal) and not node.is_string and float(node.this) == 0
+
+
+def _nonzero(divisor: exp.Expression) -> exp.Expression:
+    """Diviseur nul → NULL. Un littéral non nul, ou un `NULLIF(x, 0)` déjà écrit par
+    l'auteur, reste tel quel."""
+    if isinstance(divisor, exp.Literal) and not divisor.is_string and not _zero(divisor):
+        return divisor
+    if isinstance(divisor, exp.Nullif) and _zero(divisor.expression):
+        return divisor
+    return exp.Nullif(this=divisor, expression=exp.Literal.number(0))
+
+
+def safe_division(tree: exp.Expression, types: dict[str, str | None]) -> exp.Expression:
+    """Division identique dans les trois moteurs : en DOUBLE, et NULL sur un diviseur nul.
+
+    Sans cela, `1 / 3` rend 0,333333 en Snowflake (NUMBER à 6 décimales) et
+    0,3333333333333333 ailleurs ; un diviseur nul fait échouer Databricks (ANSI) et
+    Snowflake, et rend `inf` en DuckDB. Le numérateur passe en DOUBLE, sauf si un opérande
+    l'est déjà. `DIV` et `%` gardent leur type : seul leur diviseur passe par `NULLIF`."""
+    # Les divisions les plus profondes d'abord (ordre préfixe inversé) : `a / b / c` ne
+    # recaste pas `a / b`, déjà en DOUBLE. L'arbre est modifié sur place.
+    for node in reversed(list(tree.find_all(exp.Div, exp.IntDiv, exp.Mod))):
+        numerator, divisor = node.this, node.expression
+        if isinstance(node, exp.Div) and "double" not in (infer_type(numerator, types),
+                                                          infer_type(divisor, types)):
+            node.set("this", exp.cast(numerator, "double"))
+        node.set("expression", _nonzero(divisor.copy()))
+    return tree
+
+
+def week_start(day: exp.Expression, dialect: str) -> exp.Expression:
+    """Lundi de la semaine d'une date. `DATE_TRUNC('WEEK', …)` suit en Snowflake le
+    paramètre de session `WEEK_START` ; `DAYOFWEEKISO` (lundi = 1) n'en dépend pas, ni de
+    `WEEK_OF_YEAR_POLICY`. Databricks et DuckDB commencent toujours au lundi. Le cast en
+    DATE, superflu en Snowflake, garde le type si le SQL est traduit ailleurs."""
+    if dialect == "snowflake":
+        return exp.cast(exp.DateAdd(this=day, expression=exp.Sub(
+            this=exp.Literal.number(1), expression=exp.DayOfWeekIso(this=day.copy())),
+            unit=exp.var("DAY")), "date")
+    return exp.cast(exp.TimestampTrunc(this=day, unit=exp.var("WEEK")), "date")
 
 
 def check_window(function: str, node_id: str, dialect: str) -> None:

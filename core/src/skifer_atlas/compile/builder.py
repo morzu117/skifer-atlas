@@ -4,7 +4,8 @@ Une CTE par nœud utile, nommée d'après son identifiant, dans l'ordre topologi
 colonnes sont toujours explicites, dans l'ordre que leur donne la propagation (plan
 0002). Une référence à un KPI est compilée une fois, préfixée `r_<kpi>_v<n>_`.
 Les contrôles (cardinalité, couverture du calendrier) sont des CTE regroupées par une
-garde que la requête finale consulte (`cardinality.py`).
+garde que la requête finale consulte (`cardinality.py`). Division, semaine et garde sont
+écrites pour donner le même résultat dans les trois moteurs (plan 0021, ADR 0025).
 
 La compilation est pure : même document, mêmes calendriers, même scope et même dialecte
 donnent le même SQL, à l'octet près.
@@ -28,7 +29,16 @@ from ..model.graph import GraphView, Library, node_inputs
 from ..model.nodes import TODO
 from . import cardinality
 from .calendar import CIVIL, Calendar, aligned
-from .dialects import DIALECTS, aggregate, check_expression, check_window, mark_strings, ordered
+from .dialects import (
+    DIALECTS,
+    aggregate,
+    check_expression,
+    check_window,
+    mark_strings,
+    ordered,
+    safe_division,
+    week_start,
+)
 from .errors import CompileError, NotCompilable, compile_error
 from .scope import Scope, apply_granularity, perimeter_filters, period_bounds, reference_period
 
@@ -133,7 +143,7 @@ class _Unit:
                    substitutions: dict[str, exp.Expression] | None = None) -> exp.Expression:
         tree = parse_sql(text)
         check_expression(tree, types, node_id, self.dialect)
-        tree = mark_strings(tree, types)
+        tree = safe_division(mark_strings(tree, types), types)
         if substitutions:
             def replace(node: exp.Expression) -> exp.Expression:
                 if isinstance(node, exp.Column) and not node.table and node.name in substitutions:
@@ -462,8 +472,13 @@ class _Unit:
                                     f"« {calendar.key} » ne se découpe pas en {node.grain} : "
                                     "grain plus large que ses périodes, ou périodes non "
                                     "alignées sur ce grain.", node.id)
-            value = day.copy() if node.grain == "day" else exp.cast(exp.TimestampTrunc(
-                this=day.copy(), unit=exp.var(node.grain.upper())), "date")
+            if node.grain == "day":
+                value = day.copy()
+            elif node.grain == "week":
+                value = week_start(day.copy(), self.dialect)
+            else:
+                value = exp.cast(exp.TimestampTrunc(this=day.copy(),
+                                                    unit=exp.var(node.grain.upper())), "date")
             query = exp.select().from_(source)
         if calendar is not None:
             self._coverage(node, calendar, day)
@@ -573,13 +588,12 @@ def compile_document(document: Any, dialect: str, scope: Scope | None = None,
     document = apply_granularity(document, scope, library)
     builder = _Builder(dialect, library, calendars or {}, renames)
     output = _Unit(builder, document, scope=scope).build()
-    query = exp.select(*output.schema).from_(output.cte)
+    query: exp.Query = exp.select(*output.schema).from_(output.cte)
     for check in builder.checks:
         builder.add(check.name, check.query)
     if builder.checks:
         builder.add("atlas_guard", cardinality.guard(builder.checks, dialect))
-        query = query.where(exp.select("failure").from_("atlas_guard").subquery().is_(
-            exp.null()))
+        query = cardinality.guarded(query, list(output.schema))
     # Sans copie : chaque CTE appartient au constructeur, et recopier la requête à chaque
     # ajout rendait la compilation quadratique (plan 0013, validation sous 150 ms).
     for name, cte in builder.ctes:

@@ -84,7 +84,7 @@ WITH n01 AS (
     passee_le,
     passee_le_paris,
     jour,
-    montant / 1.2 AS montant_ht
+    CAST(montant AS DOUBLE) / 1.2 AS montant_ht
   FROM n07
 ), n09 AS (
   SELECT
@@ -197,7 +197,7 @@ WITH n01 AS (
     clients,
     objectif,
     ca - objectif AS ecart,
-    ca / objectif AS taux_atteinte
+    CAST(ca AS DOUBLE) / NULLIF(objectif, 0) AS taux_atteinte
   FROM n15
 ), chk_n10_right AS (
   SELECT
@@ -236,3 +236,15 @@ WHERE
       failure
     FROM atlas_guard
   ) IS NULL
+UNION ALL
+SELECT
+  NULL AS mois,
+  NULL AS segment,
+  NULL AS ca,
+  NULL AS clients,
+  NULL AS objectif,
+  NULL AS ecart,
+  NULL AS taux_atteinte
+FROM atlas_guard
+WHERE
+  NOT atlas_guard.failure IS NULL

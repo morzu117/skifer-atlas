@@ -197,7 +197,7 @@ def test_inferred_types():
     nodes(raw)["n04"]["inputs"] = ["n14"]
     columns = dict(columns_at(build(raw), "n14"))
     assert columns["montant_ht"] == "decimal"
-    assert columns["taux"] == "decimal"
+    assert columns["taux"] == "double"  # division en DOUBLE (plan 0021)
     assert columns["libelle"] == "string"
     assert columns["positif"] == "boolean"
     assert columns["compte"] == "integer"
@@ -240,4 +240,4 @@ def test_metric_op_after_an_aggregate():
     })
     raw["graph"]["output"] = "n06"
     assert problems(raw) == []
-    assert columns_at(build(raw), "n06")[-1] == ("taux_net", "decimal")
+    assert columns_at(build(raw), "n06")[-1] == ("taux_net", "double")

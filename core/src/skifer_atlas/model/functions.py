@@ -137,8 +137,9 @@ def infer_type(tree: exp.Expression, columns: dict[str, str | None]) -> str | No
     if isinstance(tree, (exp.Neg, exp.Abs)):
         return infer_type(tree.this, columns)
     if isinstance(tree, exp.Div):
+        # Calculée en DOUBLE dans les trois moteurs (plan 0021, ADR 0025).
         widest = _widest([infer_type(tree.left, columns), infer_type(tree.right, columns)])
-        return "double" if widest == "double" else ("decimal" if widest else None)
+        return "double" if widest else None
     if isinstance(tree, (exp.Add, exp.Sub, exp.Mul, exp.Mod)):
         return _widest([infer_type(tree.left, columns), infer_type(tree.right, columns)])
     if isinstance(tree, (exp.Cast, exp.TryCast)):
