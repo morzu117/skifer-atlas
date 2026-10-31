@@ -121,7 +121,13 @@ curl -H "$H" $API/acme/connections/dbx-fr/status                      # état, f
 curl -H "$H" -X PUT -H "$J" -d '{"token":"dapi…"}' $API/acme/connections/dbx-fr/token   # repli : token personnel
 curl -H "$H" -X POST $API/acme/connections/dbx-fr/test                # {ok, latency_ms, error}
 curl -H "$H" -X DELETE $API/acme/connections/dbx-fr/token             # retire du coffre, révoque côté Databricks
+curl -H "$H" $API/acme/connections/platforms                          # écran 10.6 : plateformes autorisées, {id, label, supported}
+curl -H "$H" -H "$J" -d '{"access_point":{…}}' $API/acme/access-point-draft/authorize   # brouillon : OAuth avant de le proposer
+curl -H "$H" -H "$J" -d '{"access_point":{…}}' $API/acme/access-point-draft/status      # état du brouillon et de son flux
+curl -H "$H" -H "$J" -d '{"access_point":{…}}' $API/acme/access-point-draft/test        # test du brouillon
 ```
+
+Chaque point d'accès de la liste porte aussi `owner_name` (nom du propriétaire d'après la gouvernance) et `supported` (Databricks seulement, jusqu'au plan 0018). Les routes `access-point-draft` valident le point d'accès comme une déclaration (`invalid_access_point`, `platform_not_allowed`, 409 `access_point_exists`, `platform_not_supported`) et n'écrivent rien dans le dépôt ; le token obtenu est rangé sous `<espace>/<identifiant>` et sert dès la fusion de la proposition (plan 0016, ADR 0020). `uv run python tests/connections/fake_databricks.py 8796` lance seul le faux Databricks des tests.
 
 L'OAuth utilise par défaut le client `databricks-cli`, dont la redirection est `http://localhost:8020` : le port doit être libre pendant la connexion (`oauth_port_busy` sinon). `oauth_client_id` et `oauth_redirect_port` se règlent par point d'accès. Sans trousseau utilisable, la réponse est `vault_unavailable` : Atlas ne range rien ailleurs. `ATLAS_VAULT=memory` remplace le trousseau par un coffre en mémoire du processus, pour les tests et les démonstrations. Le test réel contre un SQL warehouse ne tourne qu'avec `ATLAS_DATABRICKS_HOST`, `ATLAS_DATABRICKS_WAREHOUSE` et `ATLAS_DATABRICKS_TOKEN` : `uv run pytest -m databricks`. Voir `docs/plans/0008-*.md` et l'ADR 0011.
 

@@ -184,3 +184,26 @@ Serveur lancé avec `ATLAS_COMPARE_DATA` comme plus haut, Revenu net en v4. Ce q
 
   Le lien ouvre la fiche de nordis-de sur « Écarts au canonique », avec n02 entouré dans les deux graphes.
 - **Historique** : les trois dernières comparaisons, puis « Tout voir », filtrable par KPI, utilisateur et date.
+
+## Écran Mes connexions (plan 0016)
+
+`examples/points-acces-nordis.py` déclare sur le dépôt les trois points d'accès de la maquette 10.6. Julien H., seul référent d'espace, propose et fusionne seul chacun d'eux. Le script écrit dans un dossier de données temporaire et n'écrit aucun secret. dbx-fr pointe vers l'hôte donné : un vrai espace Databricks en https, ou le faux Databricks des tests.
+
+```sh
+examples/depot-nordis.sh "$DEMO"
+uv run --project core python core/tests/connections/fake_databricks.py 8796 &
+uv run --project core python examples/points-acces-nordis.py "$DEMO/distant.git" http://127.0.0.1:8796
+```
+
+Ce qu'on doit voir dans Mes connexions, en `anna.k` :
+
+- **Tableau** :
+  - Databricks · nordis-fr, `gold.finance`, Claire M., « Quotidienne · 06:10 », « Jamais connecté », bouton « Se connecter » ;
+  - Snowflake · nordis-de (Anna K.) et nordis-es (Sofia R.), « Bientôt dans Atlas » jusqu'au plan 0018.
+- **Se connecter** : la page d'autorisation s'ouvre dans le navigateur. Avec le faux Databricks, elle revient aussitôt sur « Connexion réussie ». La ligne passe à « Connecté · session OAuth », sans recharger. « Tester » donne « Connexion OK · n ms ». « Révoquer » ramène à « Jamais connecté ».
+- **Nouveau point d'accès** :
+  - Databricks, et Snowflake grisé « (bientôt) » ;
+  - entité nordis-de, identifiant `dbx-de`.
+
+  Avec l'hôte `http://127.0.0.1:8796` et le warehouse `abc123`, « S'authentifier avec OAuth » puis « Tester la connexion » réussissent. « Proposer le point d'accès » ouvre une proposition sur `access_points.yaml`.
+- **Repli** : si l'OAuth échoue sur une ligne Databricks, le lien « Utiliser un token personnel » ouvre un champ masqué. Il n'apparaît jamais autrement.

@@ -146,7 +146,7 @@ test("claire.m : Finance d'abord, diff de la surcharge DE, changements, approbat
   await expect(page.getByText(/^v4 · validée le/)).toBeVisible();
 
   await page.goto(`${QUEUE}?status=merged`);
-  await expect(queue(page).getByRole("link")).toHaveCount(1);
+  await expect(entry(page, "Revenu net · nordis-de")).toHaveCount(1); // avec les points d'accès de la démonstration
   await expect(entry(page, "Revenu net · nordis-de")).toContainText("Fusionnée");
   await page.unrouteAll({ behavior: "ignoreErrors" }); // relevés de la coque encore en vol
 });

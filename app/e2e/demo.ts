@@ -11,16 +11,22 @@ import type { APIRequestContext, Page } from "@playwright/test";
 export const API = "http://127.0.0.1:8799";
 const SCRIPT = fileURLToPath(new URL("../../examples/depot-nordis.sh", import.meta.url));
 const PROPOSALS = fileURLToPath(new URL("../../examples/propositions-nordis.py", import.meta.url));
+const ACCESS_POINTS = fileURLToPath(new URL("../../examples/points-acces-nordis.py", import.meta.url));
 const CORE = fileURLToPath(new URL("../../core", import.meta.url));
+
+/** Faux Databricks lancé par playwright.config.ts (core/tests/connections/fake_databricks.py). */
+export const FAKE_DATABRICKS = "http://127.0.0.1:8796";
 
 /** Le dépôt de démonstration et l'historique de Revenu net, en dépôt nu « distant »
  * (examples/depot-nordis.sh), avec ses cinq propositions ouvertes
- * (examples/propositions-nordis.py). */
+ * (examples/propositions-nordis.py) et ses trois points d'accès, dbx-fr sur le faux
+ * Databricks (examples/points-acces-nordis.py). */
 export function demoRemote(): string {
   const root = mkdtempSync(join(tmpdir(), "atlas-demo-"));
   execFileSync("bash", [SCRIPT, root]);
   const remote = join(root, "distant.git");
   execFileSync("uv", ["run", "--project", CORE, "python", PROPOSALS, remote]);
+  execFileSync("uv", ["run", "--project", CORE, "python", ACCESS_POINTS, remote, FAKE_DATABRICKS]);
   return remote;
 }
 

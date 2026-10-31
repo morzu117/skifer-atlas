@@ -60,6 +60,14 @@ export default defineConfig({
         ATLAS_LOG_LEVEL: "warning",
       },
     })),
+    // Faux Databricks (OAuth, SQL) pour Mes connexions (plan 0016). Le retour OAuth du
+    // serveur écoute sur 127.0.0.1:8020 : le port doit être libre.
+    {
+      command: "uv run --project ../core python ../core/tests/connections/fake_databricks.py 8796",
+      url: "http://127.0.0.1:8796/oidc/.well-known/oauth-authorization-server",
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
     {
       command: "npx vite --port 1420 --strictPort",
       url: "http://localhost:1420",

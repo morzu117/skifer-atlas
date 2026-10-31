@@ -8,6 +8,7 @@ import { explain, type Explained } from "../messages";
 import { href, navigate, type NavView, type Params, type View } from "../router";
 import { Catalogue } from "./Catalogue";
 import { Comparison } from "./Comparison";
+import { Connections } from "./Connections";
 import { Editor } from "./Editor";
 import { Fiche } from "./Fiche";
 import { Proposals, PROPOSALS_CHANGED } from "./Proposals";
@@ -180,7 +181,8 @@ export function WorkspaceShell({
         {ws && view === "fiche" && doc && <Fiche ws={ws} id={doc} params={params} heading={heading} />}
         {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} />}
         {ws && view === "comparaison" && <Comparison ws={ws} params={params} heading={heading} />}
-        {ws && !["catalogue", "fiche", "propositions", "comparaison"].includes(view) && (
+        {ws && view === "connexions" && <Connections ws={ws} heading={heading} />}
+        {ws && !["catalogue", "fiche", "propositions", "comparaison", "connexions"].includes(view) && (
           <>
             <div className="main-head">
               <h1 ref={heading} tabIndex={-1}>
