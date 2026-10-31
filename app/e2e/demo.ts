@@ -16,17 +16,22 @@ const CORE = fileURLToPath(new URL("../../core", import.meta.url));
 
 /** Faux Databricks lancé par playwright.config.ts (core/tests/connections/fake_databricks.py). */
 export const FAKE_DATABRICKS = "http://127.0.0.1:8796";
+/** Faux compte Snowflake lancé par playwright.config.ts (core/tests/connections/fake_snowflake.py) :
+ * SSO automatique pour tout identifiant, clé de démonstration de `svc_es` au chemin ci-dessous. */
+export const FAKE_SNOWFLAKE = "http://127.0.0.1:8794";
+export const SNOWFLAKE_KEY = join(process.env.ATLAS_E2E_DATA ?? "", "cles-snowflake", "svc_es.p8");
+export const SNOWFLAKE_PASSPHRASE = "demo-snowflake";
 
 /** Le dépôt de démonstration et l'historique de Revenu net, en dépôt nu « distant »
  * (examples/depot-nordis.sh), avec ses cinq propositions ouvertes
  * (examples/propositions-nordis.py) et ses trois points d'accès, dbx-fr sur le faux
- * Databricks (examples/points-acces-nordis.py). */
+ * Databricks, snow-de et snow-es sur le faux Snowflake (examples/points-acces-nordis.py). */
 export function demoRemote(): string {
   const root = mkdtempSync(join(tmpdir(), "atlas-demo-"));
   execFileSync("bash", [SCRIPT, root]);
   const remote = join(root, "distant.git");
   execFileSync("uv", ["run", "--project", CORE, "python", PROPOSALS, remote]);
-  execFileSync("uv", ["run", "--project", CORE, "python", ACCESS_POINTS, remote, FAKE_DATABRICKS]);
+  execFileSync("uv", ["run", "--project", CORE, "python", ACCESS_POINTS, remote, FAKE_DATABRICKS, FAKE_SNOWFLAKE]);
   return remote;
 }
 

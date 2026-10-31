@@ -111,15 +111,25 @@ def target_of(difference: dict) -> str:
     return f"semantics.{difference['changes'][0]['field']}"
 
 
+# Ce qui dit où sont les données, pas comment on calcule : une source déplacée sur une
+# autre plateforme (plan 0018) n'explique pas un écart.
+PHYSICAL_FIELDS = frozenset({"platform"})
+
+
+def _physical_only(difference: dict) -> bool:
+    fields = {c.get("field") for c in difference.get("changes") or []}
+    return bool(fields) and fields <= PHYSICAL_FIELDS
+
+
 def divergent_node(differences: list[dict]) -> dict | None:
     """Premier écart `critical` du diff structurel, à défaut la première surcharge hors des
-    points de variation ; un nœud passe avant un attribut de sémantique. Une piste, pas
-    une preuve : l'écran le dit."""
+    points de variation ; un nœud passe avant un attribut de sémantique, et un simple
+    changement de plateforme ne compte pas. Une piste, pas une preuve : l'écran le dit."""
     for on_node in (True, False):
         for wanted in ("critical", "override_undeclared"):
             for difference in differences:
-                if difference["classification"] == wanted and (
-                        bool(difference.get("node_ref")) == on_node):
+                if difference["classification"] == wanted and not _physical_only(
+                        difference) and bool(difference.get("node_ref")) == on_node:
                     return {"node_id": target_of(difference),
                             "node_type": difference["node_type"],
                             "classification": wanted, "message": difference["message"]}

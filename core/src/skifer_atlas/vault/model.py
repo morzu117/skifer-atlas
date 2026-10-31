@@ -2,6 +2,16 @@
 
 Une `Credential` ne s'affiche jamais : sa représentation masque les secrets, et seul
 `describe` sort du coffre, sans aucun jeton.
+
+| genre     | `access_token`              | `refresh_token` | plateforme            |
+|-----------|-----------------------------|-----------------|-----------------------|
+| `oauth`   | jeton d'accès               | de rafraîchissement | Databricks        |
+| `pat`     | token personnel             | —               | Databricks            |
+| `sso`     | jeton de session            | jeton maître    | Snowflake (plan 0018) |
+| `keypair` | passphrase de la clé privée | —               | Snowflake (plan 0018) |
+
+Une session SSO que le connecteur n'a pas pu exporter vit en mémoire seulement : son
+entrée ne porte alors aucun jeton (`access_token` vide).
 """
 
 from __future__ import annotations
@@ -11,7 +21,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-Kind = Literal["oauth", "pat"]
+Kind = Literal["oauth", "pat", "sso", "keypair"]
 REFRESH_MARGIN = 60  # secondes : on rafraîchit un jeton qui expire dans moins d'une minute
 
 

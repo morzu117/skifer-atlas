@@ -6,6 +6,7 @@ import {
   type Connection,
   type ConnectionStatus,
   type ConnectionTest,
+  type KeyPair,
   type Platform,
   type Workspace,
 } from "../api";
@@ -13,14 +14,15 @@ import { Banner } from "../components/Banner";
 import { Field } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
-import { openExternal } from "../external";
+import { canPickFile, openExternal, pickFile } from "../external";
 import { explain, type Explained } from "../messages";
 import { href } from "../router";
 
 // Mes connexions (guide 10.6, plan 0016) : les points d'accès de l'espace courant et mon
 // accès à chacun ; à droite, un nouveau point d'accès, connecté et testé avant d'être
-// proposé. Aucun jeton n'arrive jamais ici : le serveur ne rend que des états. Seul le
-// repli Databricks par token personnel passe par un champ masqué, vidé après l'envoi.
+// proposé. Aucun jeton n'arrive jamais ici : le serveur ne rend que des états. Seuls le
+// repli Databricks par token personnel et la passphrase d'une clé Snowflake (plan 0018)
+// passent par un champ masqué, vidé après l'envoi.
 
 /** Relecture de l'état pendant un flux OAuth, et délai au-delà duquel on abandonne. */
 export const OAUTH_POLL_MS = 1000;
@@ -34,7 +36,7 @@ const PLATFORMS: Record<string, string> = {
   redshift: "Redshift",
   duckdb: "DuckDB",
 };
-const AUTHS: Record<string, string> = { oauth: "OAuth", pat: "token personnel" };
+const AUTHS: Record<string, string> = { oauth: "OAuth", pat: "token personnel", sso: "SSO", keypair: "paire de clés" };
 const PREFIXES: Record<string, string> = { databricks: "dbx", snowflake: "snow", bigquery: "bq", fabric: "fab", redshift: "rs" };
 
 type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "error"; error: Explained };
@@ -59,18 +61,24 @@ function useLoad<T>(load: () => Promise<T>, deps: unknown[], keep = false): Load
 
 const platformLabel = (id: string) => PLATFORMS[id] ?? id;
 
-/** « Connecté » et son détail (« expire dans 11 j », « session OAuth »), « Token expiré »,
- * « Jamais connecté ». */
+/** « Connecté » et son détail (« expire dans 11 j », « session OAuth », « session SSO »),
+ * « Token expiré », « Jamais connecté ». */
 export function accessLabel(c: Pick<Connection, "my_access" | "auth" | "expires_in_days">): {
   text: string;
   detail: string | null;
   tone: "ok" | "warn" | "none";
 } {
   if (c.my_access === "connected") {
+    // Une session SSO se renouvelle tant qu'Atlas s'en sert : pas d'échéance à afficher.
+    if (c.auth === "sso") return { text: "Connecté", detail: "session SSO", tone: "ok" };
     if (c.expires_in_days !== null) return { text: "Connecté", detail: `expire dans ${c.expires_in_days} j`, tone: "ok" };
-    return { text: "Connecté", detail: c.auth === "oauth" ? "session OAuth" : "token personnel", tone: "ok" };
+    const detail = c.auth === "oauth" ? "session OAuth" : c.auth === "keypair" ? "paire de clés" : "token personnel";
+    return { text: "Connecté", detail, tone: "ok" };
   }
-  if (c.my_access === "expired") return { text: c.auth === "oauth" ? "Session expirée" : "Token expiré", detail: null, tone: "warn" };
+  if (c.my_access === "expired") {
+    const text = c.auth === "oauth" || c.auth === "sso" ? "Session expirée" : c.auth === "keypair" ? "Clé refusée" : "Token expiré";
+    return { text, detail: null, tone: "warn" };
+  }
   return { text: "Jamais connecté", detail: null, tone: "none" };
 }
 
@@ -82,9 +90,14 @@ type Flow =
   | { kind: "connected" }
   | { kind: "failed"; error: Explained };
 
-/** Lance le flux natif (l'URL s'ouvre dans le navigateur du système), puis relit l'état
- * jusqu'à la connexion, un refus ou le délai de 5 minutes. */
-function useOAuth(start: () => Promise<{ authorize_url: string }>, read: () => Promise<ConnectionStatus>, onConnected: () => void) {
+/** Lance le flux natif (l'URL s'ouvre dans le navigateur du système ; pour le SSO
+ * Snowflake, c'est Atlas qui l'ouvre et il n'y a pas d'URL), puis relit l'état jusqu'à la
+ * connexion, un refus ou le délai de 5 minutes. */
+function useOAuth(
+  start: (user?: string) => Promise<{ authorize_url: string | null }>,
+  read: () => Promise<ConnectionStatus>,
+  onConnected: () => void,
+) {
   const [flow, setFlow] = useState<Flow>({ kind: "idle" });
   const latest = useRef({ read, onConnected });
   latest.current = { read, onConnected };
@@ -117,10 +130,10 @@ function useOAuth(start: () => Promise<{ authorize_url: string }>, read: () => P
     };
   }, [flow.kind]);
 
-  async function connect() {
+  async function connect(user?: string) {
     try {
-      const { authorize_url } = await start();
-      await openExternal(authorize_url);
+      const { authorize_url } = await start(user);
+      if (authorize_url) await openExternal(authorize_url);
       setFlow({ kind: "waiting" });
     } catch (reason) {
       setFlow({ kind: "failed", error: explain(reason) });
@@ -182,6 +195,142 @@ function PersonalToken({ ws, point, onSaved }: { ws: Workspace; point: string; o
         </button>
       </div>
       {failure && <span className="field-error">{failure.text}</span>}
+    </form>
+  );
+}
+
+/** Connexion Snowflake (plan 0018) : l'identifiant, puis le SSO (le navigateur s'ouvre)
+ * ou la paire de clés (chemin du fichier, passphrase masquée envoyée au coffre puis
+ * vidée). Dans le panneau, ce n'est pas un formulaire : il est déjà dans celui de la
+ * déclaration. */
+function SnowflakeLogin({
+  id,
+  mode,
+  login,
+  keyFile,
+  asForm,
+  disabled,
+  onSso,
+  onKeyPair,
+  onCancel,
+}: {
+  id: string;
+  mode: "sso" | "keypair";
+  login: string | null;
+  keyFile: string | null;
+  asForm: boolean;
+  disabled?: boolean;
+  onSso: (user: string) => void;
+  onKeyPair: (keyPair: KeyPair) => Promise<void>;
+  onCancel?: () => void;
+}) {
+  const [user, setUser] = useState(login ?? "");
+  const [path, setPath] = useState(keyFile ?? "");
+  const [passphrase, setPassphrase] = useState("");
+  const [failure, setFailure] = useState<Explained | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ready = user.trim() !== "" && (mode === "sso" || path.trim() !== "");
+
+  async function submit() {
+    setFailure(null);
+    if (mode === "sso") {
+      onSso(user.trim());
+      return;
+    }
+    const secret = passphrase;
+    setPassphrase(""); // le champ ne garde rien, quoi qu'il arrive
+    setBusy(true);
+    try {
+      await onKeyPair({ user: user.trim(), private_key_file: path.trim(), ...(secret ? { passphrase: secret } : {}) });
+    } catch (reason) {
+      setFailure(explain(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function choose() {
+    try {
+      const chosen = await pickFile("Fichier de clé privée Snowflake");
+      if (chosen) setPath(chosen);
+    } catch (reason) {
+      setFailure(explain(reason));
+    }
+  }
+
+  const fields = (
+    <>
+      <label htmlFor={`${id}-user`}>Identifiant Snowflake</label>
+      <input id={`${id}-user`} autoComplete="username" spellCheck={false} value={user} onChange={(event) => setUser(event.target.value)} />
+      {mode === "keypair" && (
+        <>
+          <label htmlFor={`${id}-key`}>Fichier de clé privée</label>
+          <div className="key-file">
+            <input
+              id={`${id}-key`}
+              className="mono"
+              spellCheck={false}
+              placeholder="/Users/…/rsa_key.p8"
+              value={path}
+              onChange={(event) => setPath(event.target.value)}
+              aria-describedby={`${id}-key-hint`}
+            />
+            {canPickFile() && (
+              <button type="button" className="btn btn-neutral btn-sm" onClick={() => void choose()}>
+                Choisir…
+              </button>
+            )}
+          </div>
+          <span id={`${id}-key-hint`} className="field-hint">
+            Chemin absolu. La clé reste où elle est : Atlas la relit à chaque connexion, sans la copier.
+          </span>
+          <label htmlFor={`${id}-passphrase`}>Passphrase (si la clé est chiffrée)</label>
+          <input
+            id={`${id}-passphrase`}
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+            aria-describedby={`${id}-passphrase-hint`}
+          />
+          <span id={`${id}-passphrase-hint`} className="field-hint">
+            Envoyée une seule fois au coffre de ce poste, jamais affichée ni enregistrée ailleurs.
+          </span>
+        </>
+      )}
+      <div className="pat-actions">
+        <button
+          type={asForm ? "submit" : "button"}
+          className={`btn btn-sm ${asForm ? "btn-secondary" : "btn-primary"}`}
+          disabled={!ready || busy || disabled}
+          onClick={asForm ? undefined : () => void submit()}
+        >
+          {mode === "sso" ? "Ouvrir le SSO" : "Ranger dans le coffre"}
+        </button>
+        {onCancel && (
+          <button type="button" className="btn btn-neutral btn-sm" onClick={onCancel}>
+            Annuler
+          </button>
+        )}
+      </div>
+      {failure && (
+        <span className="field-error" role="alert">
+          {failure.text}
+        </span>
+      )}
+    </>
+  );
+  if (!asForm) return <div className="pat-form snowflake-login">{fields}</div>;
+  return (
+    <form
+      className="pat-form snowflake-login"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      {fields}
     </form>
   );
 }
@@ -281,14 +430,17 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
 function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Connection; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: "ok" | "bad" } | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
   const oauth = useOAuth(
-    () => api.authorize(ws.id, c.access_point),
+    (user) => api.authorize(ws.id, c.access_point, user),
     () => api.connectionStatus(ws.id, c.access_point),
     () => {
       setMessage(null);
       onChanged();
     },
   );
+  const snowflake = c.platform === "snowflake";
+  const mode = c.auth_mode === "keypair" ? "keypair" : "sso";
   const access = accessLabel(c);
   const name = platformLabel(c.platform);
   const label = `${name} · ${c.access_point}`;
@@ -331,6 +483,27 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
         Terminez la connexion dans le navigateur…
       </span>
     );
+  } else if (loginOpen) {
+    actions = (
+      <SnowflakeLogin
+        id={`sf-${c.access_point}`}
+        mode={mode}
+        login={c.login}
+        keyFile={c.private_key_file}
+        asForm
+        onSso={(user) => {
+          setLoginOpen(false);
+          void oauth.connect(user);
+        }}
+        onKeyPair={async (keyPair) => {
+          await api.keyPair(ws.id, c.access_point, keyPair);
+          setLoginOpen(false);
+          setMessage({ text: "Clé enregistrée : la passphrase est dans le coffre de ce poste.", tone: "ok" });
+          onChanged();
+        }}
+        onCancel={() => setLoginOpen(false)}
+      />
+    );
   } else if (c.my_access === "connected") {
     actions = (
       <>
@@ -349,7 +522,11 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
         type="button"
         className={`btn btn-sm ${again ? "btn-primary" : "btn-secondary"}`}
         aria-label={`${again ? "Reconnecter" : "Se connecter à"} ${label}`}
-        onClick={() => void oauth.connect()}
+        onClick={() => {
+          setMessage(null);
+          if (snowflake) setLoginOpen(true);
+          else void oauth.connect();
+        }}
       >
         {again ? "Reconnecter" : "Se connecter"}
       </button>
@@ -361,7 +538,7 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
       <td>
         <strong>{name}</strong>
         <span className="connections-sub">
-          {c.entity ?? "Groupe"} · {c.auth ? AUTHS[c.auth] : c.supported ? "OAuth" : "bientôt"}
+          {c.entity ?? "Groupe"} · {c.auth ? AUTHS[c.auth] : c.supported ? AUTHS[c.auth_mode ?? "oauth"] : "bientôt"}
         </span>
       </td>
       <td className="mono">{c.schema ?? "—"}</td>
@@ -401,7 +578,21 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
 
 // --- nouveau point d'accès ----------------------------------------------------------------
 
-type Draft = { platform: string; id: string; host: string; warehouse: string; schema: string; entity: string; freshness: string };
+type Draft = {
+  platform: string;
+  id: string;
+  host: string;
+  warehouse: string;
+  schema: string;
+  entity: string;
+  freshness: string;
+  /** Snowflake (plan 0018) : rôle, mode d'authentification, compte si l'hôte ne le dit pas. */
+  role: string;
+  auth: "sso" | "keypair";
+  account: string;
+};
+
+const EMPTY_DRAFT: Draft = { platform: "", id: "", host: "", warehouse: "", schema: "", entity: "", freshness: "", role: "", auth: "sso", account: "" };
 
 /** Identifiant proposé : préfixe de la plateforme et suffixe de l'entité (dbx-fr). */
 export function suggestedId(platform: string, entity: string): string {
@@ -423,6 +614,12 @@ export function toAccessPoint(draft: Draft, owner: string): AccessPointDraft {
   if (draft.platform === "databricks" && warehouse) {
     if (warehouse.startsWith("/")) point.http_path = warehouse;
     else point.warehouse_id = warehouse;
+  }
+  if (draft.platform === "snowflake") {
+    if (warehouse) point.warehouse = warehouse;
+    if (draft.role.trim()) point.role = draft.role.trim();
+    point.auth = draft.auth;
+    if (draft.account.trim()) point.account = draft.account.trim();
   }
   if (draft.schema.trim()) point.schema = draft.schema.trim();
   if (draft.entity) point.entity = draft.entity;
@@ -446,7 +643,8 @@ function NewAccessPoint({
   const first = platforms.find((p) => p.supported)?.id ?? platforms[0]?.id ?? "";
   // Par défaut, la première entité dont le point d'accès n'est pas encore déclaré.
   const free = ws.entities.find((e) => !taken.includes(suggestedId(first, e)));
-  const [draft, setDraft] = useState<Draft>({ platform: "", id: "", host: "", warehouse: "", schema: "", entity: "", freshness: "" });
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [keyStored, setKeyStored] = useState(false);
   const [entityTouched, setEntityTouched] = useState(false);
   const [idTouched, setIdTouched] = useState(false);
   const [test, setTest] = useState<{ text: string; tone: "ok" | "bad" } | null>(null);
@@ -460,10 +658,11 @@ function NewAccessPoint({
   const point = toAccessPoint({ ...draft, platform, entity, id }, ws.account);
   const supported = platforms.find((p) => p.id === platform)?.supported ?? false;
   const oauth = useOAuth(
-    () => api.authorizeDraft(ws.id, point),
+    (user) => api.authorizeDraft(ws.id, point, user),
     () => api.draftStatus(ws.id, point),
     () => setTest(null),
   );
+  const snowflake = platform === "snowflake";
 
   const set = (key: keyof Draft) => (event: { target: { value: string } }) => {
     if (key === "entity") setEntityTouched(true);
@@ -471,6 +670,7 @@ function NewAccessPoint({
     setTest(null);
     setFailure(null);
     setDeclared(null);
+    setKeyStored(false);
     if (oauth.flow.kind !== "waiting") oauth.reset();
   };
 
@@ -502,7 +702,7 @@ function NewAccessPoint({
     }
   }
 
-  const connected = oauth.flow.kind === "connected";
+  const connected = oauth.flow.kind === "connected" || keyStored;
   return (
     <aside ref={panelRef} className="card connections-panel" aria-labelledby="new-access-point">
       <h2 id="new-access-point" className="section-label">
@@ -540,23 +740,64 @@ function NewAccessPoint({
           />
         </Field>
         <Field label="Hôte" id="ap-host">
-          <input placeholder="adb-xxxx.azuredatabricks.net" value={draft.host} onChange={set("host")} />
+          <input
+            placeholder={snowflake ? "xy12345.eu-west-1.snowflakecomputing.com" : "adb-xxxx.azuredatabricks.net"}
+            value={draft.host}
+            onChange={set("host")}
+          />
         </Field>
         {platform === "databricks" && (
           <Field label="SQL warehouse" id="ap-warehouse" hint="Identifiant, ou chemin HTTP /sql/1.0/warehouses/…">
             <input className="mono" value={draft.warehouse} onChange={set("warehouse")} />
           </Field>
         )}
+        {snowflake && (
+          <>
+            <Field label="Compte" id="ap-account" hint="Seulement si l'hôte n'est pas en …snowflakecomputing.com.">
+              <input className="mono" value={draft.account} onChange={set("account")} />
+            </Field>
+            <Field label="Entrepôt" id="ap-warehouse" hint="Sinon, l'entrepôt par défaut de votre utilisateur.">
+              <input className="mono" placeholder="WH_FINANCE" value={draft.warehouse} onChange={set("warehouse")} />
+            </Field>
+            <Field label="Rôle" id="ap-role">
+              <input className="mono" value={draft.role} onChange={set("role")} />
+            </Field>
+            <Field label="Authentification" id="ap-auth">
+              <Select value={draft.auth} onChange={set("auth")}>
+                <option value="sso">SSO de l'entreprise</option>
+                <option value="keypair">Paire de clés</option>
+              </Select>
+            </Field>
+          </>
+        )}
         <Field label="Schéma" id="ap-schema">
-          <input className="mono" placeholder="catalogue.schema" value={draft.schema} onChange={set("schema")} />
+          <input className="mono" placeholder={snowflake ? "BASE.SCHEMA" : "catalogue.schema"} value={draft.schema} onChange={set("schema")} />
         </Field>
         <Field label="Fraîcheur" id="ap-freshness">
           <input placeholder="Quotidienne · 06:10" value={draft.freshness} onChange={set("freshness")} />
         </Field>
 
-        <button type="button" className="btn btn-primary" disabled={!supported || oauth.flow.kind === "waiting"} onClick={() => void oauth.connect()}>
-          {connected ? "Reconnecter avec OAuth" : "S'authentifier avec OAuth"}
-        </button>
+        {snowflake ? (
+          <SnowflakeLogin
+            key={`${id}/${draft.auth}`}
+            id="ap-snowflake"
+            mode={draft.auth}
+            login={null}
+            keyFile={null}
+            asForm={false}
+            disabled={!supported || oauth.flow.kind === "waiting"}
+            onSso={(user) => void oauth.connect(user)}
+            onKeyPair={async (keyPair) => {
+              await api.keyPairDraft(ws.id, point, keyPair);
+              setTest(null);
+              setKeyStored(true);
+            }}
+          />
+        ) : (
+          <button type="button" className="btn btn-primary" disabled={!supported || oauth.flow.kind === "waiting"} onClick={() => void oauth.connect()}>
+            {connected ? "Reconnecter avec OAuth" : "S'authentifier avec OAuth"}
+          </button>
+        )}
         <button type="button" className="btn btn-secondary" disabled={!supported || busy} onClick={() => void runTest()}>
           Tester la connexion
         </button>
@@ -567,7 +808,11 @@ function NewAccessPoint({
         )}
         {connected && (
           <p className="tone-ok" role="status">
-            Connecté : le token est rangé dans votre coffre, sous {id}.
+            {keyStored
+              ? `Clé enregistrée : la passphrase est dans votre coffre, sous ${id}.`
+              : snowflake
+                ? `Connecté : la session SSO est rangée dans votre coffre, sous ${id}.`
+                : `Connecté : le token est rangé dans votre coffre, sous ${id}.`}
           </p>
         )}
         {oauth.flow.kind === "failed" && (

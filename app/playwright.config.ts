@@ -45,6 +45,7 @@ export default defineConfig({
         ATLAS_VAULT: "memory",
         ATLAS_LOG_LEVEL: "warning",
         ATLAS_COMPARE_DATA: COMPARE_DATA,
+        SF_TEST_BROWSER_OPENER: "noop", // le faux Snowflake simule le navigateur du SSO
       },
     },
     ...REVIEWERS.map(({ account, port }) => ({
@@ -66,6 +67,14 @@ export default defineConfig({
     {
       command: "uv run --project ../core python ../core/tests/connections/fake_databricks.py 8796",
       url: "http://127.0.0.1:8796/oidc/.well-known/oauth-authorization-server",
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    // Faux compte Snowflake (SSO, paire de clés, SQL) pour Mes connexions (plan 0018) ; il
+    // écrit la clé de démonstration de svc_es dans le dossier de données des tests.
+    {
+      command: `uv run --project ../core python ../core/tests/connections/fake_snowflake.py 8794 "${join(process.env.ATLAS_E2E_DATA, "cles-snowflake")}"`,
+      url: "http://127.0.0.1:8794/health",
       reuseExistingServer: false,
       timeout: 120_000,
     },

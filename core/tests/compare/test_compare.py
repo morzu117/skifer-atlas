@@ -118,6 +118,10 @@ def test_divergent_node_prefers_critical_then_undeclared_nodes():
     assert divergent_node([difference("override_undeclared", "n02"),
                            difference("critical", "n05")])["node_id"] == "n05"
     assert divergent_node([difference("override_declared", "n03")]) is None
+    # Une source déplacée sur une autre plateforme n'explique pas un écart (plan 0018).
+    moved = difference("override_undeclared", "n01", field="platform")
+    assert divergent_node([moved, difference("override_undeclared", "n02")])["node_id"] == "n02"
+    assert divergent_node([moved]) is None
 
 
 # --- critères 1, 2, 7, 9 : la démonstration en DuckDB local ---------------------------------

@@ -496,8 +496,9 @@ function Authenticate({ ws, missing, onReady, resume }: { ws: Workspace; missing
   async function connect(point: string) {
     setFailure(null);
     try {
+      // SSO Snowflake : pas d'URL, Atlas ouvre lui-même le navigateur (plan 0018).
       const { authorize_url } = await api.authorize(ws.id, point);
-      await openExternal(authorize_url);
+      if (authorize_url) await openExternal(authorize_url);
       setWaiting((w) => [...new Set([...w, point])]);
     } catch (reason) {
       setFailure(explain(reason));

@@ -309,7 +309,13 @@ export type Connection = {
   freshness: string | null;
   allowed: boolean;
   supported: boolean;
-  auth: "oauth" | "pat" | null;
+  /** Ce que j'ai au coffre : OAuth, token personnel, session SSO, paire de clés (0018). */
+  auth: "oauth" | "pat" | "sso" | "keypair" | null;
+  /** Mode d'authentification du point d'accès : OAuth (Databricks), SSO ou paire de clés. */
+  auth_mode: "oauth" | "sso" | "keypair" | null;
+  /** Snowflake : mon identifiant et le chemin de ma clé privée, au registre local. */
+  login: string | null;
+  private_key_file: string | null;
   my_access: MyAccess;
   expires_in_days: number | null;
 };
@@ -329,11 +335,19 @@ export type AccessPointDraft = {
   host: string;
   warehouse_id?: string;
   http_path?: string;
+  /** Snowflake (plan 0018) : entrepôt, rôle, mode d'authentification, compte. */
+  warehouse?: string;
+  role?: string;
+  auth?: "sso" | "keypair";
+  account?: string;
   schema?: string;
   entity?: string;
   owner: string;
   freshness?: string;
 };
+
+/** Paire de clés Snowflake : la passphrase part au coffre et n'est jamais relue. */
+export type KeyPair = { user: string; private_key_file: string; passphrase?: string };
 
 export type ConnectionTest = { ok: boolean; latency_ms: number | null; error: { code: string; message: string } | null };
 
@@ -664,20 +678,25 @@ export const api = {
   canonicalDiff: (id: string, docId: string) => request<CanonicalDiff>(`${ws(id)}/documents/${encodeURIComponent(docId)}/canonical-diff`),
   connectionStatus: (id: string, accessPoint: string) =>
     request<ConnectionStatus>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/status`),
-  authorize: (id: string, accessPoint: string) =>
-    request<{ authorize_url: string }>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/authorize`, post({})),
+  /** OAuth : l'URL à ouvrir. SSO Snowflake : null, Atlas ouvre lui-même le navigateur. */
+  authorize: (id: string, accessPoint: string, user?: string) =>
+    request<{ authorize_url: string | null }>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/authorize`, post(user ? { user } : {})),
   connections: (id: string) => request<Connection[]>(`${ws(id)}/connections`),
   platforms: (id: string) => request<Platform[]>(`${ws(id)}/connections/platforms`),
   testConnection: (id: string, accessPoint: string) =>
     request<ConnectionTest>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/test`, post({})),
   revokeConnection: (id: string, accessPoint: string) =>
     request<{ revoked: boolean; remote_revoked: boolean }>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/token`, { method: "DELETE" }),
+  keyPair: (id: string, accessPoint: string, keyPair: KeyPair) =>
+    request<Connection>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/key-pair`, { method: "PUT", body: JSON.stringify(keyPair) }),
   personalToken: (id: string, accessPoint: string, token: string) =>
     request<Connection>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/token`, { method: "PUT", body: JSON.stringify({ token }) }),
   declareAccessPoint: (id: string, accessPoint: AccessPointDraft, justification: string) =>
     request<{ id: number; title: string }>(`${ws(id)}/connections`, post({ access_point: accessPoint, justification })),
-  authorizeDraft: (id: string, accessPoint: AccessPointDraft) =>
-    request<{ authorize_url: string }>(`${ws(id)}/access-point-draft/authorize`, post({ access_point: accessPoint })),
+  authorizeDraft: (id: string, accessPoint: AccessPointDraft, user?: string) =>
+    request<{ authorize_url: string | null }>(`${ws(id)}/access-point-draft/authorize`, post({ access_point: accessPoint, ...(user ? { user } : {}) })),
+  keyPairDraft: (id: string, accessPoint: AccessPointDraft, keyPair: KeyPair) =>
+    request<Connection>(`${ws(id)}/access-point-draft/key-pair`, { method: "PUT", body: JSON.stringify({ access_point: accessPoint, ...keyPair }) }),
   draftStatus: (id: string, accessPoint: AccessPointDraft) =>
     request<ConnectionStatus>(`${ws(id)}/access-point-draft/status`, post({ access_point: accessPoint })),
   testDraft: (id: string, accessPoint: AccessPointDraft) =>

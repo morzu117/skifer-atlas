@@ -1,9 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ensureNordis, FAKE_DATABRICKS, seriousViolations } from "./demo";
+import { ensureNordis, FAKE_DATABRICKS, seriousViolations, SNOWFLAKE_KEY, SNOWFLAKE_PASSPHRASE } from "./demo";
 
-// Plan 0016 de bout en bout, sur l'espace de démonstration (anna.k) : dbx-fr pointe vers
-// le faux Databricks (examples/points-acces-nordis.py), dont l'OAuth s'ouvre dans une
-// fenêtre du navigateur et revient sur le serveur local (127.0.0.1:8020).
+// Plans 0016 et 0018 de bout en bout, sur l'espace de démonstration (anna.k) : dbx-fr
+// pointe vers le faux Databricks (examples/points-acces-nordis.py), dont l'OAuth s'ouvre
+// dans une fenêtre du navigateur et revient sur le serveur local (127.0.0.1:8020) ;
+// snow-de (SSO) et snow-es (paire de clés) vers le faux Snowflake, dont le fournisseur
+// d'identité rappelle Atlas sans navigateur.
 test.describe.configure({ mode: "serial" });
 
 const CONNECTIONS = "/#/w/groupe-nordis/connexions";
@@ -37,7 +39,7 @@ test("liste, se connecter par OAuth, tester, révoquer (critères 1, 2, 3, 5 et 
   await expect(fr).toContainText("Jamais connecté");
   const de = table.getByRole("row").filter({ hasText: "FIN_GOLD.PUBLIC" });
   await expect(de).toContainText("Snowflake");
-  await expect(de).toContainText("Bientôt dans Atlas");
+  await expect(de).toContainText("nordis-de · SSO");
   await expect(page.getByLabel(/token/i)).toHaveCount(0);
   expect(await seriousViolations(page)).toEqual([]);
 
@@ -61,7 +63,7 @@ test("nouveau point d'accès : OAuth et test avant de le proposer", async ({ pag
   const panel = page.getByRole("complementary", { name: "Nouveau point d'accès" });
   const platform = panel.getByRole("combobox", { name: /Plateforme/ });
   await expect(platform).toBeFocused();
-  await expect(platform.getByRole("option", { name: "Snowflake (bientôt)" })).toBeDisabled();
+  await expect(platform.getByRole("option", { name: "Snowflake" })).toBeEnabled();
   await expect(panel.getByRole("combobox", { name: "Entité" })).toHaveValue("nordis-de");
   await expect(panel.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de");
   await panel.getByRole("textbox", { name: "Hôte" }).fill(FAKE_DATABRICKS);
@@ -81,4 +83,38 @@ test("nouveau point d'accès : OAuth et test avant de le proposer", async ({ pag
   await panel.getByRole("link", { name: "Voir la proposition" }).click();
   await expect(page).toHaveURL(/#\/w\/groupe-nordis\/propositions\?n=\d+&status=open&domain=tous$/);
   await expect(page.getByRole("heading", { name: /dbx-de/ }).first()).toBeVisible();
+});
+
+test("Snowflake : SSO puis paire de clés, tester, révoquer (plan 0018)", async ({ page }) => {
+  await page.goto(CONNECTIONS);
+  const table = page.getByRole("table", { name: "Points d'accès de l'espace" });
+
+  const de = table.getByRole("row").filter({ hasText: "FIN_GOLD.PUBLIC" });
+  await de.getByRole("button", { name: "Se connecter à Snowflake · snow-de" }).click();
+  await de.getByLabel("Identifiant Snowflake").fill("anna@nordis.example");
+  await de.getByRole("button", { name: "Ouvrir le SSO" }).click();
+  await expect(de.getByRole("cell", { name: /^Connecté ?· ?session SSO$/ })).toBeVisible();
+  await de.getByRole("button", { name: "Tester Snowflake · snow-de" }).click();
+  await expect(de.getByText(/^Connexion OK · \d+ ms$/)).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+
+  const es = table.getByRole("row").filter({ hasText: "VENTAS.GOLD" });
+  await expect(es).toContainText("nordis-es · paire de clés");
+  await es.getByRole("button", { name: "Se connecter à Snowflake · snow-es" }).click();
+  await es.getByLabel("Identifiant Snowflake").fill("svc_es");
+  await es.getByLabel("Fichier de clé privée").fill(SNOWFLAKE_KEY);
+  await es.getByLabel("Passphrase (si la clé est chiffrée)").fill(SNOWFLAKE_PASSPHRASE);
+  expect(await seriousViolations(page)).toEqual([]);
+  await es.getByRole("button", { name: "Ranger dans le coffre" }).click();
+  await expect(es.getByRole("cell", { name: /^Connecté ?· ?paire de clés$/ })).toBeVisible();
+  await es.getByRole("button", { name: "Tester Snowflake · snow-es" }).click();
+  await expect(es.getByText(/^Connexion OK · \d+ ms$/)).toBeVisible();
+  const seen = await page.evaluate(() => [document.documentElement.outerHTML, JSON.stringify(localStorage), JSON.stringify(sessionStorage)].join("\n"));
+  expect(seen).not.toContain(SNOWFLAKE_PASSPHRASE);
+
+  await de.getByRole("button", { name: "Révoquer Snowflake · snow-de" }).click();
+  await expect(de.getByText("Accès révoqué, ici et chez Snowflake.")).toBeVisible();
+  await expect(de).toContainText("Jamais connecté");
+  await es.getByRole("button", { name: "Révoquer Snowflake · snow-es" }).click();
+  await expect(es).toContainText("Jamais connecté");
 });
