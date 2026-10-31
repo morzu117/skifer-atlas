@@ -69,17 +69,35 @@ def is_space_referent(workspace: Workspace) -> bool:
     return governance is not None and workspace.account in space_referents(governance)
 
 
-def _kpi_counts(workspace_id: str) -> dict[str, int]:
+def _document_counts(workspace_id: str, kinds: tuple[str, ...]) -> dict[str, int]:
     try:
         connection = ensure_index(repo_dir(workspace_id), index_path(workspace_id))
     except (RepoError, OSError, duckdb.Error):
         return {}
     try:
         rows = connection.execute('SELECT domain, count(*) FROM "index".documents '
-                                  "WHERE kind = 'kpi' GROUP BY domain").fetchall()
+                                  "WHERE list_contains(?, kind) GROUP BY domain",
+                                  [list(kinds)]).fetchall()
     finally:
         connection.close()
     return {domain: count for domain, count in rows if domain}
+
+
+def _kpi_counts(workspace_id: str) -> dict[str, int]:
+    return _document_counts(workspace_id, ("kpi",))
+
+
+def _check_removed_domains(workspace_id: str, old: Governance, new: Governance) -> None:
+    """Un domaine retiré ne doit plus porter de document : ses KPI, concepts et
+    déclinaisons perdraient leurs référents et leurs validateurs (plan 0023)."""
+    kept = {d.id for d in new.domains}
+    counts = _document_counts(workspace_id, ("concept", "kpi", "variant"))
+    used = [(d.label, counts[d.id]) for d in old.domains if d.id not in kept and counts.get(d.id)]
+    if used:
+        detail = ", ".join(f"« {label} » ({n} document{'s' if n > 1 else ''})"
+                           for label, n in used)
+        raise RepoError("domain_in_use", f"Domaine encore utilisé : {detail}. Rattacher ses "
+                        "documents à un autre domaine avant de le retirer.")
 
 
 def admin_state(workspace_id: str) -> dict:
@@ -95,6 +113,8 @@ def admin_state(workspace_id: str) -> dict:
         "space_referents": sorted(referents),
         "single_referent": len(referents) == 1,
         "kpi_counts": _kpi_counts(workspace.id),
+        # Tous les documents d'un domaine : un domaine qui en porte ne se retire pas.
+        "document_counts": _document_counts(workspace.id, ("concept", "kpi", "variant")),
         "platforms": [{"id": p, "label": PLATFORM_LABELS[p], "auth": auth,
                        "supported": p in SUPPORTED_PLATFORMS}
                       for p, auth in PLATFORM_AUTH.items()],
@@ -158,7 +178,8 @@ def describe_changes(old: Governance, new: Governance) -> list[str]:
                        f"{', '.join(new.allowed_platforms) or 'aucune'}.")
     if old.tolerance != new.tolerance:
         changes.append(f"Tolérance : {new.tolerance_percent} %.")
-    return changes
+    # Un nom abrégé (« Claire M. ») termine déjà la phrase.
+    return [change[:-1] if change.endswith("..") else change for change in changes]
 
 
 def save_governance(workspace_id: str, data: dict, base_digest: str) -> dict:
@@ -169,6 +190,8 @@ def save_governance(workspace_id: str, data: dict, base_digest: str) -> dict:
         proposed = Governance.model_validate(data)
     except ValueError:
         proposed = None  # create_governance_proposal dira pourquoi
+    if proposed is not None:
+        _check_removed_domains(workspace.id, governance, proposed)
     changes = describe_changes(governance, proposed) if proposed else []
     justification = ("Paramètres modifiés depuis l'administration de l'espace :\n"
                      + "\n".join(f"- {change}" for change in changes)

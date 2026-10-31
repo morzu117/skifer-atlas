@@ -376,6 +376,7 @@ export type AdminState = {
   space_referents: string[];
   single_referent: boolean;
   kpi_counts: Record<string, number>;
+  document_counts: Record<string, number>;
   platforms: { id: string; label: string; auth: string; supported: boolean }[];
   repository: { url: string; main_branch: string; synced_at: string | null; index_fresh: boolean };
 };

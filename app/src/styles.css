@@ -854,6 +854,9 @@ textarea.prop-input { resize: vertical; }
 .admin-subform { display: flex; flex-direction: column; gap: var(--atlas-space-3); padding: var(--atlas-space-3); margin: var(--atlas-space-2) 0; border-radius: var(--atlas-radius-md); background: var(--atlas-ground); border: var(--atlas-border) solid var(--atlas-line); }
 .admin-subform .field select { width: 100%; }
 .admin-subform-actions { display: flex; gap: var(--atlas-space-2); }
+/* Un rôle et ses domaines, séparés du suivant par un filet (plan 0023). */
+.admin-role { display: flex; flex-direction: column; gap: var(--atlas-space-2); padding-top: var(--atlas-space-2); border-top: var(--atlas-border) solid var(--atlas-line); }
+.admin-role .link-button { align-self: flex-start; }
 .admin-checks { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: var(--atlas-space-1); }
 .admin-checks legend { padding: 0; margin-bottom: var(--atlas-space-1); font-size: var(--atlas-text-md); color: var(--atlas-muted); }
 .admin-platforms { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: var(--atlas-space-2); }
