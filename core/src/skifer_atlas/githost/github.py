@@ -1,7 +1,8 @@
 """`GitHubHost` : pull requests, revues et fusion par l'API REST de GitHub (plan 0006).
 
 `urllib` de la bibliothèque standard : aucune dépendance de plus à empaqueter. Le jeton
-vient du coffre (plan 0008) ; d'ici là, de `ATLAS_GITHUB_TOKEN`. Il ne figure dans aucun
+vient du coffre de l'espace, obtenu par le device flow (`device.py`, plan 0025) ; à
+défaut, de `ATLAS_GITHUB_TOKEN` (tests, intégration continue). Il ne figure dans aucun
 message d'erreur : seuls le statut HTTP et le message de GitHub remontent.
 """
 
@@ -32,7 +33,17 @@ def github_repository(remote_url: str) -> tuple[str, str] | None:
     return (match["owner"], match["repo"]) if match else None
 
 
-def github_token() -> str | None:
+def github_token(workspace_id: str | None = None) -> str | None:
+    """Le jeton de l'espace au coffre s'il est utilisable, sinon `ATLAS_GITHUB_TOKEN`."""
+    if workspace_id:
+        from .device import stored  # import tardif : device importe ce module
+
+        try:
+            credential = stored(workspace_id)
+        except RepoError:
+            credential = None  # coffre indisponible : le repli de l'environnement
+        if credential is not None and credential.state() == "connected":
+            return credential.access_token
     return os.environ.get("ATLAS_GITHUB_TOKEN") or None
 
 
@@ -46,8 +57,8 @@ class GitHubHost(GitHost):
 
     def _request(self, method: str, path: str, payload: dict | None = None) -> Any:
         if not self._token:
-            raise RepoError("host_auth_failed", "Aucun jeton GitHub pour cet espace : ajouter "
-                            "une connexion GitHub (plan 0008).")
+            raise RepoError("host_auth_failed", "Aucun jeton GitHub pour cet espace : se "
+                            "connecter à GitHub dans Mes connexions.")
         request = urllib.request.Request(
             f"{self.api_url}{path}", method=method,
             data=None if payload is None else json.dumps(payload).encode("utf-8"),

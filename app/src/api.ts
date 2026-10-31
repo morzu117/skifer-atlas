@@ -328,6 +328,19 @@ export type ConnectionStatus = Connection & {
 
 export type Platform = { id: string; label: string; supported: boolean };
 
+/** Connexion GitHub de l'espace (plan 0025) : des états, jamais de jeton. */
+export type GitHubStatus = {
+  configured: boolean; // client OAuth d'Atlas renseigné (ATLAS_GITHUB_CLIENT_ID)
+  applies: boolean; // le dépôt de l'espace est sur GitHub
+  state: "connected" | "expired" | "absent";
+  source: "vault" | "environment" | null;
+  account: string | null;
+};
+
+/** Device flow : le code à saisir sur GitHub, puis les relectures. */
+export type GitHubDevice = { flow: string; user_code: string; verification_uri: string; expires_in: number; interval: number };
+export type GitHubPoll = { status: "pending" | "connected" | "denied" | "expired"; interval: number; account?: string | null };
+
 /** Point d'accès tel que déclaré dans access_points.yaml, sans aucun secret. */
 export type AccessPointDraft = {
   id: string;
@@ -612,8 +625,13 @@ export const api = {
   health: () => request<{ status: string; version: string }>("/health"),
   workspaces: () => request<Workspace[]>("/api/workspaces"),
   createWorkspace: (body: NewWorkspace) => request<Workspace>("/api/workspaces", post(body)),
-  joinWorkspace: (remoteUrl: string) =>
-    request<Workspace>("/api/workspaces/join", post({ remote_url: remoteUrl })),
+  joinWorkspace: (remoteUrl: string, githubFlow?: string) =>
+    request<Workspace>("/api/workspaces/join", post({ remote_url: remoteUrl, ...(githubFlow ? { github_flow: githubFlow } : {}) })),
+  github: (id: string) => request<GitHubStatus>(`${ws(id)}/github`),
+  disconnectGitHub: (id: string) => request<null>(`${ws(id)}/github`, { method: "DELETE" }),
+  /** Sans espace : connexion faite avant d'adhérer à un dépôt privé. */
+  startGitHub: (workspace?: string) => request<GitHubDevice>("/api/github/device", post(workspace ? { workspace } : {})),
+  pollGitHub: (flow: string) => request<GitHubPoll>(`/api/github/device/${encodeURIComponent(flow)}`, post({})),
   setRemote: (id: string, remoteUrl: string) =>
     request<Workspace>(`${ws(id)}/remote`, post({ remote_url: remoteUrl })),
   proposalsForMe: (id: string) =>

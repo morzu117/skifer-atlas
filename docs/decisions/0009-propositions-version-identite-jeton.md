@@ -52,6 +52,7 @@ Le plan 0006 fixe le circuit : proposition, décompte, fusion, tag. En le mettan
 
 ## Conséquences
 
+- Le jeton vient désormais du coffre de l'espace, obtenu par le device flow : ADR 0029 (plan 0025).
 - Deux propositions concurrentes sur un même document visent la même version. La première fusionnée l'emporte, la seconde reçoit `stale_base` et doit être reproposée.
 - Retoucher une proposition se fait pour l'instant en poussant un commit sur sa branche, hors d'Atlas. Le décompte repart alors de zéro. L'écran des propositions (plan 0014) dira s'il faut une route de révision.
 - Une pull request fusionnée directement sur GitHub n'est pas taguée. Rattraper ces fusions au `sync` reste à faire, comme le notait l'estimation du plan 0006.

@@ -814,6 +814,13 @@ textarea.prop-input { resize: vertical; }
 .connections-message { display: block; margin-top: var(--atlas-space-1); font-size: var(--atlas-text-sm); }
 .connections-failure { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-1); margin-top: var(--atlas-space-1); }
 .connections-failure .link-button { margin-left: 0; padding: 0; }
+.connections-github { display: flex; flex-direction: column; gap: var(--atlas-space-2); padding: var(--atlas-space-3) var(--atlas-space-4); background: var(--atlas-panel); border: var(--atlas-border) solid var(--atlas-line); border-radius: var(--atlas-radius-lg); }
+.connections-github-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--atlas-space-4); font-size: var(--atlas-text-md); }
+.connections-github-repo { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.github-device { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-2); }
+.github-device p { margin: 0; }
+.github-code { font-size: var(--atlas-text-2xl); font-weight: 600; letter-spacing: 0.12em; }
+.github-device-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--atlas-space-2); }
 .connections-panel { flex: 1 1 var(--atlas-launch-basis); max-width: var(--atlas-launch-w); }
 .connections-form { gap: var(--atlas-space-3); }
 .connections-form .select, .connections-form .select select { width: 100%; }
