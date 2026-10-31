@@ -7,6 +7,7 @@ import { initials } from "../format";
 import { explain, type Explained } from "../messages";
 import { href, navigate, type NavView, type Params, type View } from "../router";
 import { Catalogue } from "./Catalogue";
+import { Comparison } from "./Comparison";
 import { Editor } from "./Editor";
 import { Fiche } from "./Fiche";
 import { Proposals, PROPOSALS_CHANGED } from "./Proposals";
@@ -178,7 +179,8 @@ export function WorkspaceShell({
         {ws && view === "catalogue" && <Catalogue ws={ws} params={params} heading={heading} />}
         {ws && view === "fiche" && doc && <Fiche ws={ws} id={doc} params={params} heading={heading} />}
         {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} />}
-        {ws && view !== "catalogue" && view !== "fiche" && view !== "propositions" && (
+        {ws && view === "comparaison" && <Comparison ws={ws} params={params} heading={heading} />}
+        {ws && !["catalogue", "fiche", "propositions", "comparaison"].includes(view) && (
           <>
             <div className="main-head">
               <h1 ref={heading} tabIndex={-1}>
@@ -188,12 +190,6 @@ export function WorkspaceShell({
             <div className="placeholder">
               Cet écran arrive avec le plan {current.plan}. L'espace <strong>{ws.name}</strong> est ouvert : la
               navigation et le sélecteur d'espace sont en place.
-              {view === "comparaison" && params.kpi && (
-                <>
-                  {" "}
-                  KPI présélectionné : <span className="mono">{params.kpi}</span>.
-                </>
-              )}
             </div>
           </>
         )}

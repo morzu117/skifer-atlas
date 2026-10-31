@@ -12,6 +12,7 @@ import {
   type Workspace,
 } from "../api";
 import { Banner } from "../components/Banner";
+import { DiffColumns } from "../components/DiffColumns";
 import { DiffList, DiffSummary, marksOf } from "../components/DiffList";
 import { GraphView } from "../components/GraphView";
 import { Icon } from "../components/Icon";
@@ -141,6 +142,7 @@ export function Fiche({
         ))}
       </nav>
       {tab === "definition" && <Definition ws={ws} doc={doc} />}
+      {tab === "definition" && doc.kind === "variant" && <AgainstCanonical ws={ws} doc={doc} params={params} />}
       {tab === "declinaisons" && <Variants doc={doc} />}
       {tab === "versions" && <Versions ws={ws} doc={doc} params={params} />}
       {tab === "dependances" && <Dependencies ws={ws} doc={doc} />}
@@ -300,6 +302,44 @@ function Definition({ ws, doc }: { ws: Workspace; doc: DocumentSheet }) {
         </div>
       </div>
     </Panel>
+  );
+}
+
+/** Une déclinaison face à son canonique (0015) : `?diff=canonique&node=n02` ouvre le diff
+ * avec le nœud entouré, depuis « Nœud divergent » de la comparaison. */
+function AgainstCanonical({ ws, doc, params }: { ws: Workspace; doc: DocumentSheet; params: Params }) {
+  const open = params.diff === "canonique";
+  return (
+    <section className="tab-panel" aria-labelledby="against-canonical">
+      <div className="panel-head">
+        <h2 id="against-canonical">Écarts au canonique</h2>
+        {!open && (
+          <a className="btn btn-secondary" href={href.document(ws.id, doc.id, { diff: "canonique" })}>
+            Comparer au canonique
+          </a>
+        )}
+      </div>
+      {open && <CanonicalDiffView ws={ws} doc={doc} node={params.node} />}
+    </section>
+  );
+}
+
+function CanonicalDiffView({ ws, doc, node }: { ws: Workspace; doc: DocumentSheet; node?: string }) {
+  const found = useLoad(() => api.canonicalDiff(ws.id, doc.id), [ws.id, doc.id]);
+  if (found.kind === "loading") return <Pending>Préparation du diff…</Pending>;
+  if (found.kind === "error") return <Failure error={found.error} />;
+  const { base, other, report } = found.value;
+  const title = node && (other.nodes.find((n) => n.id === node) ?? base.nodes.find((n) => n.id === node))?.title;
+  return (
+    <>
+      {node && (
+        <p className="fiche-text">
+          Nœud sélectionné : <span className="mono">{node}</span>
+          {title && ` · ${title}`}
+        </p>
+      )}
+      <DiffColumns base={base} other={other} report={report} label={`Diff de ${doc.label} au canonique`} selected={node} />
+    </>
   );
 }
 

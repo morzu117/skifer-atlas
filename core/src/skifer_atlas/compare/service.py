@@ -17,6 +17,7 @@ from ..connectors.base import QueryResult
 from ..governance.model import DEFAULT_TOLERANCE
 from ..index import ensure_index
 from ..index.build import analyze
+from ..model.resolve import resolve
 from ..repo.git import RepoError
 from ..repo.layout import read_governance
 from ..workspaces import get_workspace, index_path, repo_dir
@@ -74,8 +75,8 @@ def prepare_in(root: Path, request: CompareRequest, workspace_id: str | None,
                                request, choose, dialect)
 
 
-def check_access(workspace_id: str, prepared: Prepared) -> None:
-    """Un accès utilisable pour chaque point d'accès, sinon `needs_auth` : rien ne part."""
+def missing_access(workspace_id: str, prepared: Prepared) -> list[dict]:
+    """Points d'accès de la comparaison sans accès utilisable pour moi."""
     missing = []
     for point in sorted({p.access_point for p in prepared.plans if p.access_point}):
         try:
@@ -85,6 +86,12 @@ def check_access(workspace_id: str, prepared: Prepared) -> None:
                 raise
             missing.append({"access_point": point, "code": error.code,
                             "message": error.message})
+    return missing
+
+
+def check_access(workspace_id: str, prepared: Prepared) -> None:
+    """Un accès utilisable pour chaque point d'accès, sinon `needs_auth` : rien ne part."""
+    missing = missing_access(workspace_id, prepared)
     if missing:
         raise RepoError("needs_auth", "Se connecter d'abord à : "
                         f"{', '.join(m['access_point'] for m in missing)}.", missing)
@@ -108,6 +115,89 @@ def start_comparison(workspace_id: str, request: CompareRequest,
     started = orchestrate.start(index_path(workspace_id), workspace.account or None, prepared,
                                 runner, wait)
     return {"id": started.number, "status": "running", "alerts": prepared.alerts()}
+
+
+def _subsets(dimensions: list[str]) -> list[list[str]]:
+    """Granularités proposées : les dimensions du scope, puis chaque sous-ensemble non
+    vide, dans l'ordre du scope (« Mois × pays », « Mois », « Pays »)."""
+    count = len(dimensions)
+    found = [[d for i, d in enumerate(dimensions) if mask >> (count - 1 - i) & 1]
+             for mask in range(2 ** count - 1, 0, -1)]
+    return sorted(found, key=len, reverse=True)
+
+
+def comparison_setup(workspace_id: str, kpi_id: str) -> dict:
+    """Ce que le panneau de lancement (10.5) propose pour un KPI : déclinaisons avec leur
+    plateforme, scopes déclarés et granularités, tolérances du KPI et de l'espace."""
+    _workspace(workspace_id)
+    root = repo_dir(workspace_id)
+    analysis = analyze(root)
+    entry = analysis.entry(kpi_id)
+    if entry is None or entry.file.kind != "kpi" or entry.document is None:
+        raise RepoError("not_found", f"KPI « {kpi_id} » introuvable.")
+    kpi = entry.document
+    governance = read_governance(root)
+    local = local_data() is not None
+    first_scope = kpi.scopes[0].id if kpi.scopes else None
+    variants = []
+    for found in analysis.entries:
+        document = found.document
+        if document is None or document.kind != "variant" or document.variant_of.id != kpi_id:
+            continue
+        platform, unavailable = None, None
+        outdated = document.variant_of.version != kpi.data_product.version
+        if outdated:
+            unavailable = (f"Déclinaison de la v{document.variant_of.version} du KPI, "
+                           f"canonique en v{kpi.data_product.version}.")
+        else:
+            resolved = resolve(document, kpi, analysis.library)
+            try:
+                if not resolved.valid:
+                    raise RepoError("invalid", "La déclinaison ne se résout pas sur le canonique.")
+                platform = orchestrate._platform(resolved.document, document.entity)
+                # Préparée seule, comme au lancement : une déclinaison qui ne se compare pas
+                # n'est pas cochée et dit pourquoi, au lieu de bloquer les autres.
+                prepare_in(root, CompareRequest(kpi_id=kpi_id, variants=[document.entity],
+                                                scope_id=first_scope),
+                           workspace_id, local)
+            except RepoError as error:
+                unavailable = error.message
+        variants.append({
+            "entity": document.entity, "variant_id": document.data_product.id, "mode": document.mode,
+            "version": document.data_product.version, "platform": platform,
+            "outdated": outdated, "unavailable": unavailable})
+    output = orchestrate._output_group_by(kpi)
+    scopes = []
+    for scope in kpi.scopes or []:
+        dimensions = list(scope.granularity or output)
+        scopes.append({**scope.model_dump(mode="json", by_alias=True, exclude_none=True),
+                       "granularity": dimensions, "granularities": _subsets(dimensions)})
+    return {
+        "kpi_id": kpi_id, "label": kpi.label, "version": kpi.data_product.version,
+        "variants": sorted(variants, key=lambda v: v["entity"]),
+        "scopes": scopes,
+        "tolerance": {"kpi": kpi.tolerance.percent if kpi.tolerance else None,
+                      "workspace": governance.tolerance_percent if governance
+                      else DEFAULT_TOLERANCE},
+        "local": local,
+    }
+
+
+def preview_comparison(workspace_id: str, request: CompareRequest) -> dict:
+    """La préparation seule, sans rien exécuter : alertes (bypass de cardinalité, surcharge
+    hors points déclarés), plateforme et point d'accès de chaque déclinaison, accès qui
+    manquent. Une erreur de préparation répond comme le lancement."""
+    _workspace(workspace_id)
+    data = local_data()
+    prepared = prepare_in(repo_dir(workspace_id), request, workspace_id, data is not None)
+    return {
+        "alerts": prepared.alerts(),
+        "plans": [{"entity": p.entity, "platform": p.platform, "access_point": p.access_point}
+                  for p in prepared.plans],
+        "tolerance": prepared.tolerance,
+        "granularity": prepared.granularity,
+        "missing_access": [] if data is not None else missing_access(workspace_id, prepared),
+    }
 
 
 def get_comparison(workspace_id: str, number: int) -> dict:
@@ -146,6 +236,11 @@ def comparison_matrix(workspace_id: str, domain: str | None = None) -> list[dict
     _workspace(workspace_id)
     connection = ensure_index(repo_dir(workspace_id), index_path(workspace_id))
     try:
-        return store.matrix(connection, domain)
+        rows = store.matrix(connection, domain)
     finally:
         connection.close()
+    governance = read_governance(repo_dir(workspace_id))
+    labels = {d.id: d.label for d in governance.domains} if governance else {}
+    for row in rows:
+        row["domain_label"] = labels.get(row["domain"])
+    return rows

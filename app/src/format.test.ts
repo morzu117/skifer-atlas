@@ -42,7 +42,7 @@ describe("catalogue", () => {
   });
 
   it("pourcentage et ancienneté", () => {
-    expect([percent(93.75), percent(99.9), percent(100)]).toEqual(["93 %", "99 %", "100 %"]);
+    expect([percent(93.75), percent(93.2), percent(99.6), percent(100)]).toEqual(["94 %", "93 %", "99 %", "100 %"]);
     const now = new Date("2026-10-30T12:00:00Z");
     expect(
       ["2026-10-30T11:59:40", "2026-10-30T11:15:00", "2026-10-30T07:00:00Z", "2026-10-27T10:00:00+00:00"].map((t) =>

@@ -134,6 +134,9 @@ curl -H "$H" $API/acme/comparisons/1                                  # progress
 curl -H "$H" -X POST $API/acme/comparisons/1/cancel                   # 409 not_running si elle est terminée
 curl -H "$H" "$API/acme/comparisons?kpi=revenu-net&limit=20"          # historique, sans les cellules
 curl -H "$H" "$API/acme/comparisons/matrix?domain=finance"            # dernier résultat par KPI × déclinaison
+curl -H "$H" "$API/acme/comparisons/setup?kpi=revenu-net"              # écran 10.5 : déclinaisons (plateforme, unavailable), scopes et granularités, tolérances
+curl -H "$H" -H "$J" -d '{"kpi_id":"revenu-net","variants":["nordis-de"],"scope_id":"fy2026-mois-entite"}' $API/acme/comparisons/preview   # alertes, plans, accès manquants ; rien n'est exécuté
+curl -H "$H" $API/acme/documents/revenu-net--nordis-de/canonical-diff  # deux graphes disposés et diff au canonique ; 422 not_a_variant sinon
 ```
 
 Tolérance : celle de la requête, sinon celle du KPI, sinon `tolerance.percent` de `governance.yaml`, sinon 1 %. Statuts : `running`, `done`, `partial`, `failed`, `cancelled`, et `interrupted` pour une comparaison restée en cours après l'arrêt du serveur. La colonne Convergence du catalogue en découle : `never_compared`, `converged`, `divergences:n` (écart sur une surcharge) ou `candidates:n` (écart sur une déclinaison from scratch seulement, ADR 0015).

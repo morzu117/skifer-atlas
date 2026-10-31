@@ -163,3 +163,24 @@ Ce qu'on doit voir :
 - **Matrice et catalogue** : DE à 93,75 %, FR à 100 %, ES non comparée ; Revenu net passe en `convergence: divergences:1`.
 - **Après la fusion du plan 0006** : Revenu net est en v5, mais ses déclinaisons portent encore sur la v4. La comparaison répond 409 `variant_outdated`.
 - **Sans `ATLAS_COMPARE_DATA`** : la comparaison passe par les points d'accès. Sans point d'accès déclaré pour l'entité, la réponse est `no_access_point`. Sans accès dans le coffre, elle est 409 `needs_auth`, et rien n'est exécuté.
+
+## Écran de comparaison (plan 0015)
+
+Serveur lancé avec `ATLAS_COMPARE_DATA` comme plus haut, Revenu net en v4. Ce qu'on doit voir dans Comparaison :
+
+- **Lancement** :
+  - Revenu net (v4) est présélectionné ;
+  - nordis-de et nordis-fr sont cochées. nordis-es est grisée, avec « Non comparable : Le canonique ne se rebranche pas sur les sources de « nordis-es » … » ;
+  - scope `fy2026-mois-entite`, du 1er février au 30 septembre 2026, par Mois fiscal × Entité ;
+  - « Tolérance : 1,5 % (globale 1 % · KPI 1,5 %) » ;
+  - avant tout lancement, le bandeau orange « Surcharge hors des points déclarés » cite semantics.timezone et n02 sur nordis-de.
+- **Après « Lancer la comparaison »** :
+  - une barre Databricks · nordis-de, nordis-fr, puis « Relancer » ;
+  - dans la matrice, Revenu net × nordis-de à 94 % / 6,1 % en orange, nordis-fr à 100 % / 0,0 % en vert, et nordis-es « — ».
+- **Détail** :
+  - « Nœud divergent : n02 · Factures validées » ;
+  - Sept. 2026 · DE à +6,1 %, en rouge, avec « hors tolérance », sur fond orange pâle ;
+  - la valeur exacte s'affiche au survol.
+
+  Le lien ouvre la fiche de nordis-de sur « Écarts au canonique », avec n02 entouré dans les deux graphes.
+- **Historique** : les trois dernières comparaisons, puis « Tout voir », filtrable par KPI, utilisateur et date.

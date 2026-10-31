@@ -1,9 +1,7 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type RefObject, type UIEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
   api,
   UnreachableError,
-  type Difference,
-  type DiffReport,
   type ProposalDetail,
   type ProposalGraphs,
   type ProposalItem,
@@ -12,8 +10,7 @@ import {
   type Workspace,
 } from "../api";
 import { Banner } from "../components/Banner";
-import { DiffList, DiffSummary } from "../components/DiffList";
-import { GraphView, type Mark } from "../components/GraphView";
+import { DiffColumns } from "../components/DiffColumns";
 import { Select } from "../components/Select";
 import { ago, initials, NATURES, plural } from "../format";
 import { explain, type Explained } from "../messages";
@@ -76,35 +73,6 @@ function approvalsText(item: ProposalItem): string {
 
 /** Explication du serveur quand rien ne bloque sinon le nombre de validations. */
 const counted = (item: ProposalItem) => `${item.approvals?.obtained ?? 0} validation(s) sur ${item.approvals?.required ?? 0}.`;
-
-/** Classification écrite à droite d'un nœud (guide 4, diff). */
-function verdict(difference: Difference): string {
-  if (difference.classification === "override_declared") return "Normal";
-  if (difference.severity === "critical") return "Divergence critique";
-  return difference.severity === "warn" ? "À examiner" : "Sans effet";
-}
-
-/** Surlignage du diff d'une proposition : la colonne de gauche reste la référence, seul un
- * nœud retiré y est marqué ; à droite, modifié, ajouté ou surchargé sur un point déclaré. */
-export function proposalMarks(report: DiffReport) {
-  const base: Record<string, Mark> = {};
-  const other: Record<string, Mark> = {};
-  const baseNotes: Record<string, string> = {};
-  const otherNotes: Record<string, string> = {};
-  for (const difference of report.differences) {
-    const ref = difference.node_ref;
-    if (!ref) continue;
-    if (difference.kind === "removed" && ref.base) {
-      base[ref.base] = "removed";
-      baseNotes[ref.base] = verdict(difference);
-    } else if (ref.other) {
-      other[ref.other] =
-        difference.kind === "added" ? "added" : difference.classification === "override_declared" ? "overridden" : "modified";
-      otherNotes[ref.other] = verdict(difference);
-    }
-  }
-  return { base, other, baseNotes, otherNotes };
-}
 
 function names(nodes: { node: string; label: string | null }[]): string {
   return nodes.map((n) => (n.label ? `« ${n.label} » (${n.node})` : `« ${n.node} »`)).join(", ");
@@ -467,22 +435,6 @@ function Detail({
 }
 
 function Graphs({ load }: { load: Load<ProposalGraphs> }) {
-  const columns = useRef<HTMLDivElement>(null);
-  const syncing = useRef(false);
-
-  // Les deux graphes partagent couches et rangs : défiler l'un fait défiler l'autre.
-  const onScroll = (event: UIEvent<HTMLDivElement>) => {
-    const source = event.target as HTMLElement;
-    if (syncing.current || source.tagName !== "FIGURE") return;
-    syncing.current = true;
-    columns.current?.querySelectorAll<HTMLElement>("figure.graph").forEach((figure) => {
-      if (figure !== source) figure.scrollLeft = source.scrollLeft;
-    });
-    requestAnimationFrame(() => {
-      syncing.current = false;
-    });
-  };
-
   if (load.kind === "loading") {
     return (
       <p className="muted" role="status">
@@ -499,30 +451,7 @@ function Graphs({ load }: { load: Load<ProposalGraphs> }) {
   }
   const { base, proposed, report } = load.value;
   if (!proposed) return <p className="muted">Pas de graphe à comparer pour cette proposition.</p>;
-  const marks = report ? proposalMarks(report) : null;
-  return (
-    <section className="proposal-diff" aria-label="Diff de la proposition">
-      <div className="diff-columns" ref={columns} onScrollCapture={onScroll}>
-        {base && (
-          <div className="card diff-column">
-            <h3 className="section-label">{base.label}</h3>
-            <GraphView layout={base} label={`Graphe : ${base.label}`} marks={marks?.base} notes={marks?.baseNotes} />
-          </div>
-        )}
-        <div className="card diff-column">
-          <h3 className="section-label">{proposed.label}</h3>
-          <GraphView layout={proposed} label={`Graphe : ${proposed.label}`} marks={marks?.other} notes={marks?.otherNotes} />
-        </div>
-      </div>
-      {report && (
-        <div className="card diff">
-          <h3 className="section-label">Écarts</h3>
-          <DiffSummary report={report} />
-          {!report.identical && <DiffList report={report} />}
-        </div>
-      )}
-    </section>
-  );
+  return <DiffColumns base={base} other={proposed} report={report} label="Diff de la proposition" />;
 }
 
 function ChangesForm({ busy, onCancel, onSend }: { busy: boolean; onCancel: () => void; onSend: (body: string) => void }) {

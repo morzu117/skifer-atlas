@@ -6,7 +6,8 @@ import type { DiffReport, GraphLayout, GraphNode, ProposalDetail, ProposalGraphs
 import { useRoute } from "../router";
 import { fakeServer, workspace } from "../test/fakeServer";
 import { mockReactFlow } from "../test/reactFlow";
-import { proposalMarks, Proposals, PROPOSALS_CHANGED } from "./Proposals";
+import { diffMarks } from "../components/DiffColumns";
+import { Proposals, PROPOSALS_CHANGED } from "./Proposals";
 
 const API = "/api/workspaces/groupe-nordis/proposals";
 
@@ -372,7 +373,7 @@ describe("propositions", () => {
   });
 });
 
-describe("proposalMarks", () => {
+describe("diffMarks", () => {
   it("à gauche seulement le retiré, à droite modifié, ajouté ou surchargé, avec le verdict", () => {
     const report: DiffReport = {
       ...REPORT,
@@ -382,7 +383,7 @@ describe("proposalMarks", () => {
         { ...REPORT.differences[0], kind: "removed", node_ref: { base: "n04", other: null }, classification: "cosmetic", severity: "info" },
       ],
     };
-    expect(proposalMarks(report)).toEqual({
+    expect(diffMarks(report)).toEqual({
       base: { n04: "removed" },
       other: { n02: "modified", n03: "overridden", n09: "added" },
       baseNotes: { n04: "Sans effet" },

@@ -221,9 +221,13 @@ def prepare(analysis: Analysis, calendars: dict, governance_tolerance: float,
         report = diff(ResolvedGraph(kpi), resolved, DiffContext(variant.mode,
                                                                 analysis.library))
         differences = [d.model_dump(mode="json") for d in report.differences]
+        divergent = divergent_node(differences)
+        if divergent is not None:  # libellé du nœud pour « Nœud divergent : n02 · … » (0015)
+            labels = {n.id: n.label for n in (*resolved.document.graph.nodes, *kpi.graph.nodes)}
+            divergent["label"] = labels.get(divergent["node_id"])
         plans.append(VariantPlan(
             variant_id, entity, variant.data_product.version, variant.mode, platform,
-            access_point, canonical, own, differences, divergent_node(differences),
+            access_point, canonical, own, differences, divergent,
             sorted(set(canonical.compiled.bypassed) | set(own.compiled.bypassed))))
     return Prepared(kpi, declared, granularity, tolerance, plans)
 

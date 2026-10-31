@@ -14,11 +14,10 @@ from ..governance.model import ROLE_RANK, domain_approvers
 from ..governance.rules import requirement
 from ..index.build import Analysis, analyze
 from ..model.io import validate_text
-from ..model.layout import layout
 from ..model.resolve import ResolvedGraph, resolve
 from ..repo import versions as repo_versions
 from ..repo.git import RepoError
-from ..sheet import resolved_graph
+from ..sheet import labelled_layout, resolved_graph
 from .common import Context, open_context, parse_body
 from .status import list_proposals
 
@@ -69,11 +68,6 @@ def viewer(context: Context, found: dict) -> dict:
 
 
 # --- graphes du diff -----------------------------------------------------------------------
-
-def _graph(resolved: ResolvedGraph, label: str) -> dict:
-    overrides = [o.node for o in resolved.overrides] if resolved.variant is not None else []
-    return {"label": label, **layout(resolved.document), "overrides": overrides}
-
 
 def _base(context: Context, analysis: Analysis, block: dict, document: Any) -> tuple[Any, str]:
     """Le graphe de référence : le canonique désigné pour une variante, la version de base
@@ -159,8 +153,8 @@ def graphs(workspace_id: str, number: int) -> dict:
     undeclared = _undeclared(proposed, base) if document.kind == "variant" else []
     entity = f"Déclinaison {target['entity']}" if target.get("entity") else "Proposition"
     return {
-        "base": _graph(base, base_label) if base else None,
-        "proposed": _graph(proposed, f"{entity} v{block.get('version')} (proposée)"),
+        "base": labelled_layout(base, base_label) if base else None,
+        "proposed": labelled_layout(proposed, f"{entity} v{block.get('version')} (proposée)"),
         "report": report.model_dump(mode="json") if report else None,
         "undeclared": undeclared,
         "recurring": _recurring(context, analysis, block, number, undeclared),

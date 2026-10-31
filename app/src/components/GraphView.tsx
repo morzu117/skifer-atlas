@@ -17,16 +17,17 @@ const COLUMN = 206;
 const ROW = 150;
 const PAD = 24;
 
-type CardData = { node: GraphNode; mark?: Mark; note?: string };
+type CardData = { node: GraphNode; mark?: Mark; note?: string; selected?: boolean };
 type CardNode = Node<CardData, "card">;
 
 function Card({ data }: NodeProps<CardNode>) {
-  const { node, mark, note } = data;
+  const { node, mark, note, selected } = data;
   const classes = [
     "graph-card",
     node.variation && "is-variation",
     node.output && "is-output",
     mark && `mark-${mark}`,
+    selected && "is-selected",
   ].filter(Boolean);
   return (
     <div className={classes.join(" ")}>
@@ -80,11 +81,14 @@ export function GraphView({
   label,
   marks = {},
   notes = {},
+  selected,
 }: {
   layout: GraphLayout;
   label: string;
   marks?: Record<string, Mark>;
   notes?: Record<string, string>;
+  /** Nœud désigné ailleurs (« Nœud divergent », 0015) : entouré. */
+  selected?: string;
 }) {
   const { placed, width, height } = positions(layout);
   const at = new Map(placed.map((p) => [p.id, p]));
@@ -92,7 +96,7 @@ export function GraphView({
     id: node.id,
     type: "card",
     position: { x: at.get(node.id)!.x, y: at.get(node.id)!.y },
-    data: { node, mark: marks[node.id], note: notes[node.id] },
+    data: { node, mark: marks[node.id], note: notes[node.id], selected: node.id === selected },
     draggable: false,
     selectable: false,
     focusable: false,

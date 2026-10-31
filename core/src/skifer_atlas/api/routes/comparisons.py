@@ -12,8 +12,10 @@ from ...compare import (
     CompareRequest,
     cancel_comparison,
     comparison_matrix,
+    comparison_setup,
     get_comparison,
     list_comparisons,
+    preview_comparison,
     start_comparison,
 )
 
@@ -29,6 +31,16 @@ def post_comparison(ws: str, request: CompareRequest) -> dict:
 def get_comparisons(ws: str, kpi: str | None = None,
                     limit: int = Query(default=50, ge=1, le=500)) -> list[dict]:
     return list_comparisons(ws, kpi, limit)
+
+
+@router.get("/setup")
+def get_setup(ws: str, kpi: str) -> dict:
+    return comparison_setup(ws, kpi)
+
+
+@router.post("/preview")
+def post_preview(ws: str, request: CompareRequest) -> dict:
+    return preview_comparison(ws, request)
 
 
 @router.get("/matrix")

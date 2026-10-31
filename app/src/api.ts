@@ -187,6 +187,120 @@ export type ComparisonRun = {
   results: { variant_id: string; entity: string; validation_pct: number | null; max_gap_pct: number | null }[];
 };
 
+// --- Comparaison (plans 0009 et 0015) ----------------------------------------------------
+
+export type ComparisonStatus = "running" | "done" | "partial" | "failed" | "cancelled" | "interrupted";
+
+export type ComparisonScope = {
+  id: string;
+  period?: { from?: string; to?: string; calendar_period?: string };
+  perimeter?: string[];
+  granularity: string[];
+  granularities: string[][];
+};
+
+export type ComparisonSetup = {
+  kpi_id: string;
+  label: string;
+  version: number;
+  variants: { entity: string; variant_id: string; mode: string; version: number; platform: string | null; outdated: boolean; unavailable: string | null }[];
+  scopes: ComparisonScope[];
+  tolerance: { kpi: number | null; workspace: number };
+  local: boolean;
+};
+
+export type ComparisonAlert = { code: string; entity: string; nodes: string[]; message: string };
+
+export type MissingAccess = { access_point: string; code: string; message: string };
+
+export type ComparisonRequest = {
+  kpi_id: string;
+  variants: string[];
+  scope_id?: string;
+  scope?: { period?: { from?: string; to?: string; calendar_period?: string }; perimeter?: string[]; granularity: string[] };
+  tolerance?: number;
+};
+
+export type ComparisonPreview = {
+  alerts: ComparisonAlert[];
+  plans: { entity: string; platform: string; access_point: string | null }[];
+  tolerance: number;
+  granularity: string[];
+  missing_access: MissingAccess[];
+};
+
+export type ComparisonCell = {
+  dims: Record<string, unknown>;
+  canonical_value: number | null;
+  variant_value: number | null;
+  gap_pct: number | null;
+  within_tolerance: boolean;
+  missing: "canonical" | "variant" | null;
+};
+
+export type ComparisonResult = {
+  variant_id: string;
+  entity: string;
+  variant_version: number;
+  platform: string;
+  access_point: string | null;
+  cell_count: number;
+  validation_pct: number | null;
+  max_gap_pct: number | null;
+  divergent_node: string | null;
+  divergent: { node_id: string; node_type: string; classification: string; message: string; label?: string | null } | null;
+  bypass_nodes: string[];
+  cells: ComparisonCell[];
+};
+
+export type ComparisonProgress = { platform: string; entities: string[]; state: string; percent: number };
+
+export type Comparison = {
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  user_account: string | null;
+  kpi_id: string;
+  kpi_version: number;
+  scope: { id?: string; period?: ComparisonScope["period"]; granularity?: string[] };
+  tolerance_pct: number;
+  status: ComparisonStatus;
+  error: string | null;
+  progress: ComparisonProgress[] | null;
+  alerts?: ComparisonAlert[];
+  results: ComparisonResult[];
+};
+
+export type HistoryEntry = Omit<Comparison, "results" | "progress"> & {
+  results: { variant_id: string; entity: string; validation_pct: number | null; max_gap_pct: number | null; divergent_node: string | null }[];
+};
+
+export type MatrixCell = {
+  variant_id: string;
+  entity: string;
+  compared: boolean;
+  comparison_id?: number;
+  kpi_version?: number;
+  validation_pct?: number | null;
+  max_gap_pct?: number | null;
+  divergent_node?: string | null;
+  finished_at?: string;
+  stale?: boolean;
+};
+
+export type MatrixRow = { kpi_id: string; label: string; domain: string | null; domain_label: string | null; version: number; variants: MatrixCell[] };
+
+export type CanonicalDiff = { base: GraphLayout & { label: string }; other: GraphLayout & { label: string }; report: DiffReport };
+
+export type ConnectionStatus = {
+  access_point: string;
+  platform: string;
+  entity: string | null;
+  my_access: string;
+  flow: { status: string; error: string | null } | null;
+  error: { code: string; message: string } | null;
+};
+
 /** Erreur métier du serveur : `{"detail": {"code", "message", "issues"?}}`. */
 // --- Éditeur (plan 0013) ---------------------------------------------------------------
 
@@ -462,4 +576,19 @@ export const api = {
     request<Proposal>(`${ws(id)}/proposals`, post(body)),
   comparisons: (id: string, kpiId: string, limit: number) =>
     request<ComparisonRun[]>(`${ws(id)}/comparisons?kpi=${encodeURIComponent(kpiId)}&limit=${limit}`),
+  history: (id: string, limit: number) => request<HistoryEntry[]>(`${ws(id)}/comparisons?limit=${limit}`),
+  comparisonSetup: (id: string, kpiId: string) =>
+    request<ComparisonSetup>(`${ws(id)}/comparisons/setup?kpi=${encodeURIComponent(kpiId)}`),
+  previewComparison: (id: string, body: ComparisonRequest) =>
+    request<ComparisonPreview>(`${ws(id)}/comparisons/preview`, post(body)),
+  startComparison: (id: string, body: ComparisonRequest) =>
+    request<{ id: number; status: string; alerts: ComparisonAlert[] }>(`${ws(id)}/comparisons`, post(body)),
+  comparison: (id: string, number: number) => request<Comparison>(`${ws(id)}/comparisons/${number}`),
+  cancelComparison: (id: string, number: number) => request<{ id: number; status: string }>(`${ws(id)}/comparisons/${number}/cancel`, post({})),
+  matrix: (id: string) => request<MatrixRow[]>(`${ws(id)}/comparisons/matrix`),
+  canonicalDiff: (id: string, docId: string) => request<CanonicalDiff>(`${ws(id)}/documents/${encodeURIComponent(docId)}/canonical-diff`),
+  connectionStatus: (id: string, accessPoint: string) =>
+    request<ConnectionStatus>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/status`),
+  authorize: (id: string, accessPoint: string) =>
+    request<{ authorize_url: string }>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/authorize`, post({})),
 };

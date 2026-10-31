@@ -76,7 +76,7 @@ describe("coque d'un espace", () => {
 
   it("montre Administration au référent et le compteur des propositions qui l'attendent", async () => {
     nordisServer();
-    window.location.hash = "#/w/groupe-nordis/comparaison";
+    window.location.hash = "#/w/groupe-nordis/connexions";
     render(<App startup={FAST} />);
     const nav = within(await screen.findByRole("navigation", { name: "Navigation de l'espace" }));
     expect(nav.getAllByRole("link").map((l) => l.textContent)).toEqual([
@@ -87,7 +87,7 @@ describe("coque d'un espace", () => {
       "Administration",
     ]);
     expect(screen.getByText("Référent d'annuaire")).toBeInTheDocument();
-    expect(screen.getByText(/plan 0015/)).toBeInTheDocument(); // écran pas encore livré
+    expect(screen.getByText(/plan 0016/)).toBeInTheDocument(); // écran pas encore livré
   });
 
   it("masque Administration à un rôle non référent, même par l'URL (critère 7)", async () => {
