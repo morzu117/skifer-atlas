@@ -203,12 +203,14 @@ def preview_comparison(workspace_id: str, request: CompareRequest) -> dict:
 def get_comparison(workspace_id: str, number: int) -> dict:
     _workspace(workspace_id)
     db = index_path(workspace_id)
+    # Le job avant la base : `finish` est validé avant que le job quitte le registre, donc
+    # un job déjà absent ici avec une ligne encore « running » a vraiment été interrompu.
+    running = orchestrate.job(db, number)
     found = store.get(db, number)
     if found is None:
         raise RepoError("not_found", f"Comparaison {number} introuvable.")
     found["progress"] = None
     if found["status"] == "running":
-        running = orchestrate.job(db, number)
         if running is None:
             found["status"] = "interrupted"  # le processus s'est arrêté pendant l'exécution
         else:

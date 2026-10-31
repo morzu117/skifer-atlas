@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from workspace_helpers import atlas_env, remote
 
 from skifer_atlas.api.app import create_app
-from skifer_atlas.compare import service, store
+from skifer_atlas.compare import orchestrate, service, store
 from skifer_atlas.repo.git import RepoError
 from skifer_atlas.vault import Credential, Vault, keyring_vault
 from skifer_atlas.workspaces import index_path, repo_dir
@@ -203,6 +203,28 @@ def test_cancel_through_the_api(client, joined, local, monkeypatch):
 def test_comparison_left_running_by_a_stopped_process(client, joined):
     store.create(index_path("groupe-nordis"), "julien.h", "revenu-net", 4, {"id": "x"}, 1.0)
     assert client.get(f"{COMPARISONS}/1").json()["status"] == "interrupted"
+
+
+def test_comparison_finishing_while_it_is_read_is_not_interrupted(client, joined, local,
+                                                                  monkeypatch):
+    """La comparaison se termine entre la lecture de sa ligne (« running ») et celle du
+    registre des jobs : elle n'est pas « interrupted » (course vue dans la suite complète)."""
+    db = index_path("groupe-nordis")
+    number = store.create(db, "julien.h", "revenu-net", 4, {"id": "x"}, 1.0)
+    prepared = service.prepare_in(repo_dir("groupe-nordis"), service.CompareRequest(**BODY),
+                                  "groupe-nordis", True)
+    job = orchestrate.Job(number, db, prepared)
+    orchestrate._jobs[(str(db), number)] = job
+    read = store.get
+
+    def read_then_finish(*args):
+        found = read(*args)
+        orchestrate._jobs.pop((str(db), number), None)  # le job vient de se terminer
+        return found
+
+    monkeypatch.setattr(store, "get", read_then_finish)
+    assert client.get(f"{COMPARISONS}/{number}").json()["status"] == "running"
+    assert client.get(f"{COMPARISONS}/{number}").json()["status"] == "interrupted"
 
 
 def test_request_validation(client, joined, local):
