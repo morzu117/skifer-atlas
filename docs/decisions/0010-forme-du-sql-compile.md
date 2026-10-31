@@ -68,5 +68,6 @@ L'ADR 0004 fixe le principe : un AST SQLGlot, une CTE par nœud, une fonction pu
   - le début de semaine de Snowflake dépend du paramètre `WEEK_START` ;
   - le mécanisme d'échec Snowflake n'est vérifié que par re-parse, sans exécution réelle ;
   - un moteur peut ne pas évaluer la garde quand la sortie est vide, et alors une anomalie passe inaperçue sur un résultat vide.
+- La division, `WEEK_START` et la garde sur une sortie vide sont traités par l'[ADR 0025](0025-ecarts-de-compilation.md) (plan 0021) ; seul le mécanisme d'échec Snowflake reste à vérifier.
 - Les plans 0008 et 0018 exécuteront ce SQL sur Databricks et Snowflake. Le message des contrôles, qui commence par `atlas:`, permet d'y reconnaître un échec de contrôle parmi les erreurs du moteur.
 - Le plan 0009 comparera les résultats sur la base des valeurs normalisées par les tests de l'oracle (critère 9).

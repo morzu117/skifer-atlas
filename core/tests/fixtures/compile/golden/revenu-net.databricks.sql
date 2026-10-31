@@ -143,3 +143,11 @@ WHERE
       failure
     FROM atlas_guard
   ) IS NULL
+UNION ALL
+SELECT
+  NULL AS mois_fiscal,
+  NULL AS entite,
+  NULL AS revenu_net
+FROM atlas_guard
+WHERE
+  NOT atlas_guard.failure IS NULL

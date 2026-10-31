@@ -2,7 +2,8 @@
 
 Chaque contrôle est une CTE qui compte les anomalies (`problems`). La requête finale ne
 rend ses lignes que si la garde, qui regroupe tous les contrôles, vaut NULL ; sinon la
-garde appelle l'échec du dialecte, avec un message qui cite le nœud :
+garde appelle l'échec du dialecte, avec un message qui cite le nœud. Une seconde branche
+lit la garde seule, pour qu'elle soit évaluée même sur une sortie vide (`guarded`) :
 
 | dialecte   | échec                                   |
 |------------|-----------------------------------------|
@@ -82,3 +83,18 @@ def guard(checks: list[Check], dialect: str) -> exp.Select:
     for check in checks[1:]:
         query = query.join(check.name, join_type="cross")
     return query
+
+
+def guarded(query: exp.Select, columns: list[str]) -> exp.Expression:
+    """Requête finale gardée (plan 0021, ADR 0025).
+
+    La première branche ne rend ses lignes que si la garde vaut NULL. Sur une sortie vide,
+    un moteur peut ne jamais évaluer ce filtre, et l'anomalie passerait inaperçue. La
+    seconde branche lit la garde seule : elle ne rend jamais de ligne (sur anomalie, la
+    garde échoue avant), mais aucun moteur ne peut l'écarter sans évaluer la garde. Ses
+    NULL sans type prennent celui de la première branche."""
+    failure = exp.column("failure", table="atlas_guard")
+    rows = query.where(exp.select("failure").from_("atlas_guard").subquery().is_(exp.null()))
+    witness = exp.select(*[exp.null().as_(c) for c in columns]).from_("atlas_guard").where(
+        failure.is_(exp.null()).not_())
+    return exp.union(rows, witness, distinct=False)
