@@ -36,19 +36,24 @@ Statut : plans validés le 30 octobre 2026, développement lancé par le plan 00
 
 ## Reste à faire
 
-Mise à jour le 31 octobre 2026, après le plan 0019. Cette liste regroupe les « Reste à faire » des sections « Mise en œuvre » des plans, sans ce que les plans suivants ont livré. Une ligne se retire quand elle est faite, avec le plan ou l'ADR qui la règle.
+Mise à jour le 31 octobre 2026, après les plans 0019 à 0025. Cette liste regroupe les « Reste à faire » des sections « Mise en œuvre » des plans, sans ce que les plans suivants ont livré. Une ligne se retire quand elle est faite, avec le plan ou l'ADR qui la règle (voir « Réglé » en fin de liste).
 
 **Comptes et certificats** (bloquent une vérification réelle) :
 - Certificats Apple Developer ID et Windows à obtenir, puis à poser en secrets du dépôt. Vérifier ensuite la signature, la notarisation, Gatekeeper et SmartScreen au premier tag (0019, critère 1).
+- Client OAuth « Skifer Atlas » à créer sur GitHub, avec le device flow activé, puis `ATLAS_GITHUB_CLIENT_ID` à poser dans la build de release. C'est un identifiant public, pas un secret (0025).
 - Espace Databricks de test, pour :
   - l'OAuth réel et la requête agrégée (0008) ;
   - une comparaison réelle, depuis l'API puis depuis l'écran (0009, 0015, 0016) ;
-  - l'exécution à la main du SQL Databricks généré (0007).
+  - l'exécution à la main du SQL Databricks généré, avec les règles de l'ADR 0025 : division, semaine, garde (0007, 0021).
 - Compte Snowflake, pour :
   - le test réel, avec le SSO du fournisseur d'identité d'un client pilote (0018, critère 1) ;
-  - le mécanisme d'échec Snowflake (0007) ;
+  - le mécanisme d'échec Snowflake et les règles de l'ADR 0025 (0007, 0021) ;
+  - une comparaison réelle de Nordis ES, avec la table commune des jours comptables sur ce compte (0022) ;
   - les ajustements de compilation qu'ils révéleraient.
-- Dépôt GitHub de test : l'enregistrement réel de la gouvernance avec la règle Code Owners (0017).
+- Dépôt GitHub de test, pour :
+  - l'enregistrement réel de la gouvernance avec la règle Code Owners (0017) ;
+  - le tag posé au `sync` après une fusion faite dans l'interface de GitHub (0020) ;
+  - la connexion par le device flow et l'adhésion à un dépôt privé (0025).
 
 **Vérifications à la main** :
 - Installation sur un poste vierge de chaque OS, puis le parcours accueil → catalogue → fiche (0019).
@@ -56,7 +61,7 @@ Mise à jour le 31 octobre 2026, après le plan 0019. Cette liste regroupe les �
   - création, ouverture et bascule entre deux espaces (0010) ;
   - recherche avec accents et navigation au clavier du catalogue (0011) ;
   - fiche (0012) ;
-  - éditeur (0013) ;
+  - éditeur (0013), et un graphe réel d'une centaine de nœuds sous WebKit (0024) ;
   - propositions (0014) ;
   - comparaison et ouverture du navigateur (0015) ;
   - retour OAuth (0016).
@@ -66,21 +71,29 @@ Mise à jour le 31 octobre 2026, après le plan 0019. Cette liste regroupe les �
 
 **Relectures produit** :
 - Fiche KPI, dont la maquette est à retravailler (0012).
-- Session d'édition avec un utilisateur métier (0013).
+- Session d'édition avec un utilisateur métier (0013), qui dira aussi si le seuil de 50 nœuds (rendu des seules cartes visibles) gêne (0024).
 - Seuils de comparaison 99 / 90 (0015).
-- Libellés de l'administration, avec un référent (0017).
+- Libellés de l'administration, avec un référent (0017, 0023).
+- Attributs ajoutés au concept Commande de la démonstration sans changer sa version, pour la comparaison de Nordis ES (0022).
 
 **Développement** :
-- Poser le tag au `sync` quand une PR a été fusionnée directement sur GitHub (0006, ADR 0009).
-- Ranger le jeton GitHub au coffre au lieu de `ATLAS_GITHUB_TOKEN` (0006).
 - Route de révision d'une proposition, si l'écran en a besoin (0006).
-- Écarts de compilation connus (ADR 0010) : division, `WEEK_START` de Snowflake, garde sur une sortie vide (0007).
-- `binding` ou source commune, pour que Nordis ES se compare en from scratch (0009, ADR 0012).
-- Rendu de React Flow au-delà de 50 nœuds (0013).
-- Administration : retirer un membre ou un domaine, membres aux rôles multiples (0017).
+- Autres paramètres de session : fuseau de Databricks, `TIMESTAMP_TYPE_MAPPING` de Snowflake pour `CAST(… AS TIMESTAMP)` (0021).
+- Afficher à l'écran les sources communes d'une comparaison : `Rebound.common` n'est pas encore exposé (0022).
+- Test instable : `test_snowflake_compare.py::test_comparison_across_databricks_and_snowflake` échoue parfois dans la suite complète, jamais seul.
 
 **Hors périmètre, à décider** :
 - Linux : binaire, Secret Service, installateur (0008, 0018, 0019).
 - Mise à jour automatique et canal de distribution (0019).
 - Notifications (0014).
 - Export et comparaisons planifiées (0015).
+- Correspondance de valeurs entre vocabulaires locaux et du groupe : aujourd'hui, la source porte la colonne du groupe (0022).
+- Rafraîchissement des jetons GitHub à durée limitée (0025).
+
+**Réglé** depuis la mise à jour précédente :
+- Tag posé au `sync` après une fusion faite sur GitHub : plan 0020, ADR 0024.
+- Écarts de compilation (division, `WEEK_START`, garde sur une sortie vide) : plan 0021, ADR 0025.
+- Nordis ES comparée en from scratch : plan 0022, ADR 0026.
+- Administration, retraits et rôles multiples : plan 0023, ADR 0027.
+- Rendu de React Flow au-delà de 50 nœuds : plan 0024, ADR 0028.
+- Jeton GitHub au coffre : plan 0025, ADR 0029.
