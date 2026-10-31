@@ -110,4 +110,4 @@ Brief 3.3, 3.5, 3.6, 4.1, 10.3 ; guide 1.2, 3.2, 3.3, 4 (nœud en édition, arê
 - **Reste à faire** :
   - session d'édition avec un utilisateur métier, prévue par le plan ;
   - vérification à la main sous Tauri ;
-  - rendu de React Flow au-delà de 50 nœuds.
+  - rendu de React Flow au-delà de 50 nœuds (fait : plan 0024).

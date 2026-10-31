@@ -1,6 +1,8 @@
 import { Handle, MarkerType, Position, ReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { memo } from "react";
 import type { GraphLayout, GraphNode } from "../api";
+import { useStable } from "../stable";
 
 // Graphe en lecture (guide 4, « Nœud en lecture ») : cartes de 150 de large placées par
 // la disposition du serveur (couche, rang), sans zoom ni déplacement. Un graphe plus large
@@ -20,7 +22,9 @@ const PAD = 24;
 type CardData = { node: GraphNode; mark?: Mark; note?: string; selected?: boolean };
 type CardNode = Node<CardData, "card">;
 
-function Card({ data }: NodeProps<CardNode>) {
+// Mémoïsée, avec des nœuds stables (`useStable`, ADR 0028) : un changement de `selected`
+// ne redessine que les deux cartes concernées.
+const Card = memo(function Card({ data }: NodeProps<CardNode>) {
   const { node, mark, note, selected } = data;
   const classes = [
     "graph-card",
@@ -58,7 +62,7 @@ function Card({ data }: NodeProps<CardNode>) {
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   );
-}
+});
 
 const NODE_TYPES = { card: Card };
 
@@ -92,7 +96,7 @@ export function GraphView({
 }) {
   const { placed, width, height } = positions(layout);
   const at = new Map(placed.map((p) => [p.id, p]));
-  const nodes: CardNode[] = layout.nodes.map((node) => ({
+  const nodes = useStable<CardNode>(layout.nodes.map((node) => ({
     id: node.id,
     type: "card",
     position: { x: at.get(node.id)!.x, y: at.get(node.id)!.y },
@@ -100,8 +104,8 @@ export function GraphView({
     draggable: false,
     selectable: false,
     focusable: false,
-  }));
-  const edges: Edge[] = layout.edges.map((edge) => ({
+  })));
+  const edges = useStable<Edge>(layout.edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
@@ -110,7 +114,7 @@ export function GraphView({
     markerEnd: { type: MarkerType.ArrowClosed, color: "var(--atlas-node-source)" },
     focusable: false,
     selectable: false,
-  }));
+  })));
   return (
     // Focalisable : un graphe plus large que la zone défile aussi au clavier.
     <figure className="graph" aria-label={label} tabIndex={0}>
