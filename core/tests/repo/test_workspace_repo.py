@@ -122,6 +122,64 @@ def test_sync_fast_forwards(remote):
     assert get_workspace("groupe-nordis").entities[-1] == "nordis-it"
 
 
+NORDIS_FR = "variants/revenu-net/nordis-fr.yaml"
+
+
+def merge_on_the_host(work, path, old, new, message):
+    """Comme une pull request fusionnée sur GitHub sans Atlas : branche, commit, fusion."""
+    git(work, "switch", "--quiet", "-c", "pr")
+    text = (work / path).read_text(encoding="utf-8")
+    (work / path).write_text(text.replace(old, new, 1), encoding="utf-8")
+    commit_all(work, message)
+    git(work, "switch", "--quiet", "main")
+    git(work, "merge", "--quiet", "--no-ff", "-m", f"Merge pull request #7 : {message}", "pr")
+    git(work, "branch", "--quiet", "-D", "pr")
+    git(work, "push", "--quiet", "origin", "main")
+    return git(work, "rev-parse", "HEAD").strip()
+
+
+def test_sync_tags_a_version_merged_outside_atlas(remote):
+    """Plan 0020 : la version arrivée par une fusion faite sur l'hébergeur reçoit son tag
+    au sync, sur le commit de fusion, et le tag part sur le dépôt distant."""
+    bare, work = remote
+    join_workspace(str(bare))
+    merged = merge_on_the_host(work, NORDIS_FR, "version: 2", "version: 3", "FR v3")
+    (work / "notes.md").write_text("Sans changement de version.\n")
+    head = commit_all(work, "Notes")
+    git(work, "push", "--quiet", "origin", "main")
+    result = sync_workspace("groupe-nordis")
+    assert (result["status"], result["commit"]) == ("fast_forward", head)
+    assert result["warnings"] == [{"code": "versions_tagged", "message": "Version fusionnée "
+                                   "hors d'Atlas, taguée au sync : revenu-net--nordis-fr v3."}]
+    clone = repo_dir("groupe-nordis")
+    assert [(v.version, v.commit) for v in versions(clone, "revenu-net--nordis-fr")] == [
+        (3, merged)]
+    assert git(bare, "rev-parse", "doc/revenu-net--nordis-fr/v3^{commit}").strip() == merged
+    assert sync_workspace("groupe-nordis")["warnings"] == []
+
+
+def test_sync_leaves_versions_tagged_by_atlas_alone(remote):
+    bare, work = remote
+    join_workspace(str(bare))
+    merged = merge_on_the_host(work, NORDIS_FR, "version: 2", "version: 3", "FR v3")
+    git(work, "tag", "doc/revenu-net--nordis-fr/v3", merged)
+    git(work, "push", "--quiet", "origin", "doc/revenu-net--nordis-fr/v3")
+    assert sync_workspace("groupe-nordis")["warnings"] == []
+
+
+def test_tags_stay_local_when_they_cannot_be_pushed(remote):
+    bare, work = remote
+    join_workspace(str(bare))
+    merge_on_the_host(work, NORDIS_FR, "version: 2", "version: 3", "FR v3")
+    hook = bare / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'lecture seule' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    codes = [w["code"] for w in sync_workspace("groupe-nordis")["warnings"]]
+    assert codes == ["versions_tagged", "tags_not_pushed"]
+    assert [v.version for v in versions(repo_dir("groupe-nordis"), "revenu-net--nordis-fr")] \
+        == [3]
+
+
 def test_divergent_history_is_a_conflict_and_leaves_the_clone_untouched(remote):
     bare, work = remote
     join_workspace(str(bare))

@@ -23,6 +23,7 @@ Statut : plans validés le 30 octobre 2026, développement lancé par le plan 00
 | 0017 | Administration (10.7) | app : gouvernance par proposition | 0006, 0010 | M |
 | 0018 | Connecteur Snowflake | comparaison Databricks × Snowflake | 0008, 0009 | M |
 | 0019 | Packaging sidecar et build release | installateurs signés, tests de fumée | 0008, 0018 | M |
+| 0020 | Tags des versions fusionnées hors d'Atlas | `sync` qui tague les fusions faites sur GitHub | 0005, 0006 | S |
 
 **Chemin critique** : 0001 → 0002 → 0003 → 0005 → 0006 → 0010 → 0011 → 0012 → 0013 → 0014. La branche « chiffrée » 0007 → 0008 → 0009 → 0018 peut avancer en parallèle dès 0002, et l'extraction 0004 dès 0003.
 

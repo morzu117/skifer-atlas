@@ -247,6 +247,22 @@ describe("administration", () => {
     expect(api.calls.some((c) => c.method === "POST" && c.path === `${API}/sync`)).toBe(true);
   });
 
+  it("Synchroniser affiche chaque avertissement, dont une version taguée au sync (plan 0020)", async () => {
+    const warnings = [
+      { code: "versions_tagged", message: "Version fusionnée hors d'Atlas, taguée au sync : revenu-net--nordis-fr v3." },
+      { code: "tags_not_pushed", message: "Les tags n'ont pas pu être poussés sur le dépôt distant : ils restent sur ce poste." },
+    ];
+    server(state(), ({ path }) => {
+      if (path === `${API}/sync`) return { json: { status: "fast_forward", commit: "c2", warnings, reindexed: true, synced_at: new Date().toISOString() } };
+      return undefined;
+    });
+    render(screenFor());
+    const repository = within(await screen.findByRole("region", { name: "Dépôt Git de l'espace" }));
+    await userEvent.click(repository.getByRole("button", { name: "Synchroniser" }));
+    const message = await repository.findByText(/taguée au sync : revenu-net--nordis-fr v3\. Les tags n'ont pas pu/);
+    expect(message).toHaveClass("tone-warn");
+  });
+
   it("deux référents : proposition à relire, rappel Code Owners, sans bandeau (critère 8)", async () => {
     const two = structuredClone(GOVERNANCE);
     two.members[1].roles = [{ role: "referent", domains: [] }];
