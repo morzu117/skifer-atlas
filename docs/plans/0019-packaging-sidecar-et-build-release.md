@@ -34,3 +34,49 @@ ADR 0001 ; `scripts/build-sidecar.sh`, `app/src-tauri/{tauri.conf.json,tauri.rel
 
 ## Estimation
 **M**. Incertitudes : certificats de signature (à obtenir) ; comportement de keyring et des connecteurs figés sous Windows.
+
+## Mise en œuvre (31 octobre 2026)
+
+Décisions : [ADR 0023](../decisions/0023-packaging-release.md).
+
+- **Cœur** (`core/`) :
+  - `skifer-atlas-server.spec` (nouveau) :
+    - `collect_all` pour duckdb, sqlglot et `snowflake.connector` ;
+    - métadonnées de keyring, du connecteur Snowflake, de skifer et de skifer-atlas ;
+    - imports cachés : backends keyring, `skifer.core.op_catalog`, `skifer.analyzer.frontends`, uvicorn ;
+    - exclusions : pyspark, mlflow, matplotlib, tkinter, outils de test ;
+  - `src/skifer_atlas/selftest.py` (nouveau) et `GET /api/_selftest` (token exigé) : imports à la demande, keyring, extraction et compilation Databricks et Snowflake, exécution DuckDB, `zoneinfo`, présence de git ;
+  - `src/skifer_atlas/lifeline.py` (nouveau) et `server.py` :
+    - arrêt quand le processus `ATLAS_PARENT_PID` disparaît, avec une échéance de 5 s ;
+    - le message d'arrêt ne peut plus bloquer l'arrêt quand la sortie n'a plus de lecteur ;
+  - `pyproject.toml` : version dynamique, lue dans `skifer_atlas/__init__.py`.
+- **App** (`app/src-tauri/`) :
+  - `lib.rs` :
+    - passe `ATLAS_PARENT_PID` ;
+    - relaie la sortie du serveur au lieu de fermer ses tubes ;
+  - `tauri.conf.json` : la version vient de `package.json` ;
+  - `tauri.release.conf.json` : runtime renforcé, `entitlements.plist` (nouveau) et macOS 11 minimum ; horodatage SHA-256 sous Windows.
+- **Scripts** :
+  - `build-sidecar.sh` : réécrit autour du spec, `.exe` sous Windows ;
+  - `version.py` : vérifie la version, ou la porte partout ;
+  - `size-report.py` : tableau des tailles, échec au-delà de 250 Mo ;
+  - `smoke-app.sh` : test de fumée de l'app release sous macOS.
+- **CI** : `.github/workflows/release.yml`.
+  - Matrice : macOS arm64 (`macos-15`), macOS x64 (`macos-15-intel`), Windows x64.
+  - Étapes : version, sidecar, tests du binaire, installateur, taille, fumée de l'app, vérification de signature, artefacts.
+  - Signature par les secrets seulement. Elle est obligatoire sur un tag ; sans secret, un avertissement suffit.
+- **Tests** :
+  - `core/tests/test_release.py` (8 tests) ;
+  - `core/tests/test_sidecar.py`, marqué `sidecar` (5 tests) : hors ligne sous `sandbox-exec`, et arrêt du binaire quand le chargeur puis l'app sont tués ;
+  - `app/src/offline.test.ts` (3 tests) : aucune ressource distante, polices embarquées.
+- **État des critères** :
+  1. Installateurs produits par la CI. La signature et la notarisation attendent les certificats : à vérifier au premier tag.
+  2. Test du binaire et `_selftest` vérifiés localement sous macOS arm64 ; sur les trois plateformes, par la CI.
+  3. App release : `/health` en 2 s. Aucun serveur ne reste après Cmd-Q ni après `kill -9` (`smoke-app.sh`).
+  4. Hors ligne : espace local, catalogue et compilation par le binaire sous `sandbox-exec` ; aucune ressource distante dans l'interface.
+  5. Tailles locales : sidecar 52 Mo, dmg 58,9 Mo (seuil 250 Mo).
+  6. Une seule version, vérifiée par `version.py`, par les tests et par la CI.
+- **Reste à faire** :
+  - obtenir les certificats Apple Developer ID et Windows, puis les poser en secrets ;
+  - parcours manuel sur un poste vierge de chaque OS ;
+  - Linux, mise à jour automatique et canal de distribution, hors périmètre.

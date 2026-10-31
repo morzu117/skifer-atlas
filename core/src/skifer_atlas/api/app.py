@@ -144,6 +144,15 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
         return {"status": "ok", "version": __version__}
 
     protected = [Depends(require_token)]
+
+    # Diagnostic du binaire figé (plan 0019) : modules chargés à la demande, extraction,
+    # compilation. Protégé comme le reste : il dit ce qui est installé sur le poste.
+    @app.get("/api/_selftest", dependencies=protected)
+    def selftest() -> dict:
+        from .. import selftest as diagnostic
+
+        return diagnostic.run()
+
     app.include_router(workspaces.router, dependencies=protected)
     app.include_router(catalog.router, dependencies=protected)
     app.include_router(sheet.router, dependencies=protected)

@@ -53,10 +53,27 @@ npm run e2e                       # Playwright : l'app Vite contre un serveur Py
 
 ## Build d'une version installable
 
+Plan 0019, ADR [0023](docs/decisions/0023-packaging-release.md). Chaque machine construit pour sa propre architecture.
+
 ```bash
-scripts/build-sidecar.sh          # empaquette le serveur Python en binaire autonome
-cd app && npm run tauri:build    # produit le .dmg / .msi / .AppImage (config release avec le sidecar)
+scripts/build-sidecar.sh          # serveur Python figé (core/skifer-atlas-server.spec) dans app/src-tauri/binaries/
+(cd core && uv run pytest -m sidecar)   # test du binaire : /health, _selftest, hors ligne, arrêt avec l'app
+cd app && npm run tauri:build    # installateur (config release : sidecar, runtime renforcé macOS)
+python3 scripts/size-report.py    # tailles ; échoue au-delà de 250 Mo par installateur
+scripts/smoke-app.sh "app/src-tauri/target/release/bundle/macos/Skifer Atlas.app"   # macOS
 ```
+
+`smoke-app.sh` vérifie que l'app démarre son serveur en moins de 10 s, et qu'aucun processus serveur ne reste après Cmd-Q ou après un `kill -9` de l'app. Le serveur surveille l'app qui l'a lancé (`ATLAS_PARENT_PID`).
+
+Version : une seule, celle de `core/src/skifer_atlas/__init__.py`. `python3 scripts/version.py` vérifie qu'elle est identique partout (package.json et son verrou, Cargo.toml et Cargo.lock ; `tauri.conf.json` lit celle de package.json). `python3 scripts/version.py 0.2.0` la porte partout.
+
+Git doit être installé sur le poste : il n'est pas embarqué dans l'installateur.
+
+CI (`.github/workflows/release.yml`) : macOS arm64, macOS x64 et Windows x64, sur chaque PR qui touche `core/`, `app/` ou `scripts/`, et sur les tags `v*`. Elle construit le sidecar, le teste, produit l'installateur, rapporte sa taille, lance le test de fumée de l'app sous macOS et publie l'installateur en artefact. La signature ne passe que par les secrets du dépôt :
+- macOS : `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, et pour la notarisation `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` ;
+- Windows : `WINDOWS_CERTIFICATE` et `WINDOWS_CERTIFICATE_PASSWORD`.
+
+Sans ces secrets, l'installateur sort non signé, avec un avertissement. Sur un tag, il est refusé, et le tag doit correspondre à la version.
 
 ## Licence
 

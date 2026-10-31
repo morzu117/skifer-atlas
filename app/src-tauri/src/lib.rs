@@ -2,7 +2,9 @@
 //!
 //! Au lancement : choisit un port libre, génère un token de session, démarre le
 //! serveur Python (sidecar empaqueté en release, `uv run` en dev), attend qu'il
-//! réponde sur /health, puis affiche l'interface. À la fermeture, tue le serveur.
+//! réponde sur /health, puis affiche l'interface. À la fermeture, tue le serveur ;
+//! le serveur surveille aussi notre identifiant de processus (`ATLAS_PARENT_PID`) et
+//! s'arrête seul si l'app disparaît sans fermeture propre (plan 0019).
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -11,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager, RunEvent, State};
-use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
 #[derive(Clone, Serialize)]
@@ -69,11 +71,28 @@ fn spawn_server(app: &AppHandle, port: u16, token: &str) -> Result<CommandChild,
             .sidecar("skifer-atlas-server")
             .map_err(|e| format!("Sidecar introuvable : {e}"))?
     };
-    let (_rx, child) = command
+    let (mut rx, child) = command
         .env("ATLAS_PORT", port.to_string())
         .env("ATLAS_TOKEN", token)
+        .env("ATLAS_PARENT_PID", std::process::id().to_string())
         .spawn()
         .map_err(|e| format!("Impossible de démarrer le serveur local : {e}"))?;
+    // La sortie du serveur est relayée sur celle de l'app (sans paniquer si elle n'a pas de
+    // sortie). Sans lecteur, ses tubes se ferment et la moindre écriture du serveur échoue.
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line) | CommandEvent::Stderr(line) => {
+                    let text = String::from_utf8_lossy(&line);
+                    let _ = writeln!(std::io::stderr(), "[serveur] {}", text.trim_end());
+                }
+                CommandEvent::Terminated(status) => {
+                    let _ = writeln!(std::io::stderr(), "[serveur] arrêté ({:?})", status.code);
+                }
+                _ => {}
+            }
+        }
+    });
     Ok(child)
 }
 
