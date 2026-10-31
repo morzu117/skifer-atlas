@@ -161,6 +161,35 @@ def _at(repo: Path, analysis: Analysis, document_id: str, version: int | None) -
     return resolved_graph(validate_text(text).document, analysis, label)
 
 
+def labelled_layout(resolved: ResolvedGraph, label: str) -> dict:
+    """Disposition d'un graphe résolu, son titre de colonne et, pour une variante, les
+    nœuds qu'elle surcharge."""
+    overrides = [o.node for o in resolved.overrides] if resolved.variant is not None else []
+    return {"label": label, **layout(resolved.document), "overrides": overrides}
+
+
+def canonical_diff(repo: Path, variant_id: str) -> dict:
+    """Une déclinaison face à son canonique (0015, « Nœud divergent ») : les deux graphes
+    disposés et le rapport de diff (plan 0003), dans la relation de la déclinaison."""
+    analysis = analyze(repo)
+    entry = analysis.entry(variant_id)
+    if entry is None:
+        raise RepoError("not_found", f"Document « {variant_id} » introuvable.")
+    document = entry.document
+    if document is None or document.kind != "variant":
+        raise RepoError("not_a_variant", f"« {variant_id} » n'est pas une déclinaison.")
+    resolved = resolved_graph(document, analysis, f"« {variant_id} »")
+    canonical = ResolvedGraph(analysis.library.kpi(document.variant_of.id,
+                                                   document.variant_of.version))
+    report = diff(canonical, resolved, DiffContext(document.mode, analysis.library))
+    return {
+        "base": labelled_layout(canonical, f"Canonique v{document.variant_of.version}"),
+        "other": labelled_layout(resolved, f"Déclinaison {document.entity} "
+                                           f"v{document.data_product.version}"),
+        "report": report.model_dump(mode="json"),
+    }
+
+
 def graph_layout(repo: Path, document_id: str, version: int | None = None) -> dict:
     """Disposition du graphe courant, ou de celui d'une version taguée ; pour une
     variante, du graphe résolu."""

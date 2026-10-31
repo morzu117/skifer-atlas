@@ -289,6 +289,55 @@ describe("fiche", () => {
     expect(screen.getByText("commande_id")).toBeInTheDocument();
   });
 
+  it("déclinaison : diff au canonique, nœud divergent entouré (plan 0015, critère 2)", async () => {
+    const VARIANT = "/api/workspaces/groupe-nordis/documents/revenu-net--nordis-de";
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net--nordis-de?diff=canonique&node=n02";
+    const variantReport: DiffReport = {
+      ...REPORT,
+      relation: "override",
+      differences: [{ ...REPORT.differences[0], classification: "override_undeclared", severity: "critical" }],
+    };
+    const titled = { ...LAYOUT, nodes: LAYOUT.nodes.map((n) => (n.id === "n02" ? { ...n, title: "Factures validées ou expédiées" } : n)) };
+    fakeServer(({ path }) => {
+      if (path === `${VARIANT}/sheet`) {
+        return { json: { ...SHEET, id: "revenu-net--nordis-de", kind: "variant", label: "Revenu net — nordis-de", has_graph: false, variants: [] } };
+      }
+      if (path === `${VARIANT}/canonical-diff`) {
+        return {
+          json: {
+            base: { ...LAYOUT, label: "Canonique v4" },
+            other: { ...titled, label: "Déclinaison nordis-de v3", overrides: ["n02"] },
+            report: variantReport,
+          },
+        };
+      }
+      return undefined;
+    });
+    fiche();
+    expect(await screen.findByRole("heading", { level: 2, name: "Écarts au canonique" })).toBeInTheDocument();
+    expect(await screen.findByText(/Nœud sélectionné/)).toHaveTextContent("Nœud sélectionné : n02 · Factures validées ou expédiées");
+    const diff = screen.getByRole("region", { name: "Diff de Revenu net — nordis-de au canonique" });
+    const other = within(diff).getByRole("figure", { name: "Graphe : Déclinaison nordis-de v3" });
+    await waitFor(() => expect(other.querySelectorAll(".graph-card")).toHaveLength(3));
+    const selected = other.querySelector(".graph-card.is-selected")!;
+    expect(selected).toHaveTextContent("Factures validées ou expédiées");
+    expect(selected).toHaveClass("mark-modified");
+    expect(within(diff).getByRole("figure", { name: "Graphe : Canonique v4" }).querySelector(".graph-card.is-selected")).not.toBeNull();
+    expect(screen.queryByRole("link", { name: "Comparer au canonique" })).not.toBeInTheDocument();
+  });
+
+  it("déclinaison : lien « Comparer au canonique » quand le diff est fermé", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net--nordis-de";
+    fakeServer(({ path }) =>
+      path.endsWith("/revenu-net--nordis-de/sheet")
+        ? { json: { ...SHEET, id: "revenu-net--nordis-de", kind: "variant", label: "Revenu net — nordis-de", has_graph: false, variants: [] } }
+        : undefined,
+    );
+    fiche();
+    const link = await screen.findByRole("link", { name: "Comparer au canonique" });
+    expect(link).toHaveAttribute("href", "#/w/groupe-nordis/fiche/revenu-net--nordis-de?diff=canonique");
+  });
+
   it("document introuvable", async () => {
     fakeServer(() => undefined);
     fiche();

@@ -57,9 +57,38 @@ export const NATURES: Record<string, { label: string; tone: string }> = {
 
 export const KIND_LABELS: Record<string, string> = { concept: "Concept", kpi: "KPI" };
 
-/** 93.75 → « 93 % » : arrondi vers le bas, 100 % n'est affiché que s'il est atteint. */
+/** 93.75 → « 94 % » : arrondi au plus proche, mais 100 % n'est affiché que s'il est
+ * atteint (99.9 → « 99 % »). */
 export function percent(value: number): string {
-  return `${Math.floor(value)} %`;
+  return `${value < 100 ? Math.min(Math.round(value), 99) : Math.round(value)} %`;
+}
+
+const DECIMAL = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const AMOUNT = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+
+/** Écart signé, arrondi à l'affichage seulement : 6.1001 → « +6,1 % ». */
+export function gap(value: number, signed = true): string {
+  const text = DECIMAL.format(Math.abs(value));
+  return `${signed ? (value > 0 ? "+" : value < 0 ? "−" : "") : ""}${text} %`;
+}
+
+/** Valeur restituée (locale fr) : 4410720 → « 4 410 720 », 12.3456 → « 12,35 ». */
+export function amount(value: number): string {
+  return AMOUNT.format(value);
+}
+
+const MONTH = new Intl.DateTimeFormat("fr-FR", { month: "short", year: "numeric", timeZone: "UTC" });
+
+/** Valeur de dimension : un premier du mois devient « sept. 2026 », le reste est tel quel. */
+export function dimension(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  const text = String(value);
+  const month = /^(\d{4})-(\d{2})(?:-01)?$/.exec(text);
+  if (month) {
+    const label = MONTH.format(new Date(Date.UTC(Number(month[1]), Number(month[2]) - 1, 1)));
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+  return text;
 }
 
 /** Horodatage UTC du serveur (sans fuseau) → « il y a 3 j ». */

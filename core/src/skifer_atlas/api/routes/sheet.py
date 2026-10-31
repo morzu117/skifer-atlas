@@ -41,6 +41,12 @@ def get_diff(ws: str, document_id: str, base: int = Query(ge=1), other: int = Qu
     return fiche.version_diff(_repo(ws), document_id_or_404(document_id), base, other)
 
 
+@router.get("/canonical-diff")
+def get_canonical_diff(ws: str, document_id: str) -> dict:
+    """Une déclinaison face à son canonique : deux graphes et rapport de diff (0015)."""
+    return fiche.canonical_diff(_repo(ws), document_id_or_404(document_id))
+
+
 @router.post("/implementations/{entity}/{platform}/extract")
 def post_extract(ws: str, document_id: str, entity: str, platform: str) -> dict:
     return fiche.extract_implementation(

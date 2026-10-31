@@ -36,3 +36,74 @@ Brief 7.2, 8.3, 8.4, 10.5 ; guide 3.7, 5 (10.5), 7 (historique complet) ; `scree
 
 ## Estimation
 **M**. Incertitudes : seuils de couleur de la matrice, non fixés par le brief (à valider) ; flux d'authentification en place.
+
+## Mise en œuvre (31 octobre 2026)
+
+- **Cœur** (`core/src/skifer_atlas/`) :
+  - `compare/service.py` :
+    - `comparison_setup` : déclinaisons avec leur plateforme et la raison pour laquelle l'une d'elles ne se compare pas (`unavailable`), scopes et granularités possibles, tolérances du KPI et de l'espace ;
+    - `preview_comparison` : la préparation seule, avec alertes, plans, tolérance et accès manquants ;
+    - `missing_access`, partagé avec `check_access` ;
+    - `domain_label` dans la matrice ;
+  - `compare/orchestrate.py` : le nœud divergent porte son libellé, celui du canonique s'il existe ;
+  - `api/routes/comparisons.py` : `GET …/comparisons/setup?kpi=` et `POST …/comparisons/preview` ;
+  - `sheet.py` et `api/routes/sheet.py` : `GET …/documents/{id}/canonical-diff`, et 422 `not_a_variant` pour un document qui n'est pas une déclinaison. `labelled_layout` est partagé avec les propositions.
+- **Interface** (`app/src/`) :
+  - `screens/Comparison.tsx` :
+    - le panneau de lancement :
+      - déclinaisons non comparables grisées, avec leur raison ;
+      - scope, période et granularité, avec un scope ad hoc si l'on restreint ;
+      - curseur de tolérance ;
+      - aperçu et bandeaux d'alerte ;
+      - « Connexion requise » avec OAuth sur place et reprise du lancement ;
+      - progression et Annuler ;
+    - la matrice : seuils 99 / 90, filtre Domaine ;
+    - le détail : lignes hors tolérance, valeur exacte en infobulle, lien « Nœud divergent » ;
+    - le bandeau d'historique et la liste complète filtrée (`?vue=historique`) ;
+  - `components/DiffColumns.tsx` : le diff deux colonnes de 0014, partagé, avec un nœud sélectionné ;
+  - `screens/Fiche.tsx` : « Écarts au canonique » sur une déclinaison, et `?diff=canonique&node=n02` ;
+  - `external.ts` : ouverture d'une adresse dans le navigateur du système, avec le plugin shell et la capacité `shell:allow-open` ;
+  - `format.ts` :
+    - `percent` arrondit, plafonné à 99 % sous 100 ;
+    - `gap`, `amount` et `dimension` (« Sept. 2026 ») ;
+  - tokens ajoutés : `--atlas-launch-basis`, `--atlas-launch-w`, `--atlas-results-basis`, `--atlas-progress-h`, `--atlas-matrix-min-w`, `--atlas-matrix-spacing`.
+
+  Les choix que le plan ne fixait pas, ou dont on s'écarte, sont dans l'**ADR 0019** :
+  - `setup` et `preview` ;
+  - les déclinaisons non comparables décochées ;
+  - le KPI en liste ;
+  - une `calendar_period` non restreignable ;
+  - la tolérance envoyée seulement si on l'a touchée ;
+  - les seuils en constantes nommées ;
+  - l'arrondi du % ;
+  - l'OAuth sur place ;
+  - le diff au canonique sur la fiche ;
+  - l'historique de 500 entrées filtré côté client.
+- **Tests** :
+  - `core/tests/repo/test_comparison_screen.py` (5 tests) :
+    - `setup` : trois déclinaisons, dont nordis-es non comparable, granularités et tolérances ;
+    - aperçu sans exécution : surcharge hors points sur DE, puis bypass de cardinalité sur DE et FR après modification de la jointure, et toujours aucun historique (critère 3) ;
+    - accès manquants (critère 4) ;
+    - nœud divergent « Factures validées », septembre DE à 6,1 % hors tolérance, matrice à 94 % / 6,1 % (critères 1 et 2) ;
+    - diff au canonique et `not_a_variant`.
+  - Vitest, `npm test`, 109 tests. Nouveau : `screens/Comparison.test.tsx` (7 tests) :
+    - seuils ;
+    - matrice : couleurs, « non comparé », filtre Domaine (critère 1) ;
+    - détail : hors tolérance, valeur exacte en `title`, lien vers n02 (critères 2 et 6) ;
+    - panneau : nordis-es grisée, bandeau de bypass avant lancement, scope ad hoc et tolérance (critère 3) ;
+    - `needs_auth`, connexion, relecture du statut, reprise du lancement (critère 4) ;
+    - progression, Annuler, « annulée » (critère 5) ;
+    - historique filtré (critère 7).
+
+    Deux tests de fiche couvrent le diff au canonique, avec le nœud sélectionné.
+  - Playwright, `npm run e2e`, `e2e/comparaison.spec.ts` (3 tests), entièrement local :
+    - lancement, progression, 94 % / 6,1 % sur Revenu net × DE ;
+    - détail : Sept. 2026 hors tolérance, puis le lien ouvre la fiche sur n02, entouré et visible ;
+    - « Tout voir » et filtres.
+
+    axe-core passe à chaque étape.
+- **Reste à faire** :
+  - une comparaison réelle sur Databricks depuis l'écran, à la main ;
+  - vérification à la main sous Tauri, notamment l'ouverture du navigateur ;
+  - valider les seuils 99 / 90 ;
+  - export et comparaisons planifiées (hors périmètre).

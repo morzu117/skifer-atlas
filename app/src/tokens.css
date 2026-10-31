@@ -124,4 +124,12 @@
   --atlas-diff-col-min: 440px;     /* en dessous, les deux graphes du diff s'empilent */
   --atlas-avatar-xs: 26px;         /* auteur d'un commentaire */
   --atlas-tip-w: 260px;            /* infobulle d'un bouton désactivé */
+
+  /* Ajouts du plan 0015 (comparaison) */
+  --atlas-launch-basis: 300px;     /* panneau de lancement : flex 1 1 300px */
+  --atlas-launch-w: 340px;         /* largeur maximale du panneau (guide 10.5) */
+  --atlas-results-basis: 420px;    /* synthèse et détail : flex 999 1 420px */
+  --atlas-progress-h: 6px;         /* barre de progression par plateforme */
+  --atlas-matrix-min-w: 480px;     /* en dessous, la matrice et le détail défilent */
+  --atlas-matrix-spacing: 4px;     /* espace entre les cellules de la matrice */
 }
