@@ -6,6 +6,7 @@ import { Icon, type IconName } from "../components/Icon";
 import { initials } from "../format";
 import { explain, type Explained } from "../messages";
 import { href, navigate, type NavView, type Params, type View } from "../router";
+import { Administration } from "./Administration";
 import { Catalogue } from "./Catalogue";
 import { Comparison } from "./Comparison";
 import { Connections } from "./Connections";
@@ -13,14 +14,14 @@ import { Editor } from "./Editor";
 import { Fiche } from "./Fiche";
 import { Proposals, PROPOSALS_CHANGED } from "./Proposals";
 
-type Item = { view: NavView; label: string; plan: string };
+type Item = { view: NavView; label: string };
 
 const NAV: Item[] = [
-  { view: "catalogue", label: "Catalogue", plan: "0011" },
-  { view: "propositions", label: "Propositions", plan: "0014" },
-  { view: "comparaison", label: "Comparaison", plan: "0015" },
-  { view: "connexions", label: "Connexions", plan: "0016" },
-  { view: "administration", label: "Administration", plan: "0017" },
+  { view: "catalogue", label: "Catalogue" },
+  { view: "propositions", label: "Propositions" },
+  { view: "comparaison", label: "Comparaison" },
+  { view: "connexions", label: "Connexions" },
+  { view: "administration", label: "Administration" },
 ];
 
 type Load = { kind: "loading" } | { kind: "ready"; ws: Workspace } | { kind: "error"; error: Explained }
@@ -82,7 +83,8 @@ export function WorkspaceShell({
   }, [wsId]);
 
   const ws = load.kind === "ready" ? load.ws : null;
-  const referent = ws?.role === "referent";
+  // Un référent de domaine n'administre pas l'espace : seul un référent d'espace (0017).
+  const referent = ws?.space_referent === true;
 
   useEffect(() => {
     if (ws && view === "administration" && !referent) navigate(href.view(ws.id));
@@ -99,7 +101,6 @@ export function WorkspaceShell({
   const items = NAV.filter((item) => item.view !== "administration" || referent);
   // La fiche et l'éditeur, hors navigation, restent sous l'élément Catalogue.
   const active = view === "fiche" || view === "editeur" ? "catalogue" : view;
-  const current = NAV.find((item) => item.view === view) ?? NAV[0];
 
   // L'éditeur occupe tout l'écran, sans barre latérale (guide 3.1) : retour vers la fiche.
   if (view === "editeur") {
@@ -182,19 +183,7 @@ export function WorkspaceShell({
         {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} />}
         {ws && view === "comparaison" && <Comparison ws={ws} params={params} heading={heading} />}
         {ws && view === "connexions" && <Connections ws={ws} heading={heading} />}
-        {ws && !["catalogue", "fiche", "propositions", "comparaison", "connexions"].includes(view) && (
-          <>
-            <div className="main-head">
-              <h1 ref={heading} tabIndex={-1}>
-                {current.label}
-              </h1>
-            </div>
-            <div className="placeholder">
-              Cet écran arrive avec le plan {current.plan}. L'espace <strong>{ws.name}</strong> est ouvert : la
-              navigation et le sélecteur d'espace sont en place.
-            </div>
-          </>
-        )}
+        {ws && view === "administration" && <Administration ws={ws} heading={heading} />}
       </main>
     </div>
   );

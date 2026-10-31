@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -116,7 +117,8 @@ def join_workspace(remote_url: str) -> Workspace:
     account = _host_account(remote_url, meta.main_branch)
     return add_workspace(Workspace(
         id=meta.id, name=meta.name, sector=meta.sector, git_remote=remote_url,
-        account=account, entities=meta.entities, **_profile(governance, account),
+        account=account, entities=meta.entities, synced_at=_now(),
+        **_profile(governance, account),
     ))
 
 
@@ -192,10 +194,17 @@ def sync_workspace(workspace_id: str) -> dict:
     account = workspace.account or _host_account(workspace.git_remote, branch)
     update_workspace(workspace.model_copy(update={
         "name": meta.name, "sector": meta.sector, "entities": meta.entities,
-        "account": account, **_profile(read_governance(repo), account),
+        "account": account, "synced_at": _now(), **_profile(read_governance(repo), account),
     }))
     return {**result, "warnings": _warnings(repo)}
 
 
-__all__ = ["account_from_name", "create_workspace", "join_workspace", "set_remote",
-           "sync_workspace"]
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+host_account = _host_account
+
+
+__all__ = ["account_from_name", "create_workspace", "host_account", "join_workspace",
+           "set_remote", "sync_workspace"]

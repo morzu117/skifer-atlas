@@ -34,6 +34,7 @@ class Workspace(BaseModel):
     role: Role = "lecteur"
     domains: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
+    synced_at: str = ""  # dernière synchronisation avec le dépôt distant (UTC, ISO 8601)
 
 
 class WorkspaceRegistry(BaseModel):

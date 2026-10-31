@@ -6,12 +6,20 @@ import duckdb
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
-from ...index import ensure_index
+from ...admin import is_space_referent
+from ...index import ensure_index, index_fresh
 from ...proposals import list_proposals
 from ...repo.git import RepoError
 from ...repo.layout import WorkspaceMeta
 from ...repo.sync import create_workspace, join_workspace, sync_workspace
-from ...workspaces import ROLE_LABELS, Workspace, index_path, list_workspaces, repo_dir
+from ...workspaces import (
+    ROLE_LABELS,
+    Workspace,
+    get_workspace,
+    index_path,
+    list_workspaces,
+    repo_dir,
+)
 from .common import workspace_or_404
 
 router = APIRouter(prefix="/api/workspaces")
@@ -49,7 +57,8 @@ def _counts(ws: Workspace) -> dict:
 
 
 def _out(ws: Workspace, counts: bool = False) -> dict:
-    found = {**ws.model_dump(), "role_label": ROLE_LABELS[ws.role]}
+    found = {**ws.model_dump(), "role_label": ROLE_LABELS[ws.role],
+             "space_referent": is_space_referent(ws)}
     if counts:
         found["counts"] = _counts(ws)
     return found
@@ -72,4 +81,11 @@ def post_join(body: JoinRequest) -> dict:
 
 @router.post("/{ws}/sync")
 def post_sync(ws: str) -> dict:
-    return sync_workspace(workspace_or_404(ws).id)
+    """Synchronise, puis réindexe si la branche principale a bougé (plan 0017)."""
+    workspace = workspace_or_404(ws)
+    result = sync_workspace(workspace.id)
+    repo, db = repo_dir(workspace.id), index_path(workspace.id)
+    reindexed = not index_fresh(repo, db)
+    ensure_index(repo, db).close()
+    synced = get_workspace(workspace.id)
+    return {**result, "reindexed": reindexed, "synced_at": synced.synced_at if synced else None}

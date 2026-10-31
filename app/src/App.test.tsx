@@ -87,7 +87,7 @@ describe("coque d'un espace", () => {
       "Administration",
     ]);
     expect(screen.getByText("Référent d'annuaire")).toBeInTheDocument();
-    expect(screen.getByText(/plan 0017/)).toBeInTheDocument(); // écran pas encore livré
+    expect(screen.getByRole("heading", { level: 1, name: "Administration — Groupe Nordis" })).toBeInTheDocument();
   });
 
   it("masque Administration à un rôle non référent, même par l'URL (critère 7)", async () => {
@@ -98,6 +98,18 @@ describe("coque d'un espace", () => {
     expect(nav.queryByRole("link", { name: /Administration/ })).toBeNull();
     expect(nav.getByRole("link", { name: "Propositions" })).toBeInTheDocument(); // pas de compteur
     await waitFor(() => expect(window.location.hash).toBe("#/w/altavia-energie/catalogue"));
+  });
+
+  it("masque Administration à un référent de domaine : elle est réservée au référent d'espace (plan 0017)", async () => {
+    fakeServer(({ path }) => {
+      if (path === "/api/workspaces") return { json: [workspace({ account: "claire.m", space_referent: false })] };
+      if (path.endsWith("/proposals?status=open&for_me=true")) return { json: [] };
+    });
+    window.location.hash = "#/w/groupe-nordis/administration";
+    render(<App startup={FAST} />);
+    const nav = within(await screen.findByRole("navigation", { name: "Navigation de l'espace" }));
+    expect(nav.queryByRole("link", { name: /Administration/ })).toBeNull();
+    await waitFor(() => expect(window.location.hash).toBe("#/w/groupe-nordis/catalogue"));
   });
 
   it("ramène à l'accueil avec un message pour un espace inconnu", async () => {

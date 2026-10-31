@@ -11,11 +11,12 @@ const API_PORT = 8799;
 // Comparaisons chiffrées en local dans DuckDB, sans plateforme (plan 0009).
 const COMPARE_DATA = fileURLToPath(new URL("../core/tests/fixtures/compare/revenu-net", import.meta.url));
 
-// Deux comptes de plus pour les propositions (plan 0014) : un serveur par compte, comme un
-// poste par personne, chacun sur son propre dossier de données.
+// Trois comptes de plus, pour les propositions (plan 0014) et l'administration (0017) : un
+// serveur par compte, comme un poste par personne, chacun sur son propre dossier de données.
 const REVIEWERS = [
   { account: "claire.m", port: 8798 }, // référente Finance
   { account: "marc.d", port: 8797 }, // validateur Finance
+  { account: "julien.h", port: 8795 }, // référent de l'espace, pour l'administration (plan 0017)
 ];
 
 export default defineConfig({

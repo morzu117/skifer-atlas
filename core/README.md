@@ -54,7 +54,7 @@ H="Authorization: Bearer $ATLAS_TOKEN"; API=http://127.0.0.1:8765/api/workspaces
 curl -H "$H" $API                                                     # espaces du registre local, avec counts {kpi, concept, open_proposals}
 curl -H "$H" -H 'Content-Type: application/json' -d '{"id":"acme","name":"Acme","sector":"Industrie","entities":["acme-fr"]}' $API
 curl -H "$H" -H 'Content-Type: application/json' -d '{"remote_url":"/chemin/vers/depot.git"}' $API/join
-curl -H "$H" -X POST $API/acme/sync                                   # fetch + avance rapide, 409 sync_conflict si divergence
+curl -H "$H" -X POST $API/acme/sync                                   # fetch + avance rapide, 409 sync_conflict si divergence ; réindexe, rend reindexed et synced_at
 curl -H "$H" "$API/acme/catalog?q=ca%20net&domain=finance&kind=kpi"   # aussi owner=, status=
 curl -H "$H" $API/acme/catalog/facets                                 # valeurs des filtres, avec libellés (plan 0011)
 curl -H "$H" $API/acme/index                                          # {fresh} : false si la prochaine lecture reconstruit
@@ -98,6 +98,8 @@ curl -H "$H" "$API/acme/proposals/queue?status=open"                  # écran 1
 curl -H "$H" $API/acme/proposals/1/graphs                             # deux graphes disposés, diff 0003, surcharges hors points et récurrentes
 curl -H "$H" $API/acme/governance                                     # gouvernance, diagnostics, rôle, single_referent
 curl -H "$H" -H "$J" -d '{"governance":{…},"justification":"…"}' $API/acme/governance
+curl -H "$H" $API/acme/admin                                          # écran 10.7, référents d'espace seulement (403 sinon) : gouvernance, base_digest, KPI par domaine, plateformes, dépôt
+curl -H "$H" -H "$J" -d '{"governance":{…},"base_digest":"…"}' $API/acme/admin/governance   # proposition, fusionnée aussitôt par un référent seul ; 409 stale_base, 422 no_change
 curl -H "$H" -H "$J" -d '{"remote_url":"/chemin/vers/depot.git"}' $API/acme/remote
 ```
 
