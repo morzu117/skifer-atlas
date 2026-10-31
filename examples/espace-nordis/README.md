@@ -207,3 +207,19 @@ Ce qu'on doit voir dans Mes connexions, en `anna.k` :
 
   Avec l'hôte `http://127.0.0.1:8796` et le warehouse `abc123`, « S'authentifier avec OAuth » puis « Tester la connexion » réussissent. « Proposer le point d'accès » ouvre une proposition sur `access_points.yaml`.
 - **Repli** : si l'OAuth échoue sur une ligne Databricks, le lien « Utiliser un token personnel » ouvre un champ masqué. Il n'apparaît jamais autrement.
+
+## Écran d'administration (plan 0017)
+
+En `julien.h`, seul référent de l'espace : Administration n'apparaît que pour un référent d'espace. Claire M., qui n'a le rôle de référent que sur Finance, ne la voit pas. Ce qu'on doit voir :
+
+- **Bandeau orange** : « Vous êtes le seul référent de l'espace ». Le bouton dit « Enregistrer et fusionner ».
+- **Domaines** :
+  - Finance : « Référent Claire M. · 2 validateurs » ;
+  - Ventes et Supply chain avec leur référent ;
+  - Marketing « Aucun référent », en orange.
+- **Validateurs requis** : canonique 2, déclinaisons 1, et la surcharge de Supply chain, canonique 1 · déclinaisons 1. Un 0 est refusé (« Au moins 1. »).
+- **Utilisateurs et rôles** : les six membres, avec entité, rôle et domaines. Marc D. est référent, par la liste de Ventes.
+- **Dépôt** : l'URL du dépôt distant, `main`, la dernière synchronisation et « Synchroniser ».
+- **Plateformes** : Databricks et Snowflake cochées, avec leur mode d'authentification.
+- **Après « + Domaine » Data et « Enregistrer et fusionner »** : la proposition « Gouvernance de l'espace » est fusionnée sans revue. Seuls `governance.yaml` et `.github/CODEOWNERS` changent, et Data s'affiche « Aucun référent ».
+- **Après avoir donné à Claire M. le rôle de référent d'espace** (rôle Référent, aucun domaine) : le bandeau disparaît. Le rappel « Require review from Code Owners » s'affiche, et l'enregistrement suivant ouvre une proposition à relire.

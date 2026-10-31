@@ -136,4 +136,7 @@
   /* Ajouts du plan 0016 (connexions) */
   --atlas-connections-basis: 520px;  /* tableau des points d'accès : flex 999 1 520px */
   --atlas-connections-min-w: 600px;  /* en dessous, le tableau défile */
+
+  /* Ajouts du plan 0017 (administration) */
+  --atlas-admin-col-min: 420px;    /* sections en deux colonnes ; en dessous, une seule */
 }

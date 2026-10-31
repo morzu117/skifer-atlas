@@ -19,6 +19,9 @@ export type Workspace = {
   role_label: string;
   domains: string[];
   entities: string[];
+  /** Référent de l'espace (sans restriction de domaine) : seul à voir l'administration. */
+  space_referent?: boolean;
+  synced_at?: string;
   counts?: Counts;
 };
 
@@ -334,6 +337,45 @@ export type AccessPointDraft = {
 
 export type ConnectionTest = { ok: boolean; latency_ms: number | null; error: { code: string; message: string } | null };
 
+// --- Administration (plan 0017) ---------------------------------------------------------
+
+export type Levels = { canonical: number; variants: number };
+
+export type GovernanceDomain = { id: string; label: string; referents: string[]; validators: string[]; validators_required: Levels | null };
+
+export type GovernanceMember = { account: string; name: string; entity: string | null; roles: { role: Role; domains: string[] }[] };
+
+/** `governance.yaml`, tel que l'écran le modifie. */
+export type Governance = {
+  schema_version: 1;
+  validators_required: Levels;
+  domains: GovernanceDomain[];
+  members: GovernanceMember[];
+  allowed_platforms: string[];
+  tolerance: { percent: number } | null;
+};
+
+export type AdminState = {
+  governance: Governance;
+  base_digest: string;
+  warnings: string[];
+  space_referents: string[];
+  single_referent: boolean;
+  kpi_counts: Record<string, number>;
+  platforms: { id: string; label: string; auth: string; supported: boolean }[];
+  repository: { url: string; main_branch: string; synced_at: string | null; index_fresh: boolean };
+};
+
+export type AdminSaved = { id: number; title: string; merged: boolean; mention: string | null; changes: string[] };
+
+export type SyncResult = {
+  status: "up_to_date" | "ahead" | "fast_forward";
+  commit: string;
+  warnings: { code: string; message: string }[];
+  reindexed: boolean;
+  synced_at: string | null;
+};
+
 /** Erreur métier du serveur : `{"detail": {"code", "message", "issues"?}}`. */
 // --- Éditeur (plan 0013) ---------------------------------------------------------------
 
@@ -640,4 +682,8 @@ export const api = {
     request<ConnectionStatus>(`${ws(id)}/access-point-draft/status`, post({ access_point: accessPoint })),
   testDraft: (id: string, accessPoint: AccessPointDraft) =>
     request<ConnectionTest>(`${ws(id)}/access-point-draft/test`, post({ access_point: accessPoint })),
+  admin: (id: string) => request<AdminState>(`${ws(id)}/admin`),
+  saveGovernance: (id: string, governance: Governance, baseDigest: string) =>
+    request<AdminSaved>(`${ws(id)}/admin/governance`, post({ governance, base_digest: baseDigest })),
+  sync: (id: string) => request<SyncResult>(`${ws(id)}/sync`, post({})),
 };

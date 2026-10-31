@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
+from ...admin import admin_state, save_governance
 from ...governance.model import parse_governance, role_of, space_referents
 from ...proposals import create_governance_proposal
 from ...repo.layout import GOVERNANCE_FILE
@@ -20,6 +21,13 @@ class GovernanceRequest(BaseModel):
 
     governance: dict
     justification: str = Field(min_length=1)
+
+
+class AdminSaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    governance: dict
+    base_digest: str
 
 
 class RemoteRequest(BaseModel):
@@ -50,6 +58,18 @@ def get_governance(ws: str) -> dict:
 def post_governance(ws: str, body: GovernanceRequest) -> dict:
     return create_governance_proposal(workspace_or_404(ws).id, body.governance,
                                       body.justification)
+
+
+@router.get("/admin")
+def get_admin(ws: str) -> dict:
+    """Écran 10.7 : réservé aux référents de l'espace (403 `forbidden` sinon)."""
+    return admin_state(workspace_or_404(ws).id)
+
+
+@router.post("/admin/governance", status_code=201)
+def post_admin_governance(ws: str, body: AdminSaveRequest) -> dict:
+    """Proposition « Gouvernance », fusionnée aussitôt par un référent seul (ADR 0008)."""
+    return save_governance(workspace_or_404(ws).id, body.governance, body.base_digest)
 
 
 @router.post("/remote")

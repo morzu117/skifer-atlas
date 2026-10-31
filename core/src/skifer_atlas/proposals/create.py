@@ -22,7 +22,12 @@ from ..connectors.access_points import (
 from ..diff import DiffContext, diff
 from ..governance.codeowners import PATH as CODEOWNERS_PATH
 from ..governance.codeowners import OwnedDocument, generate
-from ..governance.model import dump_governance, space_referents, validate_governance
+from ..governance.model import (
+    dump_governance,
+    parse_governance,
+    space_referents,
+    validate_governance,
+)
 from ..governance.rules import requirement
 from ..index.build import Analysis, Entry, analyze
 from ..model.document import validate_data
@@ -214,16 +219,26 @@ def owned_documents(analysis: Analysis) -> list[OwnedDocument]:
 
 
 def create_governance_proposal(workspace_id: str, governance_data: dict,
-                               justification: str) -> dict:
-    """Nouvelle gouvernance, avec `CODEOWNERS` régénéré dans le même commit."""
+                               justification: str, base_digest: str | None = None) -> dict:
+    """Nouvelle gouvernance, avec `CODEOWNERS` régénéré dans le même commit.
+
+    `base_digest` : empreinte de `governance.yaml` lue par l'écran d'administration
+    (0017) ; si la branche principale a changé depuis, `stale_base`."""
     context = open_context(workspace_id, sync=True)
     if context.account not in space_referents(context.governance):
         raise RepoError("forbidden", "Seul un référent de l'espace propose une modification "
                         "de la gouvernance.")
+    current = context.show(GOVERNANCE_FILE) or ""
+    if base_digest is not None and _digest(current) != base_digest:
+        raise RepoError("stale_base", f"{GOVERNANCE_FILE} a changé sur la branche principale "
+                        "depuis son ouverture : recharger les paramètres.")
     governance, issues = validate_governance(governance_data)
     if governance is None:
         raise RepoError("invalid_governance", "La gouvernance proposée est refusée.",
                         _issues(issues))
+    if governance == parse_governance(current)[0]:
+        raise RepoError("no_change", "La gouvernance proposée est identique à la gouvernance "
+                        "en vigueur.")
     with checkout(context.repo, context.base) as root:
         documents = owned_documents(analyze(root, context.repo))
     files = {GOVERNANCE_FILE: dump_governance(governance),
@@ -231,7 +246,6 @@ def create_governance_proposal(workspace_id: str, governance_data: dict,
     title = "Gouvernance de l'espace"
     commit = commit_files(context.repo, context.base, files,
                           f"Gouvernance\n\n{justification.strip()}")
-    current = context.show(GOVERNANCE_FILE) or ""
     block = {
         "schema_version": 1,
         "target": {"kind": "governance", "id": "governance", "path": GOVERNANCE_FILE,
