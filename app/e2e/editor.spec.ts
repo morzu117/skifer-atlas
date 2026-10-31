@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 import { API, ensureNordis, seriousViolations } from "./demo";
+import { longKpi, type Raw } from "./graphe";
+import type { APIRequestContext } from "@playwright/test";
 
 // Plan 0013 de bout en bout, sur l'espace de démonstration : Revenu net reconstruit à la
 // souris, puis l'édition d'une version, la vue YAML et le mode surcharge.
@@ -41,7 +43,7 @@ const COLUMNS: [string, string, string?, string?][] = [
   ["avoirs", "decimal"],
 ];
 
-test("Revenu net reconstruit à la souris : YAML identique, soumission (critères 1, 4, 9, 10)", async ({ page, request }) => {
+test("[S-0013-01] [S-0013-04] [S-0013-09] [S-0013-10] Revenu net reconstruit à la souris : YAML identique, soumission (critères 1, 4, 9, 10)", async ({ page, request }) => {
   test.setTimeout(120_000);
   const id = `revenu-net-e2e-${Date.now().toString(36)}`;
   await page.goto("/#/w/groupe-nordis/catalogue");
@@ -151,7 +153,7 @@ test("Revenu net reconstruit à la souris : YAML identique, soumission (critère
   expect((await (await request.get(`${EDITOR}/documents/${id}`)).status())).toBe(404);
 });
 
-test("édition d'une version : cycle refusé, SQL par plateforme, YAML aller-retour (critères 3, 6, 8)", async ({ page, request }) => {
+test("[S-0013-03] [S-0013-06] [S-0013-08] édition d'une version : cycle refusé, SQL par plateforme, YAML aller-retour (critères 3, 6, 8)", async ({ page, request }) => {
   await request.delete(`${EDITOR}/documents/revenu-net/draft`);
   await page.goto("/#/w/groupe-nordis/editeur?from=revenu-net");
   await expect(page.getByRole("heading", { level: 1, name: "Revenu net : v5 · brouillon" })).toBeVisible();
@@ -204,7 +206,7 @@ test("édition d'une version : cycle refusé, SQL par plateforme, YAML aller-ret
   await request.delete(`${EDITOR}/documents/revenu-net/draft`);
 });
 
-test("mode surcharge : remplacer n02 signale la validation canonique (critère 7)", async ({ page, request }) => {
+test("[S-0013-07] mode surcharge : remplacer n02 signale la validation canonique (critère 7)", async ({ page, request }) => {
   await page.goto("/#/w/groupe-nordis/editeur?from=revenu-net--nordis-fr");
   await expect(page.getByRole("heading", { level: 1, name: /v3 · brouillon/ })).toBeVisible();
   await expect(palette(page).getByRole("button", { name: "Filtre", exact: true })).toBeDisabled();
@@ -220,4 +222,119 @@ test("mode surcharge : remplacer n02 signale la validation canonique (critère 7
   await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
   await request.delete(`${EDITOR}/documents/revenu-net--nordis-fr/draft`);
+});
+
+async function isolatedDraft(request: APIRequestContext, count?: number) {
+  const opened = await (await request.get(`${EDITOR}/documents/revenu-net`)).json() as { document: Raw };
+  const document = count ? longKpi(opened.document, count) : opened.document;
+  const id = `edition-${Date.now().toString(36)}`;
+  (document.data_product as Record<string, unknown>).id = id;
+  expect((await request.put(`${EDITOR}/documents/${id}/draft`, {
+    data: { document, positions: {}, highest: count ?? 7, base_version: null },
+  })).ok()).toBe(true);
+  return { id, document };
+}
+
+test("[S-0013-02] Clés amont et colonne supprimée : problème sur la jointure", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  try {
+    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    // La démonstration actuelle porte la jointure en n07 ; n04 est le mois fiscal.
+    await canvasNode(page, "n07").click();
+    const options = async (label: string) => props(page).getByLabel(label).locator("option").evaluateAll(
+      elements => elements.map(e => (e as HTMLOptionElement).value).filter(Boolean));
+    await expect.poll(() => options("Clé gauche 1")).toEqual([
+      "facture_id", "commande_id", "entite", "statut", "date_facture", "montant_ttc", "montant_taxes", "avoirs", "montant_ht",
+    ]);
+    expect(await options("Clé droite 1")).toEqual(["date_jour", "date_comptable"]);
+    await props(page).getByLabel("Clé droite 1").selectOption("date_jour");
+    await canvasNode(page, "n06").click();
+    await props(page).getByRole("button", { name: "Retirer la ligne 1 : Colonnes", exact: true }).click();
+    const problem = bottom(page).getByRole("listitem").filter({ hasText: "date_jour" });
+    await expect(problem.filter({ has: page.getByRole("button", { name: "Aller au nœud n07" }) })).toBeVisible();
+  } finally {
+    await page.goto("/");
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-05] Vingt opérations : ajout, champ, connexion, suppression, annuler et rétablir", async ({ page, request }) => {
+  const { id, document } = await isolatedDraft(request);
+  const current = async () => (await (await request.get(`${EDITOR}/documents/${id}`)).json()).draft.document;
+  try {
+    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    await expect(canvasNode(page, "n01")).toBeVisible();
+    for (let i = 0; i < 5; i++) {
+      const node = `n${String(8 + i).padStart(2, "0")}`;
+      await canvasNode(page, "n01").click();
+      await add(page, "Filtre", node);
+      await field(page, "Libellé", `Filtre temporaire ${i}`);
+      await page.getByRole("button", { name: "Ajouter une arête" }).click();
+      await canvasNode(page, "n06").click();
+      await canvasNode(page, node).click();
+      await page.getByRole("button", { name: "Sélection", exact: true }).click();
+      await canvasNode(page, node).click();
+      await props(page).getByRole("button", { name: "Supprimer", exact: true }).click();
+      await expect(canvasNode(page, node)).toHaveCount(0);
+    }
+    await expect.poll(current).toEqual(document);
+    for (let i = 0; i < 20; i++) await page.getByRole("button", { name: "Annuler", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Annuler", exact: true })).toBeDisabled();
+    await expect.poll(current).toEqual(document);
+    for (let i = 0; i < 20; i++) await page.getByRole("button", { name: "Rétablir", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Rétablir", exact: true })).toBeDisabled();
+    await expect.poll(current).toEqual(document);
+  } finally {
+    await page.goto("/");
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-11] Cinquante nœuds : modifier un champ actualise la validation", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request, 50);
+  try {
+    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    // Au zoom d'ensemble, la chaîne déborde de la vue : premier calcul entièrement visible.
+    const view = (await page.getByRole("region", { name: "Graphe" }).boundingBox())!;
+    let target = null;
+    for (const card of await page.getByRole("group", { name: /^Calcul de colonne n\d+$/ }).all()) {
+      const box = await card.boundingBox();
+      if (box && box.x >= view.x && box.y >= view.y && box.x + box.width <= view.x + view.width && box.y + box.height <= view.y + view.height) {
+        target = card;
+        break;
+      }
+    }
+    expect(target, "aucun calcul visible au zoom d'ensemble").not.toBeNull();
+    await target!.click();
+    const start = Date.now();
+    await field(page, /^Expression/, "colonne_absente + 1");
+    await expect(bottom(page).getByRole("listitem").filter({ hasText: "colonne_absente" }).first()).toBeVisible();
+    console.log(`[S-0013-11] validation de 50 nœuds après saisie : ${Date.now() - start} ms (temporisation et transport inclus)`);
+    await field(page, /^Expression/, "montant_ttc - montant_taxes");
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+  } finally {
+    await page.goto("/");
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0001-10] Une ancre ou un alias YAML empêche le retour au canevas", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  try {
+    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    await page.getByRole("button", { name: "Éditer en YAML" }).click();
+    const yaml = page.getByRole("textbox", { name: "YAML de Revenu net" });
+    await yaml.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText("base: &b {a: 1}\nother: *b\n");
+    await page.getByRole("button", { name: "Revenir au canevas" }).click();
+    // L'avis reste générique ; la cause (ancre refusée, avec sa position) est dans les problèmes.
+    await expect(page.getByRole("alert")).toHaveText("YAML illisible : corriger l'erreur signalée pour revenir au canevas.");
+    await expect(bottom(page).getByText(/^Les ancres YAML \(&\) ne sont pas admises \(ligne 1, colonne 7\)$/)).toBeVisible();
+    await expect(yaml).toBeVisible();
+  } finally {
+    await page.goto("/");
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
 });

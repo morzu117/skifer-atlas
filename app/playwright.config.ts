@@ -62,6 +62,38 @@ export default defineConfig({
         ATLAS_LOG_LEVEL: "warning",
       },
     })),
+    {
+      command: "uv run --project ../core skifer-atlas-server",
+      url: "http://127.0.0.1:8793/health",
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        ATLAS_PORT: "8793", ATLAS_DEV_NO_TOKEN: "1",
+        ATLAS_DATA_DIR: join(process.env.ATLAS_E2E_DATA!, "auth"),
+        ATLAS_ACCOUNT: "julien.h", ATLAS_VAULT: "memory", ATLAS_LOG_LEVEL: "warning",
+        ATLAS_GITHUB_URL: "http://127.0.0.1:8792",
+        ATLAS_GITHUB_API_URL: "http://127.0.0.1:8792",
+        ATLAS_GITHUB_CLIENT_ID: "Iv1.atlas-test",
+        // Aucun ATLAS_COMPARE_DATA : la comparaison doit demander l'OAuth.
+      },
+    },
+    {
+      command: "uv run --project ../core python ../core/tests/connections/fake_github.py 8792",
+      url: "http://127.0.0.1:8792/health",
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    {
+      command: "uv run --project ../core skifer-atlas-server",
+      url: "http://127.0.0.1:8791/health",
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        ATLAS_PORT: "8791", ATLAS_DEV_NO_TOKEN: "1",
+        ATLAS_DATA_DIR: join(process.env.ATLAS_E2E_DATA!, "accueil"),
+        ATLAS_ACCOUNT: "anna.k", ATLAS_VAULT: "memory", ATLAS_LOG_LEVEL: "warning",
+      },
+    },
     // Faux Databricks (OAuth, SQL) pour Mes connexions (plan 0016). Le retour OAuth du
     // serveur écoute sur 127.0.0.1:8020 : le port doit être libre.
     {

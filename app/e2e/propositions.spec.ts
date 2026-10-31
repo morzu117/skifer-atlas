@@ -55,7 +55,7 @@ const card = (page: Page, figure: string, id: string) =>
     .locator(".graph-card")
     .filter({ has: page.locator(".graph-card-id", { hasText: new RegExp(`^${id}$`) }) });
 
-test("file de anna.k : badges, compteurs ; l'auteure ne peut pas approuver (critères 1 et 4)", async ({ page }) => {
+test("[S-0014-01] [S-0014-04] file de anna.k : badges, compteurs ; l'auteure ne peut pas approuver (critères 1 et 4)", async ({ page }) => {
   await page.goto(QUEUE);
   await expect(page.getByRole("heading", { level: 1, name: "Propositions" })).toBeFocused();
   await expect(page.getByRole("combobox", { name: "Domaine" })).toHaveValue("tous"); // anna.k ne valide aucun domaine
@@ -81,7 +81,7 @@ test("file de anna.k : badges, compteurs ; l'auteure ne peut pas approuver (crit
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("claire.m : Finance d'abord, diff de la surcharge DE, changements, approbation, fusion (critères 2 à 7)", async ({
+test("[S-0003-02] [S-0006-04] [S-0006-07] [S-0014-02] [S-0014-03] [S-0014-04] [S-0014-05] [S-0014-06] [S-0014-07] claire.m : Finance d'abord, diff de la surcharge DE, changements, approbation, fusion (critères 2 à 7)", async ({
   page,
   request,
 }) => {
