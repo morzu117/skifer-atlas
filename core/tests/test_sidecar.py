@@ -18,6 +18,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -97,8 +98,11 @@ def launch(env: dict[str, str], sandbox: str | None = None) -> subprocess.Popen:
     command = [str(binary())]
     if sandbox:
         command = ["sandbox-exec", "-p", sandbox, *command]
-    process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
+    # Journal dans un fichier (un tube plein bloquerait le serveur), affiché par `stop` :
+    # pytest ne montre la sortie capturée que pour un test en échec.
+    log = tempfile.TemporaryFile()  # noqa: SIM115 — vit autant que le processus
+    process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
+    process.log = log
     port = int(env["ATLAS_PORT"])
     started = time.time()
     while time.time() - started < 60:  # premier lancement : décompression du binaire
@@ -111,7 +115,13 @@ def launch(env: dict[str, str], sandbox: str | None = None) -> subprocess.Popen:
         if process.poll() is not None:
             break
     process.kill()
-    pytest.fail(process.stdout.read().decode(errors="replace"))
+    process.wait()
+    pytest.fail(server_log(process))
+
+
+def server_log(process: subprocess.Popen) -> str:
+    process.log.seek(0)
+    return process.log.read().decode(errors="replace")
 
 
 def stop(process: subprocess.Popen) -> None:
@@ -120,6 +130,8 @@ def stop(process: subprocess.Popen) -> None:
         process.wait(10)
     except subprocess.TimeoutExpired:
         process.kill()
+        process.wait()
+    print(f"--- journal du serveur ---\n{server_log(process)}")
 
 
 @pytest.fixture
@@ -144,7 +156,9 @@ def test_frozen_binary_smoke(folders):
         assert call(port, "GET", "/api/workspaces", token=None)[0] == 401
         assert call(port, "GET", "/api/_selftest", token=None)[0] == 401
         status, found = call(port, "GET", "/api/_selftest")
-        assert status == 200 and found["ok"] is True, found
+        failing = {name: value for part in ("modules", "checks")
+                   for name, value in found.get(part, {}).items() if value != "ok"}
+        assert status == 200 and found["ok"] is True, json.dumps(failing, indent=1)
         assert found["frozen"] is True and found["version"] == __version__
     finally:
         stop(process)
@@ -167,8 +181,10 @@ def test_frozen_binary_works_offline(folders, tmp_path):
     compilation du graphe de Revenu net vers Databricks et Snowflake."""
     if shutil.which("bash") is None:
         pytest.skip("bash requis pour examples/depot-nordis.sh")
-    subprocess.run(["bash", str(ROOT / "examples" / "depot-nordis.sh"), str(tmp_path / "demo")],
-                   check=True, capture_output=True)
+    made = subprocess.run(["bash", str(ROOT / "examples" / "depot-nordis.sh"),
+                           (tmp_path / "demo").as_posix()], capture_output=True, text=True,
+                          check=False)
+    assert made.returncode == 0, made.stdout + made.stderr
     home, data = folders
     port = free_port()
     sandbox = OFFLINE if sys.platform == "darwin" and shutil.which("sandbox-exec") else None
