@@ -4,7 +4,7 @@ import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AdminState, Governance } from "../api";
 import { fakeServer, workspace, type Call } from "../test/fakeServer";
-import { Administration, domainReferents, mainRole } from "./Administration";
+import { Administration, domainReferents, mainRole, withoutDomain, withoutMember } from "./Administration";
 
 const API = "/api/workspaces/groupe-nordis";
 
@@ -37,6 +37,7 @@ function state(overrides: Partial<AdminState> = {}): AdminState {
     space_referents: ["julien.h"],
     single_referent: true,
     kpi_counts: { finance: 18, ventes: 14, supply: 7, marketing: 3 },
+    document_counts: { finance: 21, ventes: 14, supply: 7 },
     platforms: [
       { id: "databricks", label: "Databricks", auth: "OAuth · token personnel", supported: true },
       { id: "snowflake", label: "Snowflake", auth: "SSO · paire de clés", supported: false },
@@ -81,6 +82,18 @@ describe("règles", () => {
     expect(domainReferents(GOVERNANCE, "marketing")).toEqual([]);
     expect(mainRole(GOVERNANCE, GOVERNANCE.members[2])).toBe("referent"); // référent de Ventes par le domaine
     expect(mainRole(GOVERNANCE, GOVERNANCE.members[4])).toBe("contributeur");
+  });
+
+  it("retirer un membre ou un domaine ne laisse aucune référence, et n'élargit aucun rôle (plan 0023)", () => {
+    const noMarc = withoutMember(GOVERNANCE, "marc.d");
+    expect(noMarc.members.map((m) => m.account)).not.toContain("marc.d");
+    expect(noMarc.domains.find((d) => d.id === "finance")?.validators).toEqual(["claire.m"]);
+    expect(noMarc.domains.find((d) => d.id === "ventes")).toMatchObject({ referents: [], validators: [] });
+    const noFinance = withoutDomain(GOVERNANCE, "finance");
+    expect(noFinance.domains.map((d) => d.id)).toEqual(["ventes", "supply", "marketing"]);
+    // Claire n'était référente que de Finance : lectrice, et non référente de tout l'espace.
+    expect(noFinance.members[1].roles).toEqual([{ role: "lecteur", domains: [] }]);
+    expect(noFinance.members[2].roles).toEqual([{ role: "validateur", domains: ["ventes"] }]);
   });
 });
 
@@ -222,6 +235,69 @@ describe("administration", () => {
       entity: "nordis-fr",
       roles: [{ role: "validateur", domains: ["ventes"] }],
     });
+  });
+
+  it("retirer un membre, mais jamais le dernier référent de l'espace (plan 0023)", async () => {
+    const api = server();
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Modifier Julien H." }));
+    let form = within(screen.getByRole("group", { name: "Membre Julien H." }));
+    expect(form.getByRole("button", { name: "Retirer de l'espace" })).toBeDisabled();
+    expect(form.getByText(/Seul référent de l'espace/)).toBeInTheDocument();
+    await userEvent.click(form.getByRole("button", { name: "Annuler" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Modifier Marc D." }));
+    form = within(screen.getByRole("group", { name: "Membre Marc D." }));
+    expect(form.getByText(/L'accès au dépôt se retire sur l'hébergeur/)).toBeInTheDocument();
+    await userEvent.click(form.getByRole("button", { name: "Retirer de l'espace" }));
+    expect(within(screen.getByRole("table", { name: "Utilisateurs et rôles" })).queryByRole("row", { name: /Marc D\./ })).toBeNull();
+    await userEvent.click(saveButton());
+    await screen.findByText(/proposition n° 12/);
+    const saved = savedGovernance(api.calls);
+    expect(saved.members.map((m) => m.account)).not.toContain("marc.d");
+    expect(saved.domains[0].validators).toEqual(["claire.m"]);
+  });
+
+  it("retirer un domaine sans document ; un domaine qui en porte reste (plan 0023)", async () => {
+    const api = server();
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Modifier le domaine Supply chain" }));
+    let form = within(screen.getByRole("group", { name: "Domaine Supply chain" }));
+    expect(form.getByRole("button", { name: "Retirer le domaine" })).toBeDisabled();
+    expect(form.getByText(/7 documents rattachés : les rattacher à un autre domaine/)).toBeInTheDocument();
+    await userEvent.click(form.getByRole("button", { name: "Annuler" }));
+
+    await userEvent.click(domains().getByRole("button", { name: "Modifier le domaine Marketing" }));
+    form = within(screen.getByRole("group", { name: "Domaine Marketing" }));
+    expect(form.getByText(/Les rôles limités à ce domaine sont retirés/)).toBeInTheDocument();
+    await userEvent.click(form.getByRole("button", { name: "Retirer le domaine" }));
+    expect(domains().queryByText("Marketing")).toBeNull();
+    await userEvent.click(saveButton());
+    await screen.findByText(/proposition n° 12/);
+    expect(savedGovernance(api.calls).domains.map((d) => d.id)).toEqual(["finance", "ventes", "supply"]);
+  });
+
+  it("donner plusieurs rôles à un membre (plan 0023)", async () => {
+    const api = server();
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Modifier Anna K." }));
+    const form = within(screen.getByRole("group", { name: "Membre Anna K." }));
+    await userEvent.click(form.getByRole("button", { name: "+ Ajouter un rôle" }));
+    const second = within(form.getByRole("group", { name: "Rôle 2" }));
+    await userEvent.selectOptions(second.getByRole("combobox", { name: "Rôle 2" }), "contributeur");
+    await userEvent.click(form.getByRole("button", { name: "Appliquer" }));
+    expect(second.getByText("Ce rôle figure déjà : regroupez ses domaines.")).toBeInTheDocument();
+    await userEvent.selectOptions(second.getByRole("combobox", { name: "Rôle 2" }), "referent");
+    await userEvent.click(second.getByRole("checkbox", { name: "Ventes" }));
+    await userEvent.click(form.getByRole("button", { name: "Appliquer" }));
+    const row = within(screen.getByRole("table", { name: "Utilisateurs et rôles" })).getByRole("row", { name: /Anna K\./ });
+    expect(row).toHaveTextContent("Référent");
+    await userEvent.click(saveButton());
+    await screen.findByText(/proposition n° 12/);
+    expect(savedGovernance(api.calls).members[4].roles).toEqual([
+      { role: "contributeur", domains: [] },
+      { role: "referent", domains: ["ventes"] },
+    ]);
   });
 
   it("plateformes autorisées : une case retire la plateforme", async () => {

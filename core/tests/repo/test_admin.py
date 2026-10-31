@@ -97,6 +97,54 @@ def test_single_referent_saves_and_merges_with_the_mention(client, joined, as_):
     assert code(save(client, after, lambda g: None)) == (422, "no_change")
 
 
+def test_removing_a_member_a_domain_and_giving_several_roles(client, joined, as_):
+    """Plan 0023 : retirer un membre (et ses mentions dans les domaines), retirer un domaine
+    sans document, donner plusieurs rôles à un membre."""
+    bare, _ = joined
+    as_("julien.h")
+    state = client.get(ADMIN).json()
+
+    def change(governance):
+        governance["domains"] = [d for d in governance["domains"] if d["id"] != "marketing"]
+        finance = governance["domains"][0]
+        finance["validators"] = [a for a in finance["validators"] if a != "marc.d"]
+        ventes = governance["domains"][1]
+        ventes["referents"], ventes["validators"] = ["anna.k"], ["anna.k"]
+        governance["members"] = [m for m in governance["members"] if m["account"] != "marc.d"]
+        anna = next(m for m in governance["members"] if m["account"] == "anna.k")
+        anna["roles"] = [{"role": "contributeur", "domains": []},
+                         {"role": "referent", "domains": ["ventes"]}]
+
+    response = save(client, state, change)
+    assert response.status_code == 201, response.text
+    assert response.json()["changes"] == [
+        "Validateurs de « Finance » : Claire M.",
+        "Référents de « Ventes » : Anna K.",
+        "Validateurs de « Ventes » : Anna K.",
+        "Domaine « Marketing » retiré.",
+        "Anna K. (anna.k) : contributeur, referent (ventes), entité nordis-de.",
+        "Marc D. (marc.d) retiré."]
+    merged = main_governance(bare)
+    assert [d["id"] for d in merged["domains"]] == ["finance", "ventes", "supply"]
+    assert "marc.d" not in [m["account"] for m in merged["members"]]
+    assert next(m for m in merged["members"] if m["account"] == "anna.k")["roles"][1] == {
+        "role": "referent", "domains": ["ventes"]}
+
+
+def test_a_domain_that_still_has_documents_cannot_be_removed(client, joined, as_):
+    as_("julien.h")
+    state = client.get(ADMIN).json()
+
+    def change(governance):
+        governance["domains"] = [d for d in governance["domains"] if d["id"] != "supply"]
+        sami = next(m for m in governance["members"] if m["account"] == "sami.b")
+        sami["roles"] = [{"role": "lecteur", "domains": []}]
+
+    response = save(client, state, change)
+    assert code(response) == (422, "domain_in_use")
+    assert "« Supply chain » (1 document)" in response.json()["detail"]["message"]
+
+
 def test_zero_validators_is_refused(client, joined, as_):
     """Critère 3 : minimum 1, sur l'espace comme sur un domaine."""
     bare, _ = joined

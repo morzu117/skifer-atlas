@@ -19,6 +19,7 @@ l'annulation passent par `abort_query`.
 from __future__ import annotations
 
 import contextlib
+import os
 import re
 import threading
 import time
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from ..paths import data_dir
 from ..repo.git import RepoError
 from .access_points import AccessPoint
 from .base import MAX_ROWS, QUERY_TIMEOUT, AuthRejected, QueryResult
@@ -42,8 +44,21 @@ _GUARD = re.compile(r"Numeric value '(atlas: .*)' is not recognized", re.DOTALL)
 _LOGIN_TIMEOUT = 14  # code du connecteur : délai de connexion dépassé
 
 
+def prepare_environment() -> None:
+    """À appeler avant d'importer le connecteur. Il cherche sa configuration
+    (`connections.toml`) sous `SNOWFLAKE_HOME`, à défaut dans le dossier de configuration de
+    l'OS, et refuse de se charger s'il ne le détermine pas (constaté sous Windows, plan
+    0019). Atlas ne lit pas cette configuration : un dossier à lui, sous ses données, rend
+    le chargement indépendant du poste. Un `SNOWFLAKE_HOME` déjà posé est respecté."""
+    if not os.environ.get("SNOWFLAKE_HOME"):
+        home = data_dir() / "snowflake"
+        home.mkdir(parents=True, exist_ok=True)
+        os.environ["SNOWFLAKE_HOME"] = str(home)
+
+
 def _snowflake():
     """Import tardif : le connecteur charge un cœur natif d'une vingtaine de Mo."""
+    prepare_environment()
     import snowflake.connector
 
     return snowflake.connector
