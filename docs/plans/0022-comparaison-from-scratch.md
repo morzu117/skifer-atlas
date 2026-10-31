@@ -90,7 +90,7 @@ Décisions : [ADR 0026](../decisions/0026-comparaison-from-scratch.md). L'ADR 00
   - Playwright, `app/e2e/comparaison.spec.ts` : nordis-es cochée, barre « Snowflake · nordis-es », lien de matrice à 75 % / 2,9 %, historique « nordis-de 94 % · nordis-es 75 % · nordis-fr 100 % » (critère 6). Non relancé ici : ports fixes.
   - Vitest, `npm test` : 136 tests, inchangés. Le serveur simulé garde une déclinaison non comparable, cas que l'écran sait toujours afficher.
 - **Reste à faire** :
-  - relancer `npm run e2e` (scénario de comparaison modifié) ;
+  - relancer `npm run e2e` (scénario de comparaison modifié) : fait, 35 tests passés ;
   - une comparaison réelle d'ES sur Snowflake, avec la table commune des jours comptables sur ce compte (compte Snowflake reporté, plan 0018) ;
   - la correspondance de valeurs entre vocabulaires locaux et du groupe, hors périmètre : aujourd'hui, la source doit porter la colonne du groupe ;
   - signaler à l'écran les sources communes d'une comparaison (`Rebound.common` n'est pas encore exposé).
