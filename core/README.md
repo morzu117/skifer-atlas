@@ -54,7 +54,7 @@ H="Authorization: Bearer $ATLAS_TOKEN"; API=http://127.0.0.1:8765/api/workspaces
 curl -H "$H" $API                                                     # espaces du registre local, avec counts {kpi, concept, open_proposals}
 curl -H "$H" -H 'Content-Type: application/json' -d '{"id":"acme","name":"Acme","sector":"Industrie","entities":["acme-fr"]}' $API
 curl -H "$H" -H 'Content-Type: application/json' -d '{"remote_url":"/chemin/vers/depot.git"}' $API/join
-curl -H "$H" -X POST $API/acme/sync                                   # fetch + avance rapide, 409 sync_conflict si divergence ; réindexe, rend reindexed et synced_at
+curl -H "$H" -X POST $API/acme/sync                                   # fetch + avance rapide, 409 sync_conflict si divergence ; réindexe, rend reindexed et synced_at ; tague les versions fusionnées hors d'Atlas (warnings versions_tagged, plan 0020)
 curl -H "$H" "$API/acme/catalog?q=ca%20net&domain=finance&kind=kpi"   # aussi owner=, status=
 curl -H "$H" $API/acme/catalog/facets                                 # valeurs des filtres, avec libellés (plan 0011)
 curl -H "$H" $API/acme/index                                          # {fresh} : false si la prochaine lecture reconstruit

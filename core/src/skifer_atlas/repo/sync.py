@@ -28,6 +28,7 @@ from ..paths import data_dir
 from ..workspaces import Workspace, add_workspace, get_workspace, repo_dir, update_workspace
 from .git import RepoError, check_remote_url, head, run_git
 from .layout import GOVERNANCE_FILE, META_FILE, WorkspaceMeta, read_governance, read_meta
+from .versions import missing_tags
 
 
 def _dump(data: dict) -> str:
@@ -190,13 +191,37 @@ def sync_workspace(workspace_id: str) -> dict:
     else:
         run_git(["merge", "--quiet", "--ff-only", remote], repo, error_code="sync_conflict")
         result = {"status": "fast_forward", "commit": remote}
+    warnings = []
+    if result["status"] == "fast_forward":
+        warnings = _catch_up_tags(repo, local, remote, workspace.git_remote)
     meta = read_meta(repo)
     account = workspace.account or _host_account(workspace.git_remote, branch)
     update_workspace(workspace.model_copy(update={
         "name": meta.name, "sector": meta.sector, "entities": meta.entities,
         "account": account, "synced_at": _now(), **_profile(read_governance(repo), account),
     }))
-    return {**result, "warnings": _warnings(repo)}
+    return {**result, "warnings": warnings + _warnings(repo)}
+
+
+def _catch_up_tags(repo: Path, before: str, after: str, remote_url: str) -> list[dict]:
+    """Tags des versions fusionnées hors d'Atlas (directement sur l'hébergeur), posés au
+    clone puis poussés. Chaque membre calcule les mêmes : sans droit d'écriture, le tag
+    reste local et le prochain membre qui en a le pousse."""
+    found = missing_tags(repo, before, after)
+    if not found:
+        return []
+    for name, commit in found:
+        run_git(["tag", name, commit], repo)
+    names = ", ".join(name.removeprefix("doc/").replace("/v", " v") for name, _ in found)
+    warnings = [{"code": "versions_tagged", "message": f"Version fusionnée hors d'Atlas, "
+                 f"taguée au sync : {names}."}]
+    try:
+        run_git(["push", "--quiet", "origin", *(f"refs/tags/{name}" for name, _ in found)],
+                repo, error_code="push_failed", token=_token(remote_url))
+    except RepoError:
+        warnings.append({"code": "tags_not_pushed", "message": "Les tags n'ont pas pu être "
+                         "poussés sur le dépôt distant : ils restent sur ce poste."})
+    return warnings
 
 
 def _now() -> str:
