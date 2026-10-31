@@ -37,7 +37,7 @@ Statut : plans validés le 30 octobre 2026, développement lancé par le plan 00
 
 ## Reste à faire
 
-Mise à jour le 31 octobre 2026, après les plans 0019 à 0025. Cette liste regroupe les « Reste à faire » des sections « Mise en œuvre » des plans, sans ce que les plans suivants ont livré. Une ligne se retire quand elle est faite, avec le plan ou l'ADR qui la règle (voir « Réglé » en fin de liste).
+Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regroupe les « Reste à faire » des sections « Mise en œuvre » des plans, sans ce que les plans suivants ont livré. Une ligne se retire quand elle est faite, avec le plan ou l'ADR qui la règle (voir « Réglé » en fin de liste).
 
 **Comptes et certificats** (bloquent une vérification réelle) :
 - Certificats Apple Developer ID et Windows à obtenir, puis à poser en secrets du dépôt. Vérifier ensuite la signature, la notarisation, Gatekeeper et SmartScreen au premier tag (0019, critère 1).
@@ -58,14 +58,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0025. Cette liste regr
 
 **Vérifications à la main** :
 - Installation sur un poste vierge de chaque OS, puis le parcours accueil → catalogue → fiche (0019).
-- Sous Tauri :
-  - création, ouverture et bascule entre deux espaces (0010) ;
-  - recherche avec accents et navigation au clavier du catalogue (0011) ;
-  - fiche (0012) ;
-  - éditeur (0013), et un graphe réel d'une centaine de nœuds sous WebKit (0024) ;
-  - propositions (0014) ;
-  - comparaison et ouverture du navigateur (0015) ;
-  - retour OAuth (0016).
+- Dans l'app Tauri installée, ce que les parcours WebKit du plan 0026 n'exercent pas : fenêtre native, ouverture du navigateur système par le plugin shell (0015, 0016), démarrage et arrêt du sidecar empaqueté, trousseau système. Un graphe réel d'une centaine de nœuds (0024).
 - Keyring et connecteurs figés sous Windows (0008, 0018). La CI couvre `_selftest` et les tests du binaire ; un poste réel reste à faire.
 - Extraction d'un vrai script de production anonymisé (0004).
 - Relecture d'un diff from scratch (0014).
@@ -81,7 +74,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0025. Cette liste regr
 - Route de révision d'une proposition, si l'écran en a besoin (0006).
 - Autres paramètres de session : fuseau de Databricks, `TIMESTAMP_TYPE_MAPPING` de Snowflake pour `CAST(… AS TIMESTAMP)` (0021).
 - Afficher à l'écran les sources communes d'une comparaison : `Rebound.common` n'est pas encore exposé (0022).
-- Test instable : `test_snowflake_compare.py::test_comparison_across_databricks_and_snowflake` échoue parfois dans la suite complète, jamais seul.
+- Onglets de la fiche au clavier sous WebKit macOS : Tab seul ne passe pas par les liens (⌥Tab, ou réglage macOS). Deux pistes : des boutons à la place des liens, ou l'option WKWebView qui fait passer Tab par les liens (0026, ADR 0030).
 
 **Hors périmètre, à décider** :
 - Linux : binaire, Secret Service, installateur (0008, 0018, 0019).
@@ -92,6 +85,8 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0025. Cette liste regr
 - Rafraîchissement des jetons GitHub à durée limitée (0025).
 
 **Réglé** depuis la mise à jour précédente :
+- Parcours des plans 0010 à 0016 et graphe de 200 nœuds sous WebKit, le moteur de Tauri macOS, avec axe : plan 0026, ADR 0030.
+- Test instable de `test_snowflake_compare.py` : une vraie course dans `get_comparison`, qui pouvait lire « interrupted » une comparaison en train de se terminer. Corrigée, avec un test dédié.
 - Tag posé au `sync` après une fusion faite sur GitHub : plan 0020, ADR 0024.
 - Écarts de compilation (division, `WEEK_START`, garde sur une sortie vide) : plan 0021, ADR 0025.
 - Nordis ES comparée en from scratch : plan 0022, ADR 0026.
