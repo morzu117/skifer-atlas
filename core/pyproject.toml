@@ -1,6 +1,6 @@
 [project]
 name = "skifer-atlas"
-version = "0.0.1"
+dynamic = ["version"]  # skifer_atlas.__version__, seule source (plan 0019, scripts/version.py)
 description = "Skifer Atlas — définitions canoniques et déclinaisons des KPI, comparaison structurelle et chiffrée."
 readme = "README.md"
 license = "MIT"
@@ -38,6 +38,9 @@ build = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/skifer_atlas/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/skifer_atlas"]

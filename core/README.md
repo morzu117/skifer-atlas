@@ -99,8 +99,8 @@ curl -H "$H" "$API/acme/proposals/queue?status=open"                  # écran 1
 curl -H "$H" $API/acme/proposals/1/graphs                             # deux graphes disposés, diff 0003, surcharges hors points et récurrentes
 curl -H "$H" $API/acme/governance                                     # gouvernance, diagnostics, rôle, single_referent
 curl -H "$H" -H "$J" -d '{"governance":{…},"justification":"…"}' $API/acme/governance
-curl -H "$H" $API/acme/admin                                          # écran 10.7, référents d'espace seulement (403 sinon) : gouvernance, base_digest, KPI par domaine, plateformes, dépôt
-curl -H "$H" -H "$J" -d '{"governance":{…},"base_digest":"…"}' $API/acme/admin/governance   # proposition, fusionnée aussitôt par un référent seul ; 409 stale_base, 422 no_change
+curl -H "$H" $API/acme/admin                                          # écran 10.7, référents d'espace seulement (403 sinon) : gouvernance, base_digest, KPI et documents par domaine, plateformes, dépôt
+curl -H "$H" -H "$J" -d '{"governance":{…},"base_digest":"…"}' $API/acme/admin/governance   # proposition, fusionnée aussitôt par un référent seul ; 409 stale_base, 422 no_change, 422 domain_in_use (domaine retiré qui porte encore des documents)
 curl -H "$H" -H "$J" -d '{"remote_url":"/chemin/vers/depot.git"}' $API/acme/remote
 ```
 
@@ -148,7 +148,7 @@ Chaque point d'accès de la liste porte aussi `owner_name` (nom du propriétaire
 
 L'OAuth utilise par défaut le client `databricks-cli`, dont la redirection est `http://localhost:8020` : le port doit être libre pendant la connexion (`oauth_port_busy` sinon). `oauth_client_id` et `oauth_redirect_port` se règlent par point d'accès. Sans trousseau utilisable, la réponse est `vault_unavailable` : Atlas ne range rien ailleurs. `ATLAS_VAULT=memory` remplace le trousseau par un coffre en mémoire du processus, pour les tests et les démonstrations. Le test réel contre un SQL warehouse ne tourne qu'avec `ATLAS_DATABRICKS_HOST`, `ATLAS_DATABRICKS_WAREHOUSE` et `ATLAS_DATABRICKS_TOKEN` : `uv run pytest -m databricks`. Voir `docs/plans/0008-*.md` et l'ADR 0011.
 
-Snowflake (plan 0018, ADR 0022). Un point d'accès déclare `account` (requis si l'hôte n'est pas en `*.snowflakecomputing.com`), `warehouse`, `role` et `auth` (`sso` par défaut, ou `keypair`). En SSO, `POST …/authorize` prend l'identifiant Snowflake et le connecteur ouvre lui-même le navigateur : l'état se relit par `…/status`, comme pour l'OAuth. Les jetons de session vont au coffre ; à défaut, la session ne vit qu'en mémoire du serveur. Par paire de clés, `PUT …/key-pair` lit la clé avant de ranger quoi que ce soit (422 `key_file_unreadable`, `invalid_key_file`, `passphrase_required`, `passphrase_unexpected`, `wrong_passphrase`). La passphrase va au coffre ; l'identifiant et le chemin de la clé vont au registre local `<données>/logins.json`, et la clé n'est jamais copiée. Le connecteur n'écrit aucun cache de jeton sur le poste. `uv run python tests/connections/fake_snowflake.py 8794 [dossier]` lance seul le faux Snowflake des tests : le SSO y accepte tout identifiant, et avec un dossier il y écrit la clé de démonstration `svc_es.p8` (passphrase `demo-snowflake`). Côté Atlas, `SF_TEST_BROWSER_OPENER=noop` empêche l'ouverture du navigateur. Le test réel ne tourne qu'avec `ATLAS_SNOWFLAKE_HOST`, `ATLAS_SNOWFLAKE_USER` et `ATLAS_SNOWFLAKE_WAREHOUSE`. Avec `ATLAS_SNOWFLAKE_KEY_FILE` (et `ATLAS_SNOWFLAKE_PASSPHRASE`), il se connecte par paire de clés ; sinon, par le SSO dans le navigateur : `uv run pytest -m snowflake`. Le binaire figé se vérifie après `scripts/build-sidecar.sh` par `uv run pytest -m sidecar` : authentification et exécution contre le faux Snowflake, taille sous 200 Mo.
+Snowflake (plan 0018, ADR 0022). Un point d'accès déclare `account` (requis si l'hôte n'est pas en `*.snowflakecomputing.com`), `warehouse`, `role` et `auth` (`sso` par défaut, ou `keypair`). En SSO, `POST …/authorize` prend l'identifiant Snowflake et le connecteur ouvre lui-même le navigateur : l'état se relit par `…/status`, comme pour l'OAuth. Les jetons de session vont au coffre ; à défaut, la session ne vit qu'en mémoire du serveur. Par paire de clés, `PUT …/key-pair` lit la clé avant de ranger quoi que ce soit (422 `key_file_unreadable`, `invalid_key_file`, `passphrase_required`, `passphrase_unexpected`, `wrong_passphrase`). La passphrase va au coffre ; l'identifiant et le chemin de la clé vont au registre local `<données>/logins.json`, et la clé n'est jamais copiée. Le connecteur n'écrit aucun cache de jeton sur le poste. `uv run python tests/connections/fake_snowflake.py 8794 [dossier]` lance seul le faux Snowflake des tests : le SSO y accepte tout identifiant, et avec un dossier il y écrit la clé de démonstration `svc_es.p8` (passphrase `demo-snowflake`). Côté Atlas, `SF_TEST_BROWSER_OPENER=noop` empêche l'ouverture du navigateur. Le test réel ne tourne qu'avec `ATLAS_SNOWFLAKE_HOST`, `ATLAS_SNOWFLAKE_USER` et `ATLAS_SNOWFLAKE_WAREHOUSE`. Avec `ATLAS_SNOWFLAKE_KEY_FILE` (et `ATLAS_SNOWFLAKE_PASSPHRASE`), il se connecte par paire de clés ; sinon, par le SSO dans le navigateur : `uv run pytest -m snowflake`. Le binaire figé s'authentifie et exécute contre le faux Snowflake (voir « Binaire figé » ci-dessous).
 
 Comparaisons chiffrées (plan 0009). Tout est préparé avant la première requête : un accès manquant répond 409 `needs_auth` avec la liste des points d'accès, sans rien exécuter. `ATLAS_COMPARE_DATA=<dossier>` fait tourner les comparaisons du serveur en local dans DuckDB, sans point d'accès ni coffre, pour les tests et les démonstrations :
 
@@ -165,3 +165,27 @@ curl -H "$H" $API/acme/documents/revenu-net--nordis-de/canonical-diff  # deux gr
 ```
 
 Tolérance : celle de la requête, sinon celle du KPI, sinon `tolerance.percent` de `governance.yaml`, sinon 1 %. Statuts : `running`, `done`, `partial`, `failed`, `cancelled`, et `interrupted` pour une comparaison restée en cours après l'arrêt du serveur. La colonne Convergence du catalogue en découle : `never_compared`, `converged`, `divergences:n` (écart sur une surcharge) ou `candidates:n` (écart sur une déclinaison from scratch seulement, ADR 0015).
+
+## Binaire figé (plan 0019, ADR 0023)
+
+Le sidecar figé se construit avec `scripts/build-sidecar.sh`. Les options de PyInstaller sont dans `skifer-atlas-server.spec`. Tout module importé à la demande doit figurer à deux endroits : dans le spec (import caché ou `collect_all`) et dans `skifer_atlas.selftest.DYNAMIC_MODULES`.
+
+`GET /api/_selftest` est protégée par le token. Elle :
+- importe chacun de ces modules et le backend keyring de l'OS ;
+- extrait une requête de fixture depuis Databricks et Snowflake, et la compile vers les deux dialectes ;
+- l'exécute sous DuckDB ;
+- vérifie `zoneinfo`.
+
+Elle rend `ok`, `version`, `frozen`, `modules` et `checks`. La présence de git est rapportée mais ne compte pas dans `ok`.
+
+`ATLAS_PARENT_PID` est posé par Tauri : le serveur s'arrête dans la seconde où ce processus disparaît, au plus tard 5 s après. Le chargeur PyInstaller tué seul ne suffisait pas à arrêter l'interpréteur.
+
+`uv run pytest -m sidecar` lance les tests sur le binaire construit, ignorés sans binaire :
+- fumée et `_selftest` ;
+- refus sans token ;
+- hors ligne, sous `sandbox-exec` sous macOS : espace local, catalogue, compilation ;
+- arrêt quand l'app disparaît ;
+- Snowflake ;
+- taille sous 200 Mo.
+
+`tests/test_release.py` couvre la même chose sans binaire : version unique, `_selftest`, lifeline.

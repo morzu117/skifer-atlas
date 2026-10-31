@@ -209,7 +209,14 @@ function Settings({
             {draft.domains.map((d) =>
               editing?.kind === "domain" && editing.id === d.id ? (
                 <li key={d.id}>
-                  <DomainForm g={draft} domain={d} onApply={(next) => (change(replaceDomain(draft, d.id, next)), setEditing(null))} onCancel={() => setEditing(null)} />
+                  <DomainForm
+                    g={draft}
+                    domain={d}
+                    documents={initial.document_counts[d.id] ?? 0}
+                    onApply={(next) => (change(replaceDomain(draft, d.id, next)), setEditing(null))}
+                    onRemove={() => (change(withoutDomain(draft, d.id)), setEditing(null))}
+                    onCancel={() => setEditing(null)}
+                  />
                 </li>
               ) : (
                 <li key={d.id} className="admin-row">
@@ -271,6 +278,7 @@ function Settings({
                 change({ ...draft, members });
                 setEditing(null);
               }}
+              onRemove={(account) => (change(withoutMember(draft, account)), setEditing(null))}
               onCancel={() => setEditing(null)}
             />
           ) : (
@@ -415,6 +423,36 @@ function replaceDomain(g: Governance, id: string, next: GovernanceDomain): Gover
   return { ...g, domains: g.domains.map((d) => (d.id === id ? next : d)) };
 }
 
+/** Retire un membre, et son nom des référents et validateurs des domaines. */
+export function withoutMember(g: Governance, account: string): Governance {
+  return {
+    ...g,
+    members: g.members.filter((m) => m.account !== account),
+    domains: g.domains.map((d) => ({ ...d, referents: d.referents.filter((a) => a !== account), validators: d.validators.filter((a) => a !== account) })),
+  };
+}
+
+/** Retire un domaine. Un rôle limité à ce seul domaine disparaît : il ne s'élargit jamais à
+ *  tout l'espace (une liste de domaines vide veut dire « tout l'espace »). Un membre sans
+ *  rôle restant devient lecteur. */
+export function withoutDomain(g: Governance, id: string): Governance {
+  return {
+    ...g,
+    domains: g.domains.filter((d) => d.id !== id),
+    members: g.members.map((m) => {
+      if (!m.roles.some((r) => r.domains.includes(id))) return m;
+      const roles = m.roles.flatMap((r) => {
+        if (!r.domains.includes(id)) return [r];
+        const domains = r.domains.filter((x) => x !== id);
+        return domains.length > 0 ? [{ ...r, domains }] : [];
+      });
+      return { ...m, roles: roles.length > 0 ? roles : [{ role: "lecteur" as Role, domains: [] }] };
+    }),
+  };
+}
+
+const isSpaceReferent = (m: GovernanceMember) => m.roles.some((r) => r.role === "referent" && r.domains.length === 0);
+
 function Section({ title, id, action, children }: { title: string; id: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="card admin-section" aria-labelledby={id}>
@@ -482,12 +520,16 @@ function Members({ legend, g, value, onChange }: { legend: string; g: Governance
 function DomainForm({
   g,
   domain,
+  documents = 0,
   onApply,
+  onRemove,
   onCancel,
 }: {
   g: Governance;
   domain: GovernanceDomain | null;
+  documents?: number;
   onApply: (next: GovernanceDomain) => void;
+  onRemove?: () => void;
   onCancel: () => void;
 }) {
   const [label, setLabel] = useState(domain?.label ?? "");
@@ -575,7 +617,19 @@ function DomainForm({
         <button type="button" className="btn btn-neutral btn-sm" onClick={onCancel}>
           Annuler
         </button>
+        {domain && onRemove && (
+          <button type="button" className="btn btn-danger btn-sm" disabled={documents > 0} aria-describedby={`${prefix}-remove-hint`} onClick={onRemove}>
+            Retirer le domaine
+          </button>
+        )}
       </div>
+      {domain && onRemove && (
+        <span id={`${prefix}-remove-hint`} className="field-hint">
+          {documents > 0
+            ? `${plural(documents, "document rattaché", "documents rattachés")} : les rattacher à un autre domaine avant de le retirer.`
+            : "Les rôles limités à ce domaine sont retirés à leurs membres."}
+        </span>
+      )}
     </div>
   );
 }
@@ -585,23 +639,28 @@ function MemberForm({
   ws,
   member,
   onApply,
+  onRemove,
   onCancel,
 }: {
   g: Governance;
   ws: Workspace;
   member: GovernanceMember | null;
   onApply: (next: GovernanceMember) => void;
+  onRemove: (account: string) => void;
   onCancel: () => void;
 }) {
-  const several = (member?.roles.length ?? 0) > 1;
   const [name, setName] = useState(member?.name ?? "");
   const [account, setAccount] = useState(member?.account ?? "");
   const [entity, setEntity] = useState(member?.entity ?? "groupe");
-  const [role, setRole] = useState<Role>(member?.roles[0]?.role ?? "contributeur");
-  const [domains, setDomains] = useState<string[]>(member?.roles[0]?.domains ?? []);
+  const [roles, setRoles] = useState<{ role: Role; domains: string[] }[]>(
+    member && member.roles.length > 0 ? member.roles.map((r) => ({ role: r.role, domains: [...r.domains] })) : [{ role: "contributeur", domains: [] }],
+  );
   const [submitted, setSubmitted] = useState(false);
   const entities = [...new Set(["groupe", ...ws.entities, ...(member?.entity ? [member.entity] : [])])];
   const prefix = member ? `member-${member.account}` : "member-new";
+  const several = roles.length > 1;
+  // Dernier référent de l'espace : le retirer laisserait l'espace sans administration.
+  const lastReferent = member !== null && isSpaceReferent(member) && g.members.filter(isSpaceReferent).length === 1;
 
   const errors = {
     name: name.trim() ? undefined : "Le nom est requis.",
@@ -613,15 +672,20 @@ function MemberForm({
           ? "Ce compte est déjà membre de l'espace."
           : undefined,
   };
+  const roleErrors = roles.map((r, i) => (roles.findIndex((o) => o.role === r.role) < i ? "Ce rôle figure déjà : regroupez ses domaines." : undefined));
+
+  function setRole(index: number, next: { role: Role; domains: string[] }) {
+    setRoles(roles.map((r, i) => (i === index ? next : r)));
+  }
 
   function apply() {
     setSubmitted(true);
-    if (errors.name || errors.account) return;
+    if (errors.name || errors.account || roleErrors.some(Boolean)) return;
     onApply({
       account: member?.account ?? account.trim(),
       name: name.trim(),
       entity: entity || null,
-      roles: several && member ? member.roles : [{ role, domains: role === "lecteur" ? [] : domains }],
+      roles: roles.map((r) => ({ role: r.role, domains: r.role === "lecteur" ? [] : r.domains })),
     });
   }
 
@@ -649,37 +713,48 @@ function MemberForm({
           ))}
         </Select>
       </Field>
-      {several ? (
-        <span className="field-hint">Ce membre a plusieurs rôles : ils se modifient dans governance.yaml.</span>
-      ) : (
-        <>
-          <Field label="Rôle" id={`${prefix}-role`}>
-            <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              {(Object.keys(ROLES) as Role[]).map((r) => (
-                <option key={r} value={r}>
-                  {ROLES[r]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {role !== "lecteur" && (
-            <fieldset className="admin-checks">
-              <legend>Domaines (aucun : tout l'espace)</legend>
-              <div className="checks">
-                {g.domains.map((d) => (
-                  <label key={d.id} className="check">
-                    <input
-                      type="checkbox"
-                      checked={domains.includes(d.id)}
-                      onChange={(e) => setDomains(e.target.checked ? [...domains, d.id] : domains.filter((x) => x !== d.id))}
-                    />
-                    {d.label}
-                  </label>
+      {roles.map((r, index) => {
+        const label = several ? `Rôle ${index + 1}` : "Rôle";
+        return (
+          <div key={index} className="admin-role" role="group" aria-label={label}>
+            <Field label={label} id={`${prefix}-role-${index}`} error={shown(roleErrors[index])}>
+              <Select value={r.role} onChange={(e) => setRole(index, { ...r, role: e.target.value as Role })}>
+                {(Object.keys(ROLES) as Role[]).map((role) => (
+                  <option key={role} value={role}>
+                    {ROLES[role]}
+                  </option>
                 ))}
-              </div>
-            </fieldset>
-          )}
-        </>
+              </Select>
+            </Field>
+            {r.role !== "lecteur" && (
+              <fieldset className="admin-checks">
+                <legend>{several ? `Domaines du rôle ${index + 1} (aucun : tout l'espace)` : "Domaines (aucun : tout l'espace)"}</legend>
+                <div className="checks">
+                  {g.domains.map((d) => (
+                    <label key={d.id} className="check">
+                      <input
+                        type="checkbox"
+                        checked={r.domains.includes(d.id)}
+                        onChange={(e) => setRole(index, { ...r, domains: e.target.checked ? [...r.domains, d.id] : r.domains.filter((x) => x !== d.id) })}
+                      />
+                      {d.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            {several && (
+              <button type="button" className="link-button" onClick={() => setRoles(roles.filter((_, i) => i !== index))}>
+                Retirer le rôle {index + 1}
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {roles.length < Object.keys(ROLES).length && (
+        <button type="button" className="link-button" onClick={() => setRoles([...roles, { role: (Object.keys(ROLES) as Role[]).find((x) => !roles.some((r) => r.role === x)) ?? "lecteur", domains: [] }])}>
+          + Ajouter un rôle
+        </button>
       )}
       {!member && <span className="field-hint">Atlas ajoute la personne à governance.yaml ; l'accès au dépôt se donne sur l'hébergeur.</span>}
       <div className="admin-subform-actions">
@@ -689,7 +764,21 @@ function MemberForm({
         <button type="button" className="btn btn-neutral btn-sm" onClick={onCancel}>
           Annuler
         </button>
+        {member && (
+          <button type="button" className="btn btn-danger btn-sm" disabled={lastReferent} aria-describedby={`${prefix}-remove-hint`} onClick={() => onRemove(member.account)}>
+            Retirer de l'espace
+          </button>
+        )}
       </div>
+      {member && (
+        <span id={`${prefix}-remove-hint`} className="field-hint">
+          {lastReferent
+            ? "Seul référent de l'espace : nommez-en un autre avant de le retirer."
+            : member.account === ws.account
+              ? "Vous retirer vous ôtera l'administration de l'espace une fois la proposition fusionnée."
+              : "L'accès au dépôt se retire sur l'hébergeur."}
+        </span>
+      )}
     </div>
   );
 }

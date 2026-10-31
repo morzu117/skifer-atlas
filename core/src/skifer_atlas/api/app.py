@@ -59,6 +59,7 @@ ERROR_STATUS = {
     "not_a_variant": 422,
     "invalid_governance": 422,
     "no_change": 422,
+    "domain_in_use": 422,
     "cannot_review_own": 422,
     "host_rejected": 422,
     "no_remote": 422,
@@ -147,6 +148,15 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
         return {"status": "ok", "version": __version__}
 
     protected = [Depends(require_token)]
+
+    # Diagnostic du binaire figé (plan 0019) : modules chargés à la demande, extraction,
+    # compilation. Protégé comme le reste : il dit ce qui est installé sur le poste.
+    @app.get("/api/_selftest", dependencies=protected)
+    def selftest() -> dict:
+        from .. import selftest as diagnostic
+
+        return diagnostic.run()
+
     app.include_router(workspaces.router, dependencies=protected)
     app.include_router(catalog.router, dependencies=protected)
     app.include_router(sheet.router, dependencies=protected)
