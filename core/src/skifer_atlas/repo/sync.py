@@ -50,19 +50,19 @@ def current_user() -> str:
         return "referent"
 
 
-def _host_account(remote_url: str, main_branch: str) -> str:
+def _host_account(remote_url: str, main_branch: str, workspace_id: str | None = None) -> str:
     from ..githost import host_for  # import tardif : githost dépend de repo
 
     try:
-        return host_for(remote_url, main_branch).current_account()
+        return host_for(remote_url, main_branch, workspace_id).current_account()
     except RepoError:
         return ""  # pas de jeton, hôte injoignable : lecteur jusqu'au prochain sync
 
 
-def _token(remote_url: str) -> str | None:
+def _token(remote_url: str, workspace_id: str | None = None) -> str | None:
     from ..githost import remote_token
 
-    return remote_token(remote_url)
+    return remote_token(remote_url, workspace_id)
 
 
 def _profile(governance: Governance | None, account: str) -> dict:
@@ -95,15 +95,22 @@ def create_workspace(meta: WorkspaceMeta, creator: str | None = None) -> Workspa
     ))
 
 
-def join_workspace(remote_url: str) -> Workspace:
+def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace:
     """Clone le dépôt, lit son `atlas.yaml` et ajoute l'espace au registre, avec le rôle
-    que `governance.yaml` donne au compte de l'utilisateur sur l'hébergeur."""
+    que `governance.yaml` donne au compte de l'utilisateur sur l'hébergeur.
+
+    `github_flow` : connexion GitHub faite avant l'adhésion, pour un dépôt privé (plan
+    0025). Son jeton sert au clonage, puis va au coffre sous l'identifiant de l'espace."""
+    from ..githost import device
+
     check_remote_url(remote_url)
+    credential = device.pending(github_flow) if github_flow else None
+    token = credential.access_token if credential else _token(remote_url)
     staging = Path(tempfile.mkdtemp(prefix="clone-", dir=data_dir()))
     try:
         clone = staging / "repo"
         run_git(["clone", "--quiet", "--no-recurse-submodules", "--", remote_url, str(clone)],
-                error_code="clone_failed", token=_token(remote_url))
+                error_code="clone_failed", token=token)
         try:
             meta = read_meta(clone)
             governance = read_governance(clone)
@@ -115,7 +122,10 @@ def join_workspace(remote_url: str) -> Workspace:
         shutil.move(clone, target)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-    account = _host_account(remote_url, meta.main_branch)
+    if credential is not None and github_flow is not None:
+        device.store(meta.id, credential)
+        device.release(github_flow)
+    account = _host_account(remote_url, meta.main_branch, meta.id)
     return add_workspace(Workspace(
         id=meta.id, name=meta.name, sector=meta.sector, git_remote=remote_url,
         account=account, entities=meta.entities, synced_at=_now(),
@@ -134,14 +144,30 @@ def set_remote(workspace_id: str, remote_url: str) -> Workspace:
     run_git(["remote", "add", "origin", "--", remote_url], repo)
     try:
         run_git(["push", "--quiet", "--set-upstream", "origin", branch], repo,
-                error_code="push_failed", token=_token(remote_url))
+                error_code="push_failed", token=_token(remote_url, workspace_id))
     except RepoError:
         run_git(["remote", "remove", "origin"], repo)
         raise
-    account = _host_account(remote_url, branch) or workspace.account
+    account = _host_account(remote_url, branch, workspace_id) or workspace.account
     updated = workspace.model_copy(update={
         "git_remote": remote_url, "account": account,
         **_profile(read_governance(repo), account)})
+    update_workspace(updated)
+    return updated
+
+
+def refresh_account(workspace_id: str) -> Workspace:
+    """Compte et rôle relus sur l'hébergeur, après une connexion GitHub (plan 0025) : un
+    espace rejoint sans jeton était en lecture seule jusqu'au prochain sync."""
+    workspace = _workspace(workspace_id)
+    if not workspace.git_remote:
+        return workspace
+    repo = repo_dir(workspace_id)
+    account = _host_account(workspace.git_remote, read_meta(repo).main_branch, workspace_id)
+    if not account or account == workspace.account:
+        return workspace
+    updated = workspace.model_copy(update={"account": account,
+                                           **_profile(read_governance(repo), account)})
     update_workspace(updated)
     return updated
 
@@ -178,7 +204,7 @@ def sync_workspace(workspace_id: str) -> dict:
     if not run_git(["remote"], repo).split():
         raise RepoError("no_remote", "Cet espace n'a pas encore de dépôt distant.")
     run_git(["fetch", "--quiet", "--prune", "--tags", "origin"], repo,
-            error_code="fetch_failed", token=_token(workspace.git_remote))
+            error_code="fetch_failed", token=_token(workspace.git_remote, workspace_id))
     local = head(repo)
     remote = run_git(["rev-parse", "--verify", f"refs/remotes/origin/{branch}"], repo).strip()
     if local == remote:
@@ -193,9 +219,9 @@ def sync_workspace(workspace_id: str) -> dict:
         result = {"status": "fast_forward", "commit": remote}
     warnings = []
     if result["status"] == "fast_forward":
-        warnings = _catch_up_tags(repo, local, remote, workspace.git_remote)
+        warnings = _catch_up_tags(repo, local, remote, workspace.git_remote, workspace_id)
     meta = read_meta(repo)
-    account = workspace.account or _host_account(workspace.git_remote, branch)
+    account = workspace.account or _host_account(workspace.git_remote, branch, workspace_id)
     update_workspace(workspace.model_copy(update={
         "name": meta.name, "sector": meta.sector, "entities": meta.entities,
         "account": account, "synced_at": _now(), **_profile(read_governance(repo), account),
@@ -203,7 +229,8 @@ def sync_workspace(workspace_id: str) -> dict:
     return {**result, "warnings": warnings + _warnings(repo)}
 
 
-def _catch_up_tags(repo: Path, before: str, after: str, remote_url: str) -> list[dict]:
+def _catch_up_tags(repo: Path, before: str, after: str, remote_url: str,
+                   workspace_id: str | None = None) -> list[dict]:
     """Tags des versions fusionnées hors d'Atlas (directement sur l'hébergeur), posés au
     clone puis poussés. Chaque membre calcule les mêmes : sans droit d'écriture, le tag
     reste local et le prochain membre qui en a le pousse."""
@@ -217,7 +244,7 @@ def _catch_up_tags(repo: Path, before: str, after: str, remote_url: str) -> list
                  f"taguée au sync : {names}."}]
     try:
         run_git(["push", "--quiet", "origin", *(f"refs/tags/{name}" for name, _ in found)],
-                repo, error_code="push_failed", token=_token(remote_url))
+                repo, error_code="push_failed", token=_token(remote_url, workspace_id))
     except RepoError:
         warnings.append({"code": "tags_not_pushed", "message": "Les tags n'ont pas pu être "
                          "poussés sur le dépôt distant : ils restent sur ce poste."})
@@ -232,4 +259,5 @@ host_account = _host_account
 
 
 __all__ = ["account_from_name", "create_workspace", "host_account", "join_workspace",
+           "refresh_account",
            "set_remote", "sync_workspace"]

@@ -104,10 +104,21 @@ curl -H "$H" -H "$J" -d '{"governance":{…},"base_digest":"…"}' $API/acme/adm
 curl -H "$H" -H "$J" -d '{"remote_url":"/chemin/vers/depot.git"}' $API/acme/remote
 ```
 
-L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/…` ou SSH), ou un dépôt nu local (`LocalHost`, pour les tests et les démonstrations). Variables d'environnement, en attendant le coffre (plan 0008) :
+L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/…` ou SSH), ou un dépôt nu local (`LocalHost`, pour les tests et les démonstrations). Le jeton GitHub s'obtient par le device flow et va au coffre de l'espace (`<espace>/@github`, plan 0025, ADR 0029). Git le reçoit par un assistant d'identification, jamais dans l'URL ni dans `.git/config` (ADR 0009) :
 
-- `ATLAS_GITHUB_TOKEN` : le jeton GitHub. Git le reçoit par un assistant d'identification, jamais dans l'URL ni dans `.git/config` (ADR 0009) ;
-- `ATLAS_GITHUB_API_URL` : l'API de GitHub Enterprise, ou un faux serveur ;
+```bash
+curl -H "$H" $API/acme/github                                         # configured, applies, state, source, account : jamais de jeton
+curl -H "$H" -H "$J" -d '{"workspace":"acme"}' http://127.0.0.1:8765/api/github/device   # user_code et verification_uri à afficher ; sans espace : pour rejoindre un dépôt privé
+curl -H "$H" -X POST http://127.0.0.1:8765/api/github/device/<flow>   # pending, connected (jeton au coffre), denied, expired
+curl -H "$H" -X DELETE $API/acme/github                               # retire le jeton du coffre de ce poste
+curl -H "$H" -H "$J" -d '{"remote_url":"https://github.com/…","github_flow":"<flow>"}' http://127.0.0.1:8765/api/workspaces/join
+```
+
+Variables d'environnement :
+
+- `ATLAS_GITHUB_CLIENT_ID` : le client OAuth GitHub d'Atlas, avec le device flow activé. C'est un identifiant public : la build de release le fixe à la compilation de l'app Tauri, qui le passe au serveur. Sans lui, `github_not_configured` ;
+- `ATLAS_GITHUB_TOKEN` : repli sans coffre, pour les tests et l'intégration continue. Le jeton de l'espace au coffre passe avant ;
+- `ATLAS_GITHUB_URL` et `ATLAS_GITHUB_API_URL` : GitHub Enterprise, ou un faux serveur ;
 - `ATLAS_ACCOUNT` : l'identité de l'utilisateur avec un dépôt local. À défaut, c'est le nom Git de l'utilisateur.
 
 Les compteurs de la liste des espaces se calculent sans réseau : l'index du clone, et les propositions ouvertes qui attendent la revue de l'utilisateur d'après le dernier fetch (`awaiting_me` : un autre auteur, un compte habilité, pas encore d'avis sur le dernier commit). Un compteur indisponible vaut `null`.

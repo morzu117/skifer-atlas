@@ -29,6 +29,7 @@ class JoinRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     remote_url: str
+    github_flow: str | None = None  # connexion GitHub faite avant d'adhérer (plan 0025)
 
 
 def _counts(ws: Workspace) -> dict:
@@ -76,7 +77,7 @@ def post_workspace(meta: WorkspaceMeta) -> dict:
 
 @router.post("/join", status_code=201)
 def post_join(body: JoinRequest) -> dict:
-    return _out(join_workspace(body.remote_url))
+    return _out(join_workspace(body.remote_url, body.github_flow))
 
 
 @router.post("/{ws}/sync")
