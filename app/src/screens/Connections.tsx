@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { Banner } from "../components/Banner";
 import { Field } from "../components/Field";
+import { GitHubConnect } from "../components/GitHubConnect";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
 import { canPickFile, openExternal, pickFile } from "../external";
@@ -22,7 +23,8 @@ import { href } from "../router";
 // accès à chacun ; à droite, un nouveau point d'accès, connecté et testé avant d'être
 // proposé. Aucun jeton n'arrive jamais ici : le serveur ne rend que des états. Seuls le
 // repli Databricks par token personnel et la passphrase d'une clé Snowflake (plan 0018)
-// passent par un champ masqué, vidé après l'envoi.
+// passent par un champ masqué, vidé après l'envoi. En tête, le dépôt GitHub de l'espace :
+// le jeton s'obtient par le device flow, sans aucun champ (plan 0025).
 
 /** Relecture de l'état pendant un flux OAuth, et délai au-delà duquel on abandonne. */
 export const OAUTH_POLL_MS = 1000;
@@ -373,6 +375,7 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
       </div>
       <div className="connections">
         <div className="connections-list">
+          <GitHubAccess ws={ws} />
           {list.kind === "loading" && (
             <p className="muted" role="status">
               Chargement des points d'accès…
@@ -424,6 +427,92 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
         )}
       </div>
     </>
+  );
+}
+
+/** Le dépôt GitHub de l'espace : propositions, revues, fusions et dépôts privés. */
+function GitHubAccess({ ws }: { ws: Workspace }) {
+  const [revision, setRevision] = useState(0);
+  const status = useLoad(() => api.github(ws.id), [ws.id, revision], true);
+  const [message, setMessage] = useState<{ text: string; tone: "ok" | "bad" } | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (status.kind !== "ready" || !status.value.applies) return null;
+  const s = status.value;
+  const reload = () => setRevision((n) => n + 1);
+
+  async function disconnect() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.disconnectGitHub(ws.id);
+      setMessage({ text: "Jeton retiré du coffre. Pour le révoquer chez GitHub : Settings › Applications.", tone: "ok" });
+      reload();
+    } catch (reason) {
+      setMessage({ text: explain(reason).text, tone: "bad" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const connected = s.state === "connected";
+  const access = connected
+    ? { text: "Connecté", detail: s.source === "environment" ? "jeton de l'environnement" : s.account ? `@${s.account}` : null, tone: "ok" }
+    : s.state === "expired"
+      ? { text: "Jeton refusé", detail: null, tone: "warn" }
+      : { text: "Jamais connecté", detail: null, tone: "none" };
+  let actions;
+  if (!s.configured && !connected) {
+    actions = <span className="muted">Connexion GitHub non configurée pour cette installation</span>;
+  } else if (connected && s.source === "vault") {
+    actions = (
+      <button type="button" className="btn btn-danger btn-sm" aria-label="Déconnecter GitHub" disabled={busy} onClick={() => void disconnect()}>
+        Déconnecter
+      </button>
+    );
+  } else if (!connected) {
+    actions = (
+      <GitHubConnect
+        workspace={ws.id}
+        primary={s.state === "expired"}
+        label={s.state === "expired" ? "Reconnecter GitHub" : "Se connecter à GitHub"}
+        onConnected={(_, account) => {
+          setMessage({ text: account ? `Connecté à GitHub en tant que @${account}.` : "Connecté à GitHub.", tone: "ok" });
+          reload();
+        }}
+      />
+    );
+  }
+
+  return (
+    <section className="connections-github" aria-labelledby="github-access">
+      <h2 id="github-access" className="section-label">
+        Dépôt de l'espace
+      </h2>
+      <div className="connections-github-row">
+        <div className="connections-github-repo">
+          <strong>GitHub</strong>
+          <span className="connections-sub mono">{ws.git_remote}</span>
+        </div>
+        <div>
+          <span className={`convergence tone-${access.tone}`}>
+            <span className="dot" aria-hidden="true" />
+            {access.text}
+          </span>
+          {access.detail && (
+            <span className="connections-sub connections-detail">
+              <span className="sr-only"> · </span>
+              {access.detail}
+            </span>
+          )}
+        </div>
+        <div className="connections-actions">{actions}</div>
+      </div>
+      {message && (
+        <span className={`connections-message tone-${message.tone}`} role="status">
+          {message.text}
+        </span>
+      )}
+    </section>
   );
 }
 

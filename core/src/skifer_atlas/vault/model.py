@@ -9,6 +9,7 @@ Une `Credential` ne s'affiche jamais : sa représentation masque les secrets, et
 | `pat`     | token personnel             | —               | Databricks            |
 | `sso`     | jeton de session            | jeton maître    | Snowflake (plan 0018) |
 | `keypair` | passphrase de la clé privée | —               | Snowflake (plan 0018) |
+| `github`  | jeton du device flow        | de rafraîchissement, s'il y en a | GitHub (plan 0025) |
 
 Une session SSO que le connecteur n'a pas pu exporter vit en mémoire seulement : son
 entrée ne porte alors aucun jeton (`access_token` vide).
@@ -21,7 +22,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-Kind = Literal["oauth", "pat", "sso", "keypair"]
+Kind = Literal["oauth", "pat", "sso", "keypair", "github"]
 REFRESH_MARGIN = 60  # secondes : on rafraîchit un jeton qui expire dans moins d'une minute
 
 
@@ -33,6 +34,7 @@ class Credential:
     expires_at: float | None = None  # epoch ; None si la plateforme ne le dit pas
     client_id: str | None = None  # client OAuth qui a émis le jeton
     rejected: bool = False  # la plateforme a refusé ce jeton, ou son rafraîchissement
+    account: str | None = None  # compte de la plateforme (login GitHub), à afficher
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True)

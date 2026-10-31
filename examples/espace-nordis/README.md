@@ -137,7 +137,7 @@ Revenu net déclare deux scopes : `fy2026-mois-entite` (février à septembre 20
 ```sh
 uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de,nordis-fr --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net
 uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de --scope fy2026-mois-entite --tolerance 1 --duckdb-data tests/fixtures/compare/revenu-net
-uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-es --scope fy2026-t4 --duckdb-data tests/fixtures/compare/revenu-net
+uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de,nordis-fr,nordis-es --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net
 ```
 
 Ce qu'on doit voir :
@@ -145,7 +145,11 @@ Ce qu'on doit voir :
 - **Nordis DE** : 93,8 % de validation sur 16 cellules, écart maximal 6,10 % en septembre. Juillet à septembre reprennent la maquette 10.5 : +0,2 %, +1,43 %, +6,10 %. Le nœud divergent est n02, le filtre « Factures validées », surchargé hors des points de variation déclarés. La comparaison sort en 2.
 - **Tolérance** : avec `--tolerance 1`, l'écart de 1,43 % d'août sort aussi de la tolérance, et la validation tombe à 87,5 %.
 - **Nordis FR** : 100 % sur 8 cellules.
-- **Nordis ES** : `canonical_not_rebindable`. Ses tables `from_scratch` n'ont pas les colonnes du canonique, qui ne peut donc pas s'exécuter sur ses données.
+- **Nordis ES** (plan 0022) : 75 % sur 8 cellules, écart maximal 2,93 %.
+  - Le canonique se rebranche sur `FINANZAS.PUBLIC.FACTURAS` : le `binding` de la source espagnole rattache `importe_bruto`, `iva`, `abonos`, `fecha_factura` et `estado_grupo` aux attributs de Commande que le canonique lit.
+  - Les jours comptables restent la table commune `gold.finance.dim_date`.
+  - La facture du 30 juin, clôturée à 0 h 30 le 1er juillet à Madrid, compte en juin pour le canonique (date comptable) et en juillet pour ES (date locale) : -2,86 % en juin, +2,93 % en juillet.
+  - Pas de nœud divergent : une déclinaison from scratch est justifiée (ADR 0026).
 
 Depuis l'API, sur un espace rejoint comme plus haut mais sans la fusion du plan 0006 (Revenu net en v4), on relance le serveur avec `ATLAS_COMPARE_DATA="$PWD/tests/fixtures/compare/revenu-net"` :
 
@@ -161,6 +165,7 @@ Ce qu'on doit voir :
 - **Création** : 202, `{"id": 1, "status": "running", "alerts": [{"code": "undeclared_override", …}]}`.
 - **Résultat** : `status: done`, les quatre requêtes exécutées (canonique et déclinaison pour chaque entité) avec leur SQL, puis les synthèses et les cellules.
 - **Matrice et catalogue** : DE à 93,75 %, FR à 100 %, ES non comparée ; Revenu net passe en `convergence: divergences:1`.
+- **Nordis ES** : avec `"variants":["nordis-es"]`, la comparaison aboutit aussi, à 75 % (plan 0022). Revenu net reste en `divergences:1` : l'écart d'une déclinaison from scratch ne compte pas comme une divergence (ADR 0015).
 - **Après la fusion du plan 0006** : Revenu net est en v5, mais ses déclinaisons portent encore sur la v4. La comparaison répond 409 `variant_outdated`.
 - **Sans `ATLAS_COMPARE_DATA`** : la comparaison passe par les points d'accès. Sans point d'accès déclaré pour l'entité, la réponse est `no_access_point`. Sans accès dans le coffre, elle est 409 `needs_auth`, et rien n'est exécuté.
 
@@ -170,13 +175,13 @@ Serveur lancé avec `ATLAS_COMPARE_DATA` comme plus haut, Revenu net en v4. Ce q
 
 - **Lancement** :
   - Revenu net (v4) est présélectionné ;
-  - nordis-de et nordis-fr sont cochées. nordis-es est grisée, avec « Non comparable : Le canonique ne se rebranche pas sur les sources de « nordis-es » … » ;
+  - nordis-de, nordis-es et nordis-fr sont cochées ;
   - scope `fy2026-mois-entite`, du 1er février au 30 septembre 2026, par Mois fiscal × Entité ;
   - « Tolérance : 1,5 % (globale 1 % · KPI 1,5 %) » ;
   - avant tout lancement, le bandeau orange « Surcharge hors des points déclarés » cite semantics.timezone et n02 sur nordis-de.
 - **Après « Lancer la comparaison »** :
-  - une barre Databricks · nordis-de, nordis-fr, puis « Relancer » ;
-  - dans la matrice, Revenu net × nordis-de à 94 % / 6,1 % en orange, nordis-fr à 100 % / 0,0 % en vert, et nordis-es « — ».
+  - une barre Databricks · nordis-de, nordis-fr et une barre Snowflake · nordis-es, puis « Relancer » ;
+  - dans la matrice, Revenu net × nordis-de à 94 % / 6,1 % en orange, nordis-es à 75 % / 2,9 % et nordis-fr à 100 % / 0,0 % en vert.
 - **Détail** :
   - « Nœud divergent : n02 · Factures validées » ;
   - Sept. 2026 · DE à +6,1 %, en rouge, avec « hors tolérance », sur fond orange pâle ;

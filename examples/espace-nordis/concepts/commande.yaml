@@ -16,3 +16,7 @@ entity:
     - {name: entite, type: string}
     - {name: date_commande, type: date}
     - {name: statut, type: string}
+    - {name: date_facture, type: date}
+    - {name: montant_ttc, type: decimal}
+    - {name: montant_taxes, type: decimal}
+    - {name: avoirs, type: decimal}

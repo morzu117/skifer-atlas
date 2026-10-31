@@ -802,7 +802,8 @@ function Repository({
     setMessage(null);
     try {
       const result = await api.sync(ws.id);
-      const warning = result.warnings[0]?.message;
+      // Tous les avertissements : « taguée au sync » et « tags restés sur ce poste » vont ensemble.
+      const warning = result.warnings.map((w) => w.message).join(" ");
       setMessage(
         warning
           ? { text: warning, tone: "warn" }

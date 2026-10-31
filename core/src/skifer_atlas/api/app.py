@@ -22,6 +22,7 @@ from .routes import (
     comparisons,
     connections,
     editor,
+    github,
     governance,
     proposals,
     sheet,
@@ -87,7 +88,9 @@ ERROR_STATUS = {
     "no_access_point": 422,
     "ambiguous_access_point": 422,
     "access_point_mismatch": 422,
+    "github_not_configured": 422,
     "clone_failed": 502,
+    "device_flow_failed": 502,
     "fetch_failed": 502,
     "push_failed": 502,
     "git_failed": 502,
@@ -153,5 +156,7 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
     app.include_router(governance.router, dependencies=protected)
     app.include_router(connections.router, dependencies=protected)
     app.include_router(connections.drafts, dependencies=protected)
+    app.include_router(github.router, dependencies=protected)
+    app.include_router(github.flows, dependencies=protected)
     app.include_router(comparisons.router, dependencies=protected)
     return app

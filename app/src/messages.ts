@@ -36,6 +36,18 @@ const KNOWN: Record<string, Explained> = {
     title: "Identifiant déjà pris",
     text: "Un document ou un brouillon porte déjà cet identifiant. Proposez une modification depuis sa fiche, ou choisissez-en un autre.",
   },
+  github_not_configured: {
+    title: "Connexion GitHub non configurée",
+    text: "Cette installation d'Atlas n'a pas de client OAuth GitHub (ATLAS_GITHUB_CLIENT_ID). Contactez l'équipe qui la distribue.",
+  },
+  device_flow_failed: {
+    title: "GitHub a refusé la connexion",
+    text: "Recommencez la connexion. Si le refus persiste, vérifiez que l'application Skifer Atlas est autorisée par votre organisation.",
+  },
+  host_auth_failed: {
+    title: "GitHub demande une connexion",
+    text: "Connectez-vous à GitHub dans Mes connexions, puis réessayez.",
+  },
   workspace_exists: {
     title: "Identifiant déjà pris",
     text: "Un espace porte déjà cet identifiant sur ce poste. Choisissez-en un autre.",
