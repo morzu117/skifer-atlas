@@ -17,7 +17,20 @@ access_points:
     freshness: quotidienne, 6 h
     oauth_client_id: mon-app              # facultatif : client OAuth propre au client
     oauth_redirect_port: 8020             # facultatif : port déclaré pour ce client
+  - id: snow-de
+    platform: snowflake
+    host: https://nordis-de.snowflakecomputing.com
+    warehouse: WH_FINANCE                 # facultatif : entrepôt par défaut de l'utilisateur sinon
+    schema: FIN_GOLD.PUBLIC               # base.schéma
+    role: ANALYSTE                        # facultatif : rôle par défaut de l'utilisateur sinon
+    auth: sso                             # sso (externalbrowser) ou keypair (plan 0018)
+    account: nordis-de                    # facultatif : déduit de l'hôte *.snowflakecomputing.com
+    entity: nordis-de
+    owner: anna.k
 ```
+
+L'identifiant Snowflake de chacun et le chemin de sa clé privée ne sont pas ici : ils
+vivent dans le registre local de l'utilisateur (`connectors/logins.py`).
 """
 
 from __future__ import annotations
@@ -37,6 +50,10 @@ FILE = "access_points.yaml"
 DEFAULT_REDIRECT_PORT = 8020  # adresse de retour enregistrée pour le client `databricks-cli`
 _WAREHOUSE_PATH = re.compile(r"^/sql/1\.0/warehouses/([0-9a-zA-Z]+)$")
 _LOOPBACK = ("127.0.0.1", "localhost")
+_SNOWFLAKE_DOMAIN = ".snowflakecomputing.com"
+_DATABRICKS_ONLY = ("http_path", "warehouse_id", "oauth_client_id", "oauth_redirect_port")
+_SNOWFLAKE_ONLY = ("warehouse_name", "role", "auth", "account")
+_SNOWFLAKE_NAME = r"^[A-Za-z0-9_$.\-]+$"
 
 
 class _Model(BaseModel):
@@ -55,6 +72,12 @@ class AccessPoint(_Model):
     freshness: str | None = None
     oauth_client_id: str | None = None
     oauth_redirect_port: Annotated[int, Field(ge=1024, le=65535)] | None = None
+    # Entrepôt virtuel Snowflake ; `warehouse()` désigne le SQL warehouse Databricks.
+    warehouse_name: Annotated[str, Field(pattern=_SNOWFLAKE_NAME)] | None = Field(
+        default=None, alias="warehouse")
+    role: Annotated[str, Field(pattern=_SNOWFLAKE_NAME)] | None = None
+    auth: Literal["sso", "keypair"] | None = None
+    account: Annotated[str, Field(pattern=_SNOWFLAKE_NAME)] | None = None
 
     @model_validator(mode="after")
     def _platform_fields(self) -> AccessPoint:
@@ -71,6 +94,16 @@ class AccessPoint(_Model):
             if self.warehouse() is None:
                 raise ValueError("Un point d'accès Databricks désigne son SQL warehouse "
                                  "(« warehouse_id » ou « http_path »).")
+        foreign = {"databricks": _SNOWFLAKE_ONLY, "snowflake": _DATABRICKS_ONLY}.get(
+            self.platform, ())
+        for name in foreign:
+            if getattr(self, name) is not None:
+                key = "warehouse" if name == "warehouse_name" else name
+                raise ValueError(f"« {key} » ne s'applique pas à un point d'accès "
+                                 f"{self.platform}.")
+        if self.platform == "snowflake" and self.snowflake_account() is None:
+            raise ValueError("« account » est requis quand l'hôte n'est pas "
+                             f"<compte>{_SNOWFLAKE_DOMAIN}.")
         return self
 
     @property
@@ -86,6 +119,23 @@ class AccessPoint(_Model):
             return self.warehouse_id
         found = _WAREHOUSE_PATH.match(self.http_path or "")
         return found.group(1) if found else None
+
+    def snowflake_account(self) -> str | None:
+        """Identifiant du compte Snowflake : déclaré, ou l'hôte sans le domaine."""
+        if self.account:
+            return self.account
+        hostname = urlparse(self.host).hostname or ""
+        if hostname.endswith(_SNOWFLAKE_DOMAIN):
+            return hostname.removesuffix(_SNOWFLAKE_DOMAIN).removesuffix(".privatelink")
+        return None
+
+    @property
+    def auth_mode(self) -> str:
+        """Mode d'authentification déclaré : OAuth pour Databricks, SSO par défaut pour
+        Snowflake."""
+        if self.platform == "snowflake":
+            return self.auth or "sso"
+        return "oauth"
 
     def catalog_and_schema(self) -> tuple[str | None, str | None]:
         if not self.schema_:

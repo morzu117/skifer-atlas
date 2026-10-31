@@ -185,24 +185,32 @@ Serveur lancé avec `ATLAS_COMPARE_DATA` comme plus haut, Revenu net en v4. Ce q
   Le lien ouvre la fiche de nordis-de sur « Écarts au canonique », avec n02 entouré dans les deux graphes.
 - **Historique** : les trois dernières comparaisons, puis « Tout voir », filtrable par KPI, utilisateur et date.
 
-## Écran Mes connexions (plan 0016)
+## Écran Mes connexions (plans 0016 et 0018)
 
-`examples/points-acces-nordis.py` déclare sur le dépôt les trois points d'accès de la maquette 10.6. Julien H., seul référent d'espace, propose et fusionne seul chacun d'eux. Le script écrit dans un dossier de données temporaire et n'écrit aucun secret. dbx-fr pointe vers l'hôte donné : un vrai espace Databricks en https, ou le faux Databricks des tests.
+`examples/points-acces-nordis.py` déclare sur le dépôt les trois points d'accès de la maquette 10.6. Julien H., seul référent d'espace, propose et fusionne seul chacun d'eux. Le script écrit dans un dossier de données temporaire et n'écrit aucun secret.
+- dbx-fr pointe vers l'hôte donné : un vrai espace Databricks en https, ou le faux Databricks des tests.
+- snow-de (SSO, entrepôt `WH_FINANCE`, rôle `ANALYSTE`) et snow-es (paire de clés, entrepôt `WH_VENTAS`) pointent vers l'hôte Snowflake donné, le faux Snowflake des tests. Sans troisième argument, ils pointent vers des comptes `*.snowflakecomputing.com` fictifs.
 
 ```sh
 examples/depot-nordis.sh "$DEMO"
 uv run --project core python core/tests/connections/fake_databricks.py 8796 &
-uv run --project core python examples/points-acces-nordis.py "$DEMO/distant.git" http://127.0.0.1:8796
+uv run --project core python core/tests/connections/fake_snowflake.py 8794 "$DEMO/cles" &
+uv run --project core python examples/points-acces-nordis.py "$DEMO/distant.git" \
+    http://127.0.0.1:8796 http://127.0.0.1:8794
 ```
+
+Le serveur d'Atlas se lance alors avec `SF_TEST_BROWSER_OPENER=noop` : le faux Snowflake simule lui-même le navigateur du SSO.
 
 Ce qu'on doit voir dans Mes connexions, en `anna.k` :
 
 - **Tableau** :
   - Databricks · nordis-fr, `gold.finance`, Claire M., « Quotidienne · 06:10 », « Jamais connecté », bouton « Se connecter » ;
-  - Snowflake · nordis-de (Anna K.) et nordis-es (Sofia R.), « Bientôt dans Atlas » jusqu'au plan 0018.
+  - Snowflake · nordis-de · SSO (Anna K.) et Snowflake · nordis-es · paire de clés (Sofia R.), « Jamais connecté », bouton « Se connecter ».
 - **Se connecter** : la page d'autorisation s'ouvre dans le navigateur. Avec le faux Databricks, elle revient aussitôt sur « Connexion réussie ». La ligne passe à « Connecté · session OAuth », sans recharger. « Tester » donne « Connexion OK · n ms ». « Révoquer » ramène à « Jamais connecté ».
+- **Snowflake en SSO** : « Se connecter » sur snow-de demande l'identifiant Snowflake, puis « Ouvrir le SSO ». Le faux fournisseur d'identité accepte tout identifiant et la ligne passe à « Connecté · session SSO ».
+- **Snowflake par paire de clés** : sur snow-es, saisir l'identifiant `svc_es`, le chemin `$DEMO/cles/svc_es.p8` (« Choisir… » sous Tauri) et la passphrase `demo-snowflake`. Après « Ranger dans le coffre », la ligne affiche « Connecté · paire de clés » et le champ de la passphrase est vidé. « Tester » réussit sur les deux lignes.
 - **Nouveau point d'accès** :
-  - Databricks, et Snowflake grisé « (bientôt) » ;
+  - Databricks et Snowflake. Pour Snowflake, les champs compte, entrepôt, rôle et authentification, puis la connexion SSO ou par paire de clés ;
   - entité nordis-de, identifiant `dbx-de`.
 
   Avec l'hôte `http://127.0.0.1:8796` et le warehouse `abc123`, « S'authentifier avec OAuth » puis « Tester la connexion » réussissent. « Proposer le point d'accès » ouvre une proposition sur `access_points.yaml`.

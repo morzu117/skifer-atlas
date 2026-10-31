@@ -1,7 +1,8 @@
 """Mes connexions dans un espace (plan 0008).
 
 Aucune réponse ne contient de jeton : le token personnel du repli entre par
-`PUT …/token` et n'en ressort jamais.
+`PUT …/token`, la passphrase d'une clé Snowflake par `PUT …/key-pair` (plan 0018), et
+n'en ressortent jamais.
 """
 
 from __future__ import annotations
@@ -29,6 +30,25 @@ class DeclareRequest(BaseModel):
 class DraftRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    access_point: dict
+    user: str | None = None  # identifiant Snowflake, pour le SSO
+
+
+class AuthorizeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user: str | None = None  # identifiant Snowflake ; sinon celui du registre local
+
+
+class KeyPairRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user: str = Field(min_length=1)
+    private_key_file: str = Field(min_length=1)
+    passphrase: str | None = Field(default=None, repr=False)
+
+
+class DraftKeyPairRequest(KeyPairRequest):
     access_point: dict
 
 
@@ -64,8 +84,15 @@ def status(ws: str, ap: str) -> dict:
 
 
 @router.post("/{ap}/authorize")
-def authorize(ws: str, ap: str) -> dict:
-    return connections.authorize(workspace_or_404(ws).id, ap)
+def authorize(ws: str, ap: str, body: AuthorizeRequest | None = None) -> dict:
+    return connections.authorize(workspace_or_404(ws).id, ap, user=body.user if body else None)
+
+
+@router.put("/{ap}/key-pair")
+def key_pair(ws: str, ap: str, body: KeyPairRequest) -> dict:
+    """Paire de clés Snowflake : chemin de la clé au registre local, passphrase au coffre."""
+    return connections.store_key_pair(workspace_or_404(ws).id, ap, body.user,
+                                      body.private_key_file, body.passphrase)
 
 
 @router.put("/{ap}/token")
@@ -86,7 +113,14 @@ def revoke(ws: str, ap: str) -> dict:
 
 @drafts.post("/authorize")
 def authorize_draft(ws: str, body: DraftRequest) -> dict:
-    return connections.authorize_draft(workspace_or_404(ws).id, body.access_point)
+    return connections.authorize_draft(workspace_or_404(ws).id, body.access_point,
+                                       user=body.user)
+
+
+@drafts.put("/key-pair")
+def key_pair_draft(ws: str, body: DraftKeyPairRequest) -> dict:
+    return connections.store_key_pair_draft(workspace_or_404(ws).id, body.access_point,
+                                            body.user, body.private_key_file, body.passphrase)
 
 
 @drafts.post("/status")

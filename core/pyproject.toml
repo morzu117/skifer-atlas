@@ -16,6 +16,7 @@ dependencies = [
     "skifer",
     "tzdata>=2024.1 ; sys_platform == 'win32'",
     "keyring>=25.0",
+    "snowflake-connector-python>=3.12",
 ]
 
 [project.scripts]
@@ -50,6 +51,8 @@ extend-exclude = ["tests/fixtures"]  # scripts et notebooks d'entrée de l'extra
 markers = [
     "github: test réel contre GitHub (ATLAS_GITHUB_TEST_REPO), hors CI",
     "databricks: test réel contre un SQL warehouse Databricks (ATLAS_DATABRICKS_*), hors CI",
+    "snowflake: test réel contre un compte Snowflake (ATLAS_SNOWFLAKE_*), hors CI",
+    "sidecar: binaire figé construit par scripts/build-sidecar.sh, hors CI",
 ]
 
 [tool.uv.sources]

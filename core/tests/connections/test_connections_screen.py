@@ -20,7 +20,7 @@ def test_platforms_are_the_allowed_ones_with_support(client, fake):
     space("nordis", [point(fake)])
     assert client.get("/api/workspaces/nordis/connections/platforms").json() == [
         {"id": "databricks", "label": "Databricks", "supported": True},
-        {"id": "snowflake", "label": "Snowflake", "supported": False}]
+        {"id": "snowflake", "label": "Snowflake", "supported": True}]
     governance = repo_dir("nordis") / "governance.yaml"
     governance.write_text(governance.read_text(encoding="utf-8").replace(
         "allowed_platforms: [databricks, snowflake]", "allowed_platforms: [databricks]"),
@@ -35,7 +35,8 @@ def test_list_names_the_owner_and_says_what_atlas_supports(client, fake):
     space("nordis", [point(fake), snowflake])
     listed = {c["access_point"]: c for c in client.get("/api/workspaces/nordis/connections").json()}
     assert (listed["dbx-fr"]["owner_name"], listed["dbx-fr"]["supported"]) == ("Claire M.", True)
-    assert (listed["snow-de"]["owner_name"], listed["snow-de"]["supported"]) == ("Anna K.", False)
+    assert (listed["snow-de"]["owner_name"], listed["snow-de"]["supported"]) == ("Anna K.", True)
+    assert (listed["dbx-fr"]["auth_mode"], listed["snow-de"]["auth_mode"]) == ("oauth", "sso")
 
 
 def test_draft_access_point_connects_and_tests_before_being_proposed(client, fake):
@@ -76,8 +77,8 @@ def test_draft_is_validated_like_a_declaration(client, fake):
     assert code({**point(fake, "bq-de"), "platform": "bigquery"}) == "platform_not_allowed"
     response = client.post(f"{DRAFT}/authorize", json={"access_point": {
         "id": "snow-de", "platform": "snowflake", "host": "https://x.snowflakecomputing.com",
-        "owner": "anna.k"}})
-    assert response.json()["detail"]["code"] == "platform_not_supported"
+        "owner": "anna.k", "warehouse_id": "abc"}})
+    assert response.json()["detail"]["code"] == "invalid_access_point"
     assert client.post(f"{DRAFT}/status", json={"access_point": point(fake, "dbx-de"),
                                                 "other": 1}).status_code == 422
 
