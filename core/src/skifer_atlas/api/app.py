@@ -62,6 +62,7 @@ ERROR_STATUS = {
     "no_remote": 422,
     "unsupported_host": 422,
     "invalid_access_point": 422,
+    "access_point_exists": 409,
     "invalid_access_points": 422,
     "platform_not_allowed": 422,
     "platform_not_supported": 422,
@@ -142,5 +143,6 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
     app.include_router(proposals.router, dependencies=protected)
     app.include_router(governance.router, dependencies=protected)
     app.include_router(connections.router, dependencies=protected)
+    app.include_router(connections.drafts, dependencies=protected)
     app.include_router(comparisons.router, dependencies=protected)
     return app

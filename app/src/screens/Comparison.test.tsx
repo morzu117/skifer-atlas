@@ -244,7 +244,7 @@ describe("comparaison", () => {
       if (path.endsWith("/connections/dbx-de/status")) {
         statusReads += 1;
         connected = statusReads >= 2;
-        return { json: { access_point: "dbx-de", platform: "databricks", entity: "nordis-de", my_access: connected ? "connected" : "not_connected", flow: { status: connected ? "done" : "pending", error: null } } };
+        return { json: { access_point: "dbx-de", platform: "databricks", entity: "nordis-de", my_access: connected ? "connected" : "never", flow: { status: connected ? "connected" : "pending", error: null } } };
       }
       return undefined;
     });

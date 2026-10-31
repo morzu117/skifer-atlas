@@ -14,6 +14,9 @@ from ...proposals import create_access_point_proposal
 from .common import workspace_or_404
 
 router = APIRouter(prefix="/api/workspaces/{ws}/connections")
+# Un point d'accès pas encore déclaré, dans le corps : se connecter et tester avant de le
+# proposer (plan 0016). Préfixe à part : `…/connections/{ap}/…` reste sans ambiguïté.
+drafts = APIRouter(prefix="/api/workspaces/{ws}/access-point-draft")
 
 
 class DeclareRequest(BaseModel):
@@ -21,6 +24,12 @@ class DeclareRequest(BaseModel):
 
     access_point: dict
     justification: str = Field(min_length=1)
+
+
+class DraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    access_point: dict
 
 
 class PersonalTokenRequest(BaseModel):
@@ -33,6 +42,12 @@ class PersonalTokenRequest(BaseModel):
 @router.get("")
 def list_connections(ws: str) -> list[dict]:
     return connections.list_connections(workspace_or_404(ws).id)
+
+
+@router.get("/platforms")
+def platforms(ws: str) -> list[dict]:
+    """Plateformes autorisées par le référent, et celles qu'Atlas sait connecter."""
+    return connections.platforms(workspace_or_404(ws).id)
 
 
 @router.post("", status_code=201)
@@ -67,3 +82,18 @@ def test_connection(ws: str, ap: str) -> dict:
 @router.delete("/{ap}/token")
 def revoke(ws: str, ap: str) -> dict:
     return connections.revoke(workspace_or_404(ws).id, ap)
+
+
+@drafts.post("/authorize")
+def authorize_draft(ws: str, body: DraftRequest) -> dict:
+    return connections.authorize_draft(workspace_or_404(ws).id, body.access_point)
+
+
+@drafts.post("/status")
+def draft_status(ws: str, body: DraftRequest) -> dict:
+    return connections.draft_status(workspace_or_404(ws).id, body.access_point)
+
+
+@drafts.post("/test")
+def test_draft(ws: str, body: DraftRequest) -> dict:
+    return connections.check_draft(workspace_or_404(ws).id, body.access_point)

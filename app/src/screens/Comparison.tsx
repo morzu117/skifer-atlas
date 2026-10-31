@@ -475,9 +475,9 @@ function Authenticate({ ws, missing, onReady, resume }: { ws: Workspace; missing
     const timer = setInterval(async () => {
       try {
         const states = await Promise.all(missing.map((m) => api.connectionStatus(ws.id, m.access_point)));
-        const refused = states.find((s) => s.flow?.status === "error");
+        const refused = states.find((s) => s.flow?.status === "failed" || s.flow?.status === "expired");
         if (refused) {
-          setFailure({ title: "Connexion refusée", text: refused.flow?.error ?? "Le fournisseur a refusé la connexion." });
+          setFailure({ title: "Connexion échouée", text: refused.flow?.error ?? "La plateforme a refusé la connexion." });
           setWaiting([]);
           return;
         }

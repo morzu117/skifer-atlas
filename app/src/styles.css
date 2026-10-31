@@ -794,3 +794,38 @@ textarea.prop-input { resize: vertical; }
 .detail-table tbody td:first-child { white-space: nowrap; }
 .detail-table td.tone-bad, .detail-table td.tone-ok { font-weight: 600; }
 .graph-card.is-selected { outline: var(--atlas-border-strong) solid var(--atlas-warn); outline-offset: var(--atlas-halo); }
+
+/* Connexions (guide 10.6) : le panneau reprend les mesures du panneau de lancement (340 px). */
+.main-title { display: flex; flex-direction: column; gap: var(--atlas-space-1); }
+.connections-head { align-items: flex-start; flex-wrap: wrap; }
+.connections { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--atlas-space-5); }
+.connections-list { flex: 999 1 var(--atlas-connections-basis); min-width: 0; display: flex; flex-direction: column; gap: var(--atlas-space-3); }
+.connections-list .table-wrap { flex: none; }
+.connections-table { min-width: var(--atlas-connections-min-w); }
+.connections-table { font-size: var(--atlas-text-md); }
+.connections-table th, .connections-table td { padding-left: var(--atlas-space-3); padding-right: var(--atlas-space-3); }
+.connections-table td { vertical-align: top; }
+.connections-table .convergence, .connections-actions .btn { white-space: nowrap; }
+.connections-table td.mono { font-family: var(--atlas-font-mono); font-size: var(--atlas-text-md); }
+.connections-sub { display: block; font-size: var(--atlas-text-sm); color: var(--atlas-muted); }
+.connections-actions { display: flex; flex-direction: column; gap: var(--atlas-space-2); align-items: flex-start; }
+.connections-detail { padding-left: calc(var(--atlas-dot) + var(--atlas-space-2)); }
+.connections-actions .muted { font-size: var(--atlas-text-sm); }
+.connections-message { display: block; margin-top: var(--atlas-space-1); font-size: var(--atlas-text-sm); }
+.connections-failure { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-1); margin-top: var(--atlas-space-1); }
+.connections-failure .link-button { margin-left: 0; padding: 0; }
+.connections-panel { flex: 1 1 var(--atlas-launch-basis); max-width: var(--atlas-launch-w); }
+.connections-form { gap: var(--atlas-space-3); }
+.connections-form .select, .connections-form .select select { width: 100%; }
+.connections-form p { margin: 0; }
+.connections-form textarea {
+  font: inherit; font-size: var(--atlas-text-md); color: var(--atlas-ink); padding: var(--atlas-space-2) var(--atlas-space-3);
+  border: var(--atlas-border) solid var(--atlas-line); border-radius: var(--atlas-radius-md); resize: vertical;
+}
+.pat-form { display: flex; flex-direction: column; gap: var(--atlas-space-1); font-size: var(--atlas-text-sm); }
+.pat-form label { color: var(--atlas-muted); }
+.pat-form input {
+  height: var(--atlas-control-h-xs); padding: 0 var(--atlas-space-2); font: inherit;
+  border: var(--atlas-border) solid var(--atlas-line); border-radius: var(--atlas-radius-sm);
+}
+.pat-actions { display: flex; gap: var(--atlas-space-2); }

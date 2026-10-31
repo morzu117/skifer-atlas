@@ -292,14 +292,47 @@ export type MatrixRow = { kpi_id: string; label: string; domain: string | null; 
 
 export type CanonicalDiff = { base: GraphLayout & { label: string }; other: GraphLayout & { label: string }; report: DiffReport };
 
-export type ConnectionStatus = {
+/** Mon accès à un point d'accès (plan 0008) : un état, jamais de jeton. */
+export type MyAccess = "connected" | "expired" | "never";
+
+export type Connection = {
   access_point: string;
   platform: string;
+  host: string;
+  schema: string | null;
   entity: string | null;
-  my_access: string;
-  flow: { status: string; error: string | null } | null;
+  owner: string;
+  owner_name: string | null;
+  freshness: string | null;
+  allowed: boolean;
+  supported: boolean;
+  auth: "oauth" | "pat" | null;
+  my_access: MyAccess;
+  expires_in_days: number | null;
+};
+
+/** `status` d'un flux OAuth : pending, connected, failed ou expired (5 minutes). */
+export type ConnectionStatus = Connection & {
+  flow: { status: "pending" | "connected" | "failed" | "expired"; error: string | null } | null;
   error: { code: string; message: string } | null;
 };
+
+export type Platform = { id: string; label: string; supported: boolean };
+
+/** Point d'accès tel que déclaré dans access_points.yaml, sans aucun secret. */
+export type AccessPointDraft = {
+  id: string;
+  platform: string;
+  host: string;
+  warehouse_id?: string;
+  http_path?: string;
+  schema?: string;
+  entity?: string;
+  owner: string;
+  freshness?: string;
+};
+
+export type ConnectionTest = { ok: boolean; latency_ms: number | null; error: { code: string; message: string } | null };
 
 /** Erreur métier du serveur : `{"detail": {"code", "message", "issues"?}}`. */
 // --- Éditeur (plan 0013) ---------------------------------------------------------------
@@ -591,4 +624,20 @@ export const api = {
     request<ConnectionStatus>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/status`),
   authorize: (id: string, accessPoint: string) =>
     request<{ authorize_url: string }>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/authorize`, post({})),
+  connections: (id: string) => request<Connection[]>(`${ws(id)}/connections`),
+  platforms: (id: string) => request<Platform[]>(`${ws(id)}/connections/platforms`),
+  testConnection: (id: string, accessPoint: string) =>
+    request<ConnectionTest>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/test`, post({})),
+  revokeConnection: (id: string, accessPoint: string) =>
+    request<{ revoked: boolean; remote_revoked: boolean }>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/token`, { method: "DELETE" }),
+  personalToken: (id: string, accessPoint: string, token: string) =>
+    request<Connection>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/token`, { method: "PUT", body: JSON.stringify({ token }) }),
+  declareAccessPoint: (id: string, accessPoint: AccessPointDraft, justification: string) =>
+    request<{ id: number; title: string }>(`${ws(id)}/connections`, post({ access_point: accessPoint, justification })),
+  authorizeDraft: (id: string, accessPoint: AccessPointDraft) =>
+    request<{ authorize_url: string }>(`${ws(id)}/access-point-draft/authorize`, post({ access_point: accessPoint })),
+  draftStatus: (id: string, accessPoint: AccessPointDraft) =>
+    request<ConnectionStatus>(`${ws(id)}/access-point-draft/status`, post({ access_point: accessPoint })),
+  testDraft: (id: string, accessPoint: AccessPointDraft) =>
+    request<ConnectionTest>(`${ws(id)}/access-point-draft/test`, post({ access_point: accessPoint })),
 };

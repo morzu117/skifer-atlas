@@ -132,4 +132,8 @@
   --atlas-progress-h: 6px;         /* barre de progression par plateforme */
   --atlas-matrix-min-w: 480px;     /* en dessous, la matrice et le détail défilent */
   --atlas-matrix-spacing: 4px;     /* espace entre les cellules de la matrice */
+
+  /* Ajouts du plan 0016 (connexions) */
+  --atlas-connections-basis: 520px;  /* tableau des points d'accès : flex 999 1 520px */
+  --atlas-connections-min-w: 600px;  /* en dessous, le tableau défile */
 }

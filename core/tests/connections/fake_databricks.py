@@ -1,5 +1,10 @@
 """Faux espace Databricks local : OIDC (découverte, autorisation, jetons, révocation) et
-API d'exécution de requêtes SQL. Il n'écoute que sur 127.0.0.1, sur un port libre."""
+API d'exécution de requêtes SQL. Il n'écoute que sur 127.0.0.1, sur un port libre.
+
+    uv run --project core python core/tests/connections/fake_databricks.py 8796
+
+le lance seul sur un port donné, pour les tests de bout en bout et les démonstrations de
+l'écran Mes connexions (plan 0016)."""
 
 from __future__ import annotations
 
@@ -176,10 +181,10 @@ def _handler(state: State, base: list[str]):
 
 
 class FakeDatabricks:
-    def __init__(self) -> None:
+    def __init__(self, port: int = 0) -> None:
         self.state = State()
         base: list[str] = []
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _handler(self.state, base))
+        self.server = ThreadingHTTPServer(("127.0.0.1", port), _handler(self.state, base))
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
         base.append(self.url)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -188,3 +193,11 @@ class FakeDatabricks:
     def close(self) -> None:
         self.server.shutdown()
         self.server.server_close()
+
+
+if __name__ == "__main__":
+    import sys
+
+    fake = FakeDatabricks(int(sys.argv[1]) if len(sys.argv) > 1 else 0)
+    print(fake.url, flush=True)
+    fake.thread.join()
