@@ -478,3 +478,28 @@ def test_cli_compare_errors(capsys, space):
     assert "canonical_not_rebindable" in capsys.readouterr().err
     assert main(["compare", "espace-inconnu", "revenu-net", "--variants", "nordis-de",
                  "--scope", SCOPE]) == 1
+
+
+def test_concurrent_reads_of_the_history(tmp_path):
+    """L'index existe (catalogue) sans le schéma `results` : les premières lectures
+    simultanées le créent chacune. Sans verrou, DuckDB répondait « Catalog write-write
+    conflict » (500 à l'ouverture de l'écran Comparaison)."""
+    errors: list[Exception] = []
+    for attempt in range(10):
+        db = tmp_path / f"index-{attempt}.duckdb"
+        duckdb.connect(str(db)).close()  # l'index du catalogue, sans comparaison
+        start = threading.Barrier(8)
+
+        def read(db=db, start=start):
+            try:
+                start.wait()
+                store.history(db)
+            except Exception as error:  # noqa: BLE001 — remonté par l'assertion
+                errors.append(error)
+
+        threads = [threading.Thread(target=read) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    assert errors == []
