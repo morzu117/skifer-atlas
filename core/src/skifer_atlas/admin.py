@@ -53,7 +53,7 @@ def _current(workspace_id: str) -> tuple[Workspace, Governance, str]:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     governance = parse_governance(text)[0]
     # Le compte de l'hébergeur, comme pour les propositions qui en découlent.
-    account = (host_account(workspace.git_remote, read_meta(repo).main_branch)
+    account = (host_account(workspace.git_remote, read_meta(repo).main_branch, workspace.id)
                if workspace.git_remote else "") or workspace.account
     if governance is None or account not in space_referents(governance):
         raise RepoError("forbidden", "L'administration est réservée aux référents de "

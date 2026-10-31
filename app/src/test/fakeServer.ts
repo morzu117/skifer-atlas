@@ -28,7 +28,8 @@ export function fakeServer(handler: Handler) {
       if (reply === undefined) reply = { status: 404, json: { detail: { code: "not_found", message: path } } };
       if (reply === "down") throw new TypeError("Failed to fetch");
       const { status = 200, json = {} } = await reply;
-      return new Response(JSON.stringify(json), { status, headers: { "Content-Type": "application/json" } });
+      // 204 : une réponse sans corps, comme le vrai serveur.
+      return new Response(status === 204 ? null : JSON.stringify(json), { status, headers: { "Content-Type": "application/json" } });
     }),
   );
   return {

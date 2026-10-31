@@ -1,6 +1,8 @@
 """Coffre personnel : le trousseau de l'OS, rangé par espace (plan 0008, ADR 0001).
 
-Service `skifer-atlas`, compte `<espace>/<point d'accès>`. Le backend est choisi
+Service `skifer-atlas`, compte `<espace>/<point d'accès>`, et `<espace>/@github` pour le
+jeton GitHub de l'espace (plan 0025) : `@` n'entre dans aucun identifiant de point
+d'accès, les deux ne peuvent pas se confondre. Le backend est choisi
 explicitement selon le système, jamais par la découverte de `keyring` : pas de repli
 silencieux sur un fichier en clair. Sans trousseau utilisable, `vault_unavailable`.
 
@@ -22,6 +24,7 @@ from ..repo.git import RepoError
 from .model import Credential
 
 SERVICE = "skifer-atlas"
+GITHUB_ENTRY = "@github"
 
 
 class MemoryKeyring(KeyringBackend):
@@ -84,7 +87,8 @@ def system_keyring() -> KeyringBackend:
 
 
 def _account(workspace_id: str, access_point_id: str) -> str:
-    if not is_workspace_id(workspace_id) or not is_workspace_id(access_point_id):
+    entry_ok = access_point_id == GITHUB_ENTRY or is_workspace_id(access_point_id)
+    if not is_workspace_id(workspace_id) or not entry_ok:
         raise RepoError("not_found", "Espace ou point d'accès invalide.")
     return f"{workspace_id}/{access_point_id}"
 
