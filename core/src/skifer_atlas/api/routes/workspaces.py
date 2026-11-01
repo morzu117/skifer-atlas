@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
 from ...admin import is_space_referent
+from ...dbfile import without_waiting
 from ...index import ensure_index, index_fresh
 from ...proposals import list_proposals
 from ...repo.git import RepoError
@@ -35,10 +36,12 @@ class JoinRequest(BaseModel):
 def _counts(ws: Workspace) -> dict:
     """Compteurs de la carte d'accueil, sans réseau côté Git : l'index du clone, et les
     propositions qui attendent ma revue d'après le dernier fetch. Un compteur
-    indisponible vaut `None` ; il n'empêche pas la liste."""
+    indisponible vaut `None` ; il n'empêche pas la liste, ni ne la retarde : une base
+    occupée par un autre processus ne fait pas attendre (ADR 0032)."""
     found: dict = {"kpi": None, "concept": None, "open_proposals": None}
     try:
-        connection = ensure_index(repo_dir(ws.id), index_path(ws.id))
+        with without_waiting():
+            connection = ensure_index(repo_dir(ws.id), index_path(ws.id))
         try:
             kinds = dict(connection.execute(
                 'SELECT kind, count(*) FROM "index".documents GROUP BY kind').fetchall())

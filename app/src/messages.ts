@@ -8,6 +8,10 @@ const KNOWN: Record<string, Explained> = {
     title: "Git est introuvable sur ce poste",
     text: "Installez Git (git-scm.com), puis relancez Skifer Atlas.",
   },
+  index_busy: {
+    title: "Base de l'espace occupée",
+    text: "Un autre processus Atlas (la ligne de commande, par exemple) utilise la base de cet espace. Réessayez quand il aura fini.",
+  },
   git_timeout: {
     title: "Git ne répond pas",
     text: "Le dépôt met trop de temps à répondre. Vérifiez la connexion, puis réessayez.",

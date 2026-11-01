@@ -40,7 +40,7 @@ Le modèle des documents (dix types de nœuds, concept, KPI, déclinaison) est d
 
 ## API locale
 
-Le serveur n'écoute que sur `127.0.0.1` et refuse de démarrer sans token de session : dans l'application, Tauri choisit le port et génère le token (`ATLAS_PORT`, `ATLAS_TOKEN`). Les données (registre des espaces, clones, index `atlas.duckdb`) sont dans le dossier de données de l'utilisateur, ou dans `ATLAS_DATA_DIR` s'il est défini.
+Le serveur n'écoute que sur `127.0.0.1` et refuse de démarrer sans token de session : dans l'application, Tauri choisit le port et génère le token (`ATLAS_PORT`, `ATLAS_TOKEN`). Les données (registre des espaces, clones, index `atlas.duckdb`) sont dans le dossier de données de l'utilisateur, ou dans `ATLAS_DATA_DIR` s'il est défini. La CLI et le serveur peuvent ouvrir la même base : DuckDB verrouille le fichier, l'un attend que l'autre l'ait refermé, au plus 10 s, puis répond `index_busy` (503) ; plan 0028, ADR 0032.
 
 ```sh
 export ATLAS_TOKEN=$(openssl rand -hex 16)

@@ -191,3 +191,96 @@ def test_sync_refreshes_the_catalog(client, joined):
     git(joined, "push", "--quiet", "origin", "main")
     assert client.post(f"{WS}/sync").json()["status"] == "fast_forward"
     assert "taux-de-service" not in [r["id"] for r in client.get(f"{WS}/catalog").json()]
+
+
+def test_a_base_held_by_another_process_answers_index_busy(client, joined, monkeypatch):
+    """ADR 0032 : la CLI garde la base ouverte trop longtemps, l'API le dit."""
+    import subprocess
+    import sys
+
+    from skifer_atlas import dbfile
+
+    monkeypatch.setattr(dbfile, "WAIT_SECONDS", 0.3)
+    holder = subprocess.Popen(
+        [sys.executable, "-c", ("import sys, time, duckdb; c = duckdb.connect(sys.argv[1]); "
+                                "print('ouverte', flush=True); time.sleep(30)"),
+         str(index_path("groupe-nordis"))],
+        stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "ouverte"
+        response = client.get(f"{WS}/catalog")
+    finally:
+        holder.kill()
+        holder.wait()
+    assert response.status_code == 503 and response.json()["detail"]["code"] == "index_busy"
+    assert client.get(f"{WS}/catalog").status_code == 200
+
+
+def test_a_busy_base_does_not_delay_the_workspace_list(client, joined):
+    """ADR 0032 : les compteurs de la liste des espaces n'attendent pas une base occupée ;
+    sinon la coque de chaque écran attendrait `WAIT_SECONDS` avant d'afficher l'écran."""
+    import subprocess
+    import sys
+    import time
+
+    holder = subprocess.Popen(
+        [sys.executable, "-c", ("import sys, time, duckdb; c = duckdb.connect(sys.argv[1]); "
+                                "print('ouverte', flush=True); time.sleep(30)"),
+         str(index_path("groupe-nordis"))],
+        stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "ouverte"
+        started = time.monotonic()
+        response = client.get("/api/workspaces")
+        elapsed = time.monotonic() - started
+    finally:
+        holder.kill()
+        holder.wait()
+    assert response.status_code == 200
+    counts = response.json()[0]["counts"]
+    assert (counts["kpi"], counts["concept"]) == (None, None)
+    assert elapsed < 3
+
+
+def test_requests_waiting_for_a_busy_base_wait_side_by_side(joined, monkeypatch):
+    """ADR 0032 : l'écran du catalogue lit l'index par trois requêtes à la fois ; chacune
+    attend au plus `WAIT_SECONDS`, pas la somme des attentes de celles d'avant."""
+    import subprocess
+    import sys
+    import threading
+    import time
+
+    from skifer_atlas import dbfile
+    from skifer_atlas.index import ensure_index
+    from skifer_atlas.repo.git import RepoError
+
+    monkeypatch.setattr(dbfile, "WAIT_SECONDS", 0.6)
+    repo, db = repo_dir("groupe-nordis"), index_path("groupe-nordis")
+    ensure_index(repo, db).close()
+    codes = []
+
+    def read():
+        try:
+            ensure_index(repo, db).close()
+            codes.append("ok")
+        except RepoError as error:
+            codes.append(error.code)
+
+    holder = subprocess.Popen(
+        [sys.executable, "-c", ("import sys, time, duckdb; c = duckdb.connect(sys.argv[1]); "
+                                "print('ouverte', flush=True); time.sleep(30)"), str(db)],
+        stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "ouverte"
+        started = time.monotonic()
+        threads = [threading.Thread(target=read) for _ in range(3)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        elapsed = time.monotonic() - started
+    finally:
+        holder.kill()
+        holder.wait()
+    assert codes == ["index_busy"] * 3
+    assert elapsed < 1.5  # l'une après l'autre : 1,8 s
