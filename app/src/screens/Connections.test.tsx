@@ -175,7 +175,7 @@ describe("mes connexions", () => {
     expect(screen.queryByLabelText(/token/i)).not.toBeInTheDocument();
   });
 
-  it("panneau : seules les plateformes autorisées, celles à venir désactivées (critère 6)", async () => {
+  it("[S-0016-06] panneau : seules les plateformes autorisées, celles à venir désactivées (critère 6)", async () => {
     server();
     render(screenFor());
     const platform = await screen.findByRole("combobox", { name: "Plateforme (autorisées par le référent)" });
@@ -243,7 +243,7 @@ describe("mes connexions", () => {
     expect(screen.queryByRole("button", { name: /dbx-fr/ })).not.toBeInTheDocument();
   });
 
-  it("échec de l'OAuth : repli par token personnel, champ masqué vidé après l'envoi", async () => {
+  it("[S-0008-05] échec de l'OAuth : repli par token personnel, champ masqué vidé après l'envoi", async () => {
     let saved = false;
     const list = () => [connection({ access_point: "dbx-fr", auth: saved ? "pat" : null, my_access: saved ? "connected" : "never" })];
     const api = server(list, ({ method, path }) => {

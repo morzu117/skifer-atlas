@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { git, isolatedDemo, python } from "./isolation";
+import { expect, type Page } from "@playwright/test";
+import { git, isolatedDemo, python, test } from "./isolation";
 import { API, demoRemote, ensureNordis, seriousViolations } from "./demo";
 
 // Plan 0017 de bout en bout : julien.h, seul référent de Groupe Nordis, sur son propre
@@ -32,7 +32,7 @@ test.afterEach(async ({ page }) => {
 const domains = (page: Page) => page.getByRole("region", { name: "Domaines métier" });
 const save = (page: Page) => page.getByRole("button", { name: /^Enregistrer et/ });
 
-test("[S-0017-02] [S-0017-03] [S-0017-06] [S-0017-08] référent seul : bandeau, domaine sans référent, enregistrement fusionné (critères 2, 3, 6 et 8)", async ({ page }) => {
+test("[S-0006-10] [S-0006-12] [S-0017-02] [S-0017-03] [S-0017-06] [S-0017-08] référent seul : bandeau, domaine sans référent, enregistrement fusionné (critères 2, 3, 6 et 8)", async ({ page }) => {
   await asJulien(page);
   await page.goto(ADMIN);
   await expect(page.getByRole("heading", { level: 1, name: "Administration — Groupe Nordis" })).toBeVisible();
@@ -64,7 +64,7 @@ test("[S-0017-02] [S-0017-03] [S-0017-06] [S-0017-08] référent seul : bandeau,
   await expect(save(page)).toBeDisabled();
 });
 
-test("[S-0017-08] deuxième référent : le bandeau disparaît, la suite passe par une revue (critère 8)", async ({ page }) => {
+test("[S-0006-12] [S-0017-08] deuxième référent : le bandeau disparaît, la suite passe par une revue (critère 8)", async ({ page }) => {
   await asJulien(page);
   await page.goto(ADMIN);
   await page.getByRole("button", { name: "Modifier Claire M." }).click();
@@ -114,7 +114,7 @@ test("[S-0017-01] Anna n'a ni lien d'administration ni accès à l'écran ou à 
   await expect(save(page)).toHaveCount(0);
 });
 
-test("[S-0017-04] [S-0017-05] Renommer un domaine ne change que son libellé ; proposition limitée à la gouvernance", async ({ page, request }) => {
+test("[S-0006-11] [S-0017-04] [S-0017-05] Renommer un domaine ne change que son libellé ; proposition limitée à la gouvernance", async ({ page, request }) => {
   const ws = await isolatedDemo(request, JULIEN);
   await asJulien(page);
   const before = await (await request.get(`${ws.api}/admin`)).json();
@@ -144,7 +144,7 @@ test("[S-0017-04] [S-0017-05] Renommer un domaine ne change que son libellé ; p
   expect(git(ws.remote, "diff", "--name-only", next, "main").split("\n")).toEqual(["governance.yaml"]);
 });
 
-test("[S-0023-01] [S-0023-02] [S-0023-03] [S-0023-04] Retraits et rôles multiples conservés après enregistrement", async ({ page, request }) => {
+test("[S-0006-10] [S-0023-01] [S-0023-02] [S-0023-03] [S-0023-04] Retraits et rôles multiples conservés après enregistrement", async ({ page, request }) => {
   const ws = await isolatedDemo(request, JULIEN);
   await asJulien(page);
   await page.goto(`${ws.root}/administration`);

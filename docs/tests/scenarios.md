@@ -3,7 +3,7 @@
 **Règle : chaque vérification a un scénario et un test front.** Une vérification est un critère d'acceptation d'un plan (`docs/plans/00*.md`) ou une vérification à la main du « Reste à faire » de `docs/plans/README.md`. Le test front rend l'écran : parcours Playwright (`app/e2e/*.spec.ts`) ou, à défaut, test de composant Vitest (`app/src/**/*.test.tsx`). Un test core seul ne compte pas. Une vérification sans test front figure dans l'une des deux sections finales, avec la raison et le test qui la couvre malgré tout :
 
 - « Sans test front, et pourquoi » : rien ne l'affiche à l'écran (compte réel, fenêtre native Tauri, CI de release, revue produit, logique serveur sans écran) ;
-- « Sans test front, testable » : un écran la montre, mais aucun test ne la vérifie. Ce sont des tests à écrire.
+- « Sans test front, testable » : un écran la montre, mais aucun test ne la vérifie. Ce sont des tests à écrire ; il n'en reste aucun.
 
 ## Lancer les tests
 
@@ -16,39 +16,40 @@
 - `S-RAF-<nn>` : les vérifications à la main du « Reste à faire » de `docs/plans/README.md`, numérotées dans l'ordre de leurs lignes terminales ; l'intitulé « Sous Tauri » n'est qu'un regroupement (S-RAF-02 à S-RAF-08).
 - Le titre d'un test commence par tous les identifiants qu'il couvre, entre crochets : `[S-0013-02] …`. Un test se cite par son fichier et son identifiant (`app/e2e/editor.spec.ts` › `[S-0013-02]`), jamais par la suite du titre, qui peut changer.
 - Quelques titres sont produits par une boucle (`diff.spec.ts`, `validation.spec.ts`, le test éditeur de `parcours.webkit.spec.ts`) : l'identifiant figure alors dans la table des cas, au-dessus du `test(…)`.
+- D'autres boucles écrivent l'identifiant dans le gabarit du titre et produisent un test par cas : `validation-testables.spec.ts` (S-0001-02, S-0001-14, S-0002-01) et `connexions-testables.spec.ts` (S-0008-04). Le scénario le signale.
 
 ## Synthèse
 
 | Plan | Vérifications | Test front e2e | Test front Vitest seulement | Sans test front | dont testables |
 |---|---:|---:|---:|---:|---:|
-| 0001 | 14 | 8 | 0 | 6 | 3 |
-| 0002 | 11 | 2 | 0 | 9 | 6 |
+| 0001 | 14 | 11 | 0 | 3 | 0 |
+| 0002 | 11 | 8 | 0 | 3 | 0 |
 | 0003 | 10 | 8 | 0 | 2 | 0 |
-| 0004 | 8 | 1 | 0 | 7 | 1 |
-| 0005 | 11 | 5 | 0 | 6 | 2 |
-| 0006 | 13 | 2 | 0 | 11 | 7 |
-| 0007 | 9 | 3 | 0 | 6 | 1 |
-| 0008 | 9 | 0 | 0 | 9 | 5 |
-| 0009 | 10 | 3 | 1 | 6 | 2 |
+| 0004 | 8 | 2 | 0 | 6 | 0 |
+| 0005 | 11 | 7 | 0 | 4 | 0 |
+| 0006 | 13 | 9 | 0 | 4 | 0 |
+| 0007 | 9 | 4 | 0 | 5 | 0 |
+| 0008 | 9 | 5 | 0 | 4 | 0 |
+| 0009 | 10 | 5 | 1 | 4 | 0 |
 | 0010 | 10 | 9 | 0 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 7 | 7 | 0 | 0 | 0 |
 | 0013 | 11 | 11 | 0 | 0 | 0 |
 | 0014 | 7 | 7 | 0 | 0 | 0 |
 | 0015 | 7 | 5 | 2 | 0 | 0 |
-| 0016 | 6 | 5 | 0 | 1 | 1 |
+| 0016 | 6 | 6 | 0 | 0 | 0 |
 | 0017 | 8 | 8 | 0 | 0 | 0 |
 | 0018 | 6 | 1 | 0 | 5 | 0 |
 | 0019 | 6 | 1 | 0 | 5 | 0 |
-| 0020 | 4 | 3 | 0 | 1 | 1 |
+| 0020 | 4 | 4 | 0 | 0 | 0 |
 | 0021 | 7 | 5 | 0 | 2 | 0 |
-| 0022 | 6 | 5 | 0 | 1 | 1 |
+| 0022 | 6 | 6 | 0 | 0 | 0 |
 | 0023 | 4 | 4 | 0 | 0 | 0 |
 | 0024 | 4 | 2 | 2 | 0 | 0 |
-| 0025 | 6 | 5 | 0 | 1 | 1 |
+| 0025 | 6 | 6 | 0 | 0 | 0 |
 | 0026 | 9 | 9 | 0 | 0 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **221** | **133** | **5** | **83** | **31** |
+| **Total** | **221** | **164** | **5** | **52** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -136,6 +137,16 @@ Plan 0010, critère 10 · Test : `app/e2e/accueil.spec.ts` › `[S-0010-10]` (de
 - **Alors** le focus passe au titre « Catalogue », à « Connexions », à « Propositions », au titre « Propositions », au sélecteur, puis au titre « Vos espaces de travail »
 - **Et** axe-core ne relève aucune violation sérieuse ou critique sur l'accueil vide, le dialogue de création, le catalogue de l'espace créé et l'accueil à deux cartes
 
+**Plan 0025**
+
+### S-0025-04 — Rejoindre un dépôt privé après une connexion GitHub
+Plan 0025, critère 4 · Test : `app/e2e/github.spec.ts` › `[S-0025-04]`
+- **Étant donné** un espace isolé sur le serveur 8793 (julien.h) et l'adresse `https://github.com/nordis/<espace>.git` ; la route d'adhésion est interceptée : sans flux GitHub, elle répond 502 `clone_failed` (« Authentication failed »)
+- **Quand** je clique « Rejoindre un espace », saisis l'adresse et clique « Cloner et ouvrir » ; puis « Se connecter à GitHub », « Ouvrir GitHub », et « Autoriser » dans la fenêtre du faux GitHub
+- **Alors** le dialogue propose « Si le dépôt est privé, connectez-vous à GitHub », puis le groupe « Connexion à GitHub » montre le code
+- **Et** le catalogue de l'espace s'ouvre ; deux adhésions sont parties, la première sans flux, la seconde avec `github_flow`, flux que le serveur dit connecté avant de répondre
+- Limite : la seconde adhésion est servie par l'espace local, sans clone. Le clonage avec le jeton du flux est vérifié par `core/tests/repo/test_github_device.py::test_join_takes_the_token_of_a_flow_made_before_the_workspace_exists` ; un vrai dépôt privé exige un compte. Le même enchaînement est rendu en Vitest : `app/src/screens/GitHub.test.tsx` › `[S-0025-04]`.
+
 ## Catalogue
 
 Les tests de `app/e2e/catalogue.spec.ts` se suivent sur Groupe Nordis, vu par anna.k (contributrice) ; le dernier lance une comparaison.
@@ -155,6 +166,14 @@ Plan 0005, critère 4 · Test : `app/e2e/catalogue.spec.ts` › `[S-0005-04]`
 - **Quand** je choisis le domaine Finance, puis le type KPI
 - **Alors** il reste trois documents, puis deux
 - Limite : propriétaire et statut ne sont pas combinés ici ; `core/tests/repo/test_index.py::test_filters_combine`.
+
+### S-0005-05 — Un document invalide est indexé et se filtre « Invalide »
+Plan 0005, critère 5 · Test : `app/e2e/depot-testables.spec.ts` › `[S-0005-05]`
+- **Étant donné** un espace isolé sur le serveur 8793, où un commit poussé ajoute `kpis/invalide.yaml`, « Document invalide », au graphe vide ; l'espace est synchronisé
+- **Quand** j'ouvre le catalogue et choisis « Invalide » dans le filtre Statut, puis ouvre ce document dans l'éditeur
+- **Alors** le filtre vaut `invalid`, la ligne « Document invalide » s'affiche et Revenu net disparaît
+- **Et** « Validation du document » affiche « Schéma invalide »
+- Limite : le tableau n'a pas de colonne Statut (guide 10.1), et l'éditeur recalcule la validation au lieu de lire les erreurs de l'index. Le statut `invalid` et les erreurs indexées sont vérifiés par `core/tests/repo/test_index.py::test_invalid_documents_are_indexed_with_their_errors`.
 
 **Plan 0011**
 
@@ -265,6 +284,14 @@ Plan 0004, critère 1 · Test : `app/e2e/fiche.spec.ts` › `[S-0004-01]`
 - **Et** la région « Écarts au canonique » titre « Écarts au canonique v4 » et liste au moins un écart
 - Limite : un seul script est extrait. Les huit scripts du corpus, le résidu bloquant `window_function` de `08_kpi_monthly.sql` et son nœud `union` sont vérifiés par `core/tests/extract/test_extract.py::test_corpus_statuses` et `::test_monthly_kpi_union_is_a_node`.
 
+### S-0004-06 — Aucun message de résidu ne cite le SQL
+Plan 0004, critère 6 · Test : `app/e2e/depot-testables.spec.ts` › `[S-0004-06]`
+- **Étant donné** un espace isolé sur le serveur 8793, où `implementations/revenu-net/nordis-fr/databricks.sql` est remplacé par `core/tests/fixtures/sql/sentinelles.sql` : quatorze instructions semées de valeurs sentinelles (`zqx…`, `987654321`, `'ZQX_SECRET'`) ; l'espace est synchronisé
+- **Quand** j'ouvre l'onglet Implémentations de Revenu net et clique « Extraire et comparer au canonique » dans la section « nordis-fr · Databricks »
+- **Alors** la section montre le SQL semé (témoin : `ZQX_SECRET`), puis au moins un résidu
+- **Et** aucun résidu affiché ne contient `zqx`, quelle que soit la casse, ni `987654321`
+- Limite : seuls les résidus affichés sont lus ; tous les messages de l'extraction sont vérifiés par `core/tests/extract/test_extract.py::test_residue_messages_never_quote_the_sql`.
+
 **Plan 0005**
 
 ### S-0005-08 — Dépendances de Revenu net
@@ -337,12 +364,22 @@ Plan 0012, critère 7 · Test : `app/e2e/fiche.spec.ts` › `[S-0012-07]`
 
 Les scénarios S-0001-03 à S-0001-08 partent du même montage (`app/e2e/validation.spec.ts`) : Revenu net, tel que l'éditeur l'ouvre, est modifié par le test puis enregistré comme brouillon indépendant ; l'API `/editor/check` doit rendre le code attendu. Pour chaque modification, j'ouvre le brouillon dans l'éditeur et clique « Soumettre la proposition ». Le message du problème s'affiche dans « Validation du document » et l'alerte « Soumission bloquée » apparaît.
 
+Les scénarios de `app/e2e/validation-testables.spec.ts` partagent un seul espace isolé, sur le serveur 8793. Chaque cas part des fixtures de référence de `core/tests/model` (Revenu net à cinq nœuds, surcharge nordis-de, from scratch nordis-es, nœuds minimaux des dix types), les modifie, et vérifie que `/editor/check` rend le code, le `node_id` et, le cas échéant, le `path` attendus. Il enregistre le document comme brouillon à identifiant unique et l'ouvre dans l'éditeur. Le message s'affiche dans « Validation du document » ; quand le problème désigne un nœud, la ligne cite son identifiant et porte le bouton « Aller au nœud nXX ».
+
 ### S-0001-01 — Les documents de référence affichent « Schéma valide »
 Plan 0001, critère 1 · Test : `app/e2e/validation.spec.ts` › `[S-0001-01]`
 - **Étant donné** Groupe Nordis
 - **Quand** j'ouvre dans l'éditeur Revenu net, sa surcharge nordis-de, sa déclinaison from scratch nordis-es et le concept Commande
 - **Alors** chacun affiche « Schéma valide » dans « Validation du document »
 - Limite : l'indicateur porte sur le schéma ; l'absence de toute erreur est vérifiée par `core/tests/model/test_document.py::test_reference_fixtures_are_valid` et `core/tests/model/test_graph.py::test_reference_kpi_and_concept_are_clean`.
+
+### S-0001-02 — Pour chaque type de nœud, chaque champ requis manquant est signalé
+Plan 0001, critère 2 · Test : `app/e2e/validation-testables.spec.ts` › `[S-0001-02]` (boucle : un test par champ des dix types, 54 tests)
+- **Étant donné** pour chacun des dix types, son nœud minimal privé d'un champ, seul nœud du graphe (n01)
+- **Quand** j'ouvre le brouillon
+- **Alors** `/editor/check` rend `missing_field` avec le chemin `/graph/nodes/0/<champ>`, et le nœud n01 (aucun nœud pour le champ `id`)
+- **Et** le panneau affiche « Champ requis manquant : « <champ> ». », avec n01 et « Aller au nœud n01 » quand le nœud est désigné
+- Limite : la soumission n'est pas tentée. Le chargement de chaque nœud minimal valide est vérifié par `core/tests/model/test_nodes.py::test_minimal_node_is_valid`, et le contrat complet par `::test_missing_required_field`.
 
 ### S-0001-03 — Une clé inconnue est signalée
 Plan 0001, critère 3 · Test : `app/e2e/validation.spec.ts` › `[S-0001-03]`
@@ -381,6 +418,14 @@ Plan 0001, critère 8 · Test : `app/e2e/validation.spec.ts` › `[S-0001-08]`
 - **Quand** je l'ouvre et tente de soumettre
 - **Alors** le problème `duplicate_node_id` s'affiche, et la soumission est bloquée
 
+### S-0001-09 — Un YAML aux clés désordonnées est réécrit, puis stable
+Plan 0001, critère 9 · Test : `app/e2e/validation-testables.spec.ts` › `[S-0001-09]`
+- **Étant donné** le brouillon de Revenu net ouvert dans l'éditeur
+- **Quand** je clique « Éditer en YAML », remplace le texte par le même document aux clés en ordre inverse (écrit en JSON, qui est du YAML), reviens au canevas et rouvre la vue YAML
+- **Alors** le texte, relu par le presse-papiers, commence par `schema_version: 1` puis `kind: kpi`, et diffère du texte collé
+- **Et** après deux nouveaux allers-retours entre canevas et YAML, il est identique
+- Limite : un seul document est réécrit. `dump(load(f)) == f` sur toutes les fixtures canoniques est vérifié par `core/tests/model/test_io.py::test_canonical_fixtures_round_trip` ; la réécriture d'un fichier désordonné par `::test_non_canonical_file_is_rewritten_then_stable`.
+
 ### S-0001-10 — Une ancre ou un alias YAML empêche le retour au canevas
 Plan 0001, critère 10 · Test : `app/e2e/editor.spec.ts` › `[S-0001-10]`
 - **Étant donné** un brouillon indépendant de Revenu net ouvert dans l'éditeur
@@ -388,7 +433,30 @@ Plan 0001, critère 10 · Test : `app/e2e/editor.spec.ts` › `[S-0001-10]`
 - **Alors** l'alerte « YAML illisible : corriger l'erreur signalée pour revenir au canevas. » s'affiche, et la vue YAML reste ouverte
 - **Et** le panneau du bas explique « Les ancres YAML (&) ne sont pas admises (ligne 1, colonne 7) »
 
+### S-0001-14 — Une variante sans ses champs propres est refusée
+Plan 0001, critère 14 · Test : `app/e2e/validation-testables.spec.ts` › `[S-0001-14]` (boucle : trois tests)
+- **Étant donné** la surcharge nordis-de sans `overrides`, puis la déclinaison from scratch nordis-es sans `justification`, puis sans `concepts`
+- **Quand** j'ouvre chaque brouillon et clique « Soumettre la proposition »
+- **Alors** `/editor/check` rend `missing_field` au chemin du champ (`/overrides`, `/justification`, `/concepts`), et le panneau affiche « Champ requis manquant : « <champ> ». »
+- **Et** l'alerte « Soumission bloquée » apparaît
+
 **Plan 0002**
+
+### S-0002-01 — Chaque code du validateur désigne le bon nœud
+Plan 0002, critère 1 · Test : `app/e2e/validation-testables.spec.ts` › `[S-0002-01]` (boucles : treize cas de graphe, dix cas de schéma, deux de résolution ; plus quatre tests isolés)
+- **Étant donné** un brouillon par code : graphe (`reaggregation`, `ambiguous_column`, `cardinality_bypass`, `unknown_input`, `cycle`, `orphan_node`, `branch_not_merged`, `metric_op_on_rows`, `kpi_output_not_aggregated`, `concept_output_aggregated`, `missing_calendar`, `unknown_kpi_ref`, `unknown_column`) ; schéma (`unknown_key`, `unknown_node_type`, `unknown_schema_version`, `missing_field`, `forbidden_function`, `duplicate_node_id`, `invalid_value`, `todo`, `needs_curation`, `blocking_residue`) ; résolution (`unknown_override_target`, `undeclared_override`, `unbound_concept`) ; enfin `override_type_change`, `implicit_timezone_conversion` et `kpi_ref_cycle`, vus en S-0002-07, S-0002-05 et S-0002-11
+- **Quand** j'ouvre chaque brouillon
+- **Alors** `/editor/check` rend le code avec le nœud attendu (par exemple n02 pour `cycle`, n07 pour la jointure ajoutée d'`ambiguous_column`, aucun pour `unknown_schema_version`)
+- **Et** le panneau affiche le message du code, avec le nœud et son bouton « Aller au nœud » quand il en désigne un
+- Limite : le bouton n'est pas cliqué. `subquery_in_expr`, `variant_of_mismatch` et `missing_canonical` (propre à la CLI) ne sont pas exercés à l'écran ; ils sont vérifiés par `core/tests/model/test_columns.py::test_subquery_in_expr`, `core/tests/model/test_resolve.py::test_variant_of_mismatch` et `core/tests/model/test_cli.py::test_check_variant_without_its_canonical`.
+
+### S-0002-02 — Les colonnes en sortie de chaque nœud de Revenu net
+Plan 0002, critère 2 · Test : `app/e2e/validation-testables.spec.ts` › `[S-0002-02]`
+- **Étant donné** la fixture Revenu net à cinq nœuds, ouverte dans l'éditeur
+- **Quand** je sélectionne chaque nœud et ouvre l'onglet « Colonnes en sortie de nXX »
+- **Alors** n01 et n02 listent les sept colonnes des factures (`facture_id`, `entite`, `statut` en `string`, `date_facture` en `date`, `montant_ttc`, `montant_taxes`, `avoirs` en `decimal`) ; n03 y ajoute `montant_ht decimal`, n04 encore `mois_fiscal date`
+- **Et** n05 liste `mois_fiscal date`, `entite string`, `revenu_net decimal`
+- Limite : la même table de vérité est vérifiée côté serveur par `core/tests/model/test_columns.py::test_columns_at_revenu_net`.
 
 ### S-0002-03 — Une clé de jointure inconnue est refusée
 Plan 0002, critère 3 · Test : `app/e2e/validation.spec.ts` › `[S-0002-03]`
@@ -401,6 +469,29 @@ Plan 0002, critère 4 · Test : `app/e2e/validation.spec.ts` › `[S-0002-04]`
 - **Étant donné** des brouillons où l'expression de n03 devient `ROUND(montant_ttc, 2)`, puis `NOW()`
 - **Quand** j'ouvre chacun et tente de soumettre
 - **Alors** chacun affiche un problème `forbidden_function`, et la soumission est bloquée
+
+### S-0002-05 — Un `period` sur un horodatage exige un `to_date` en amont
+Plan 0002, critère 5 · Test : `app/e2e/validation-testables.spec.ts` › `[S-0002-05]`
+- **Étant donné** Revenu net où `date_facture` devient un `timestamp` en UTC
+- **Quand** j'ouvre ce brouillon, puis le même avec un nœud `to_date` (n06, `Europe/Paris`) intercalé avant n04, qui lit sa colonne `jour_facture`
+- **Alors** le premier affiche `implicit_timezone_conversion` sur n04, avec un message qui cite `to_date`
+- **Et** le second affiche « Aucun problème. » et « Compilable Databricks, Snowflake »
+- Limite : le second document perd ses points de variation, que le nœud intercalé décalerait. Les deux cas sont vérifiés côté serveur par `core/tests/model/test_columns.py::test_period_on_a_timestamp_is_refused` et `::test_period_after_an_explicit_to_date_passes`.
+
+### S-0002-07 — Une surcharge ne change pas le type d'un nœud
+Plan 0002, critère 7 · Test : `app/e2e/validation-testables.spec.ts` › `[S-0002-07]`
+- **Étant donné** la surcharge nordis-de dont le remplaçant de n03 devient un filtre
+- **Quand** j'ouvre ce brouillon
+- **Alors** `/editor/check` rend `override_type_change` sur n03, au chemin `/overrides/1/replace/type`
+- **Et** le panneau affiche le refus, qui cite le type, avec n03 et « Aller au nœud n03 »
+- Limite : le brouillon est écrit par l'API, pas saisi dans la vue YAML ; le formulaire de surcharge ne propose pas ce changement.
+
+### S-0002-11 — Un cycle de `kpi_ref` entre deux KPI est détecté
+Plan 0002, critère 11 · Test : `app/e2e/validation-testables.spec.ts` › `[S-0002-11]`
+- **Étant donné** un brouillon de Revenu net réduit à une référence à Marge brute v2, qui référence déjà Revenu net v4
+- **Quand** je l'ouvre
+- **Alors** `/editor/check` rend `kpi_ref_cycle` sur n01
+- **Et** le panneau affiche « revenu-net v4 → marge-brute v2 → revenu-net v4 », avec « Aller au nœud n01 »
 
 **Plan 0007**
 
@@ -417,6 +508,13 @@ Plan 0007, critère 2 · Test : `app/e2e/sql.spec.ts` › `[S-0007-02]`
 - **Quand** j'affiche le SQL Databricks, puis Snowflake
 - **Alors** chacun contient la garde `atlas_guard`
 - Limite : l'échec sur clé dupliquée, qui cite la jointure, et le passage en bypass avec son commentaire sont vérifiés par `core/tests/compile/test_compile.py::test_duplicate_key_on_the_one_side_fails_citing_the_join` et `::test_bypass_runs_and_leaves_a_comment`.
+
+### S-0007-06 — Une compilation répétée donne le même SQL
+Plan 0007, critère 6 · Test : `app/e2e/sql.spec.ts` › `[S-0007-06]`
+- **Étant donné** le brouillon v5 de Revenu net ouvert par `editeur?from=revenu-net`, sur Groupe Nordis
+- **Quand** pour Databricks puis Snowflake, je relève le texte de « SQL compilé », recharge la page et le relève de nouveau
+- **Alors** les deux textes sont identiques, caractère pour caractère
+- Limite : les deux compilations viennent du même processus. L'identité entre processus est vérifiée par `core/tests/compile/test_compile.py::test_compilation_is_identical_across_processes`, et l'identité à l'octet par `::test_repeated_compilation_is_byte_identical`.
 
 ### S-0007-07 — `TRY_CAST` numérique n'est pas compilable en Snowflake
 Plan 0007, critère 7 · Test : `app/e2e/sql.spec.ts` › `[S-0007-07]`
@@ -571,7 +669,19 @@ Plan 0024, critère 4 · Test : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024
 
 ## Propositions
 
-Les tests de `app/e2e/propositions.spec.ts` portent sur les cinq propositions de démonstration (`examples/propositions-nordis.py`). Trois comptes, trois serveurs sur le même dépôt nu : anna.k (autrice de la surcharge DE, serveur par défaut), claire.m (port 8798) et marc.d (port 8797), validateurs Finance. Pour claire.m, les requêtes de l'app sont relayées vers son serveur.
+Les tests de `app/e2e/propositions.spec.ts` portent sur les cinq propositions de démonstration (`examples/propositions-nordis.py`). Trois comptes, trois serveurs sur le même dépôt nu : anna.k (autrice de la surcharge DE, serveur par défaut), claire.m (port 8798) et marc.d (port 8797), validateurs Finance. Pour claire.m, les requêtes de l'app sont relayées vers son serveur. Chaque test travaille sur sa propre copie de la démonstration, que claire.m et marc.d rejoignent.
+
+`app/e2e/propositions-testables.spec.ts` fait de même : une copie par test, rejointe par les validateurs au besoin. S-0006-12 travaille sur le serveur 8793 (julien.h).
+
+**Plan 0002**
+
+### S-0002-06 — La surcharge DE remplace n03 sous son identifiant ; celle de n02 est hors points
+Plan 0002, critère 6 · Test : `app/e2e/propositions.spec.ts` › `[S-0002-06]`
+- **Étant donné** claire.m sur la proposition « Revenu net · nordis-de »
+- **Quand** je lis le graphe « Déclinaison nordis-de v4 (proposée) » et le bandeau de la proposition
+- **Alors** la carte n03 porte « Normal » et une bordure pointillée (point de variation déclaré) ; la carte n02 porte « Divergence critique »
+- **Et** l'alerte « Surcharge hors des points de variation déclarés » nomme « Factures validées » (n02)
+- Limite : l'écran montre l'effet de la résolution, pas son résultat. Le remplacement de n03 sous le même identifiant et les classes `declared` / `undeclared` sont vérifiés par `core/tests/model/test_resolve.py::test_de_override_replaces_n03_and_classifies_overrides`.
 
 **Plan 0003**
 
@@ -585,6 +695,28 @@ Plan 0003, critère 2 · Test : `app/e2e/propositions.spec.ts` › `[S-0003-02]`
 
 **Plan 0006**
 
+### S-0006-01 — Validations requises selon le type de proposition
+Plan 0006, critère 1 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0006-01]`
+- **Étant donné** une copie de la démonstration, et une nouvelle proposition, créée par l'API, qui ne change sur nordis-fr que le texte d'un point déclaré
+- **Quand** j'ouvre Propositions
+- **Alors** le canonique v5 affiche « Validations : 1 / 2 » ; nordis-de (hors points) « 0 / 2 (canonique requis) » ; nordis-es (from scratch) « 1 / 2 (canonique requis) »
+- **Et** la nouvelle proposition affiche « Validations : 0 / 1 »
+
+### S-0006-02 — Les approbations non habilitées ne comptent pas
+Plan 0006, critère 2 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0006-02]`
+- **Étant donné** une copie de la démonstration, où marc.d a approuvé le canonique v5 (« 1 / 2 »)
+- **Quand** un commit poussé fait de marc.d un validateur Supply seulement et l'espace est synchronisé ; puis anna.k approuve par l'API sa propre proposition DE, puis le canonique v5 (n° 3), en simple contributrice ; enfin marc.d approuve DE depuis son serveur
+- **Alors** après le changement de rôle, le canonique v5 et DE affichent « 0 / 2 »
+- **Et** l'approbation de l'autrice est refusée (422 `cannot_review_own`) ; celles de la contributrice et du validateur Supply sont enregistrées, mais les deux compteurs restent à « 0 / 2 »
+- Limite : le refus de l'autrice à l'écran est S-0014-04. Les règles d'habilitation sont vérifiées par `core/tests/repo/test_governance.py::test_only_eligible_approvals_on_the_head_count` et `core/tests/repo/test_proposals.py::test_rights`.
+
+### S-0006-03 — Un nouveau commit remet le décompte à zéro
+Plan 0006, critère 3 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0006-03]`
+- **Étant donné** une copie de la démonstration, où claire.m a approuvé DE depuis son serveur : « Validations : 1 / 2 »
+- **Quand** un commit est poussé par git sur la branche de la proposition, puis je recharge
+- **Alors** DE affiche « Validations : 0 / 2 »
+- **Et** la proposition sélectionnée n'a pas de bouton « Fusionner »
+
 ### S-0006-04 — La fusion incrémente la version, que la fiche montre
 Plan 0006, critère 4 · Test : `app/e2e/propositions.spec.ts` › `[S-0006-04]`
 - **Étant donné** la proposition DE approuvée par claire.m à l'écran et par marc.d par l'API : « Validations : 2 / 2 (canonique requis) · prête à fusionner »
@@ -592,12 +724,28 @@ Plan 0006, critère 4 · Test : `app/e2e/propositions.spec.ts` › `[S-0006-04]`
 - **Alors** « Proposition n° 5 fusionnée » s'affiche, et la fiche `revenu-net--nordis-de` affiche « v4 · validée le … »
 - Limite : le tag Git n'est pas lu ici ; `core/tests/repo/test_proposals.py::test_full_cycle` vérifie `doc/revenu-net/v5`.
 
+### S-0006-05 — Une base avancée refuse la fusion
+Plan 0006, critère 5 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0006-05]`
+- **Étant donné** une copie de la démonstration, DE approuvée par claire.m et marc.d (« 2 / 2 »), vue par claire.m ; puis un commit poussé sur la branche principale change le document DE
+- **Quand** je clique « Fusionner »
+- **Alors** le serveur répond 409 `stale_base`, et une alerte dit que le document « a changé depuis la proposition »
+- **Et** la branche principale du dépôt distant n'a pas bougé
+
 ### S-0006-07 — Le cycle de revue passe sur l'hébergeur local
 Plan 0006, critère 7 · Test : `app/e2e/propositions.spec.ts` › `[S-0006-07]`
 - **Étant donné** trois serveurs locaux sur un même dépôt nu, sans hébergeur distant (`LocalHost`)
 - **Quand** claire.m approuve à l'écran, marc.d approuve par l'API, puis claire.m fusionne
 - **Alors** le compteur passe de 0 / 2 à 1 / 2 puis 2 / 2, la fusion aboutit, et la file `?status=merged` affiche DE « Fusionnée »
 - Limite : la proposition vient du script de démonstration (la création depuis l'éditeur est S-0013-10) ; aucun commentaire n'est posté, et seules les requêtes du navigateur restent locales. Le cycle complet, commentaire compris, est vérifié par `core/tests/repo/test_proposals.py::test_full_cycle`.
+
+### S-0006-12 — Seul habilité : fusion sans revue, avec mention et trailer, jusqu'à un deuxième habilité
+Plan 0006, critère 12 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0006-12]` ; `app/e2e/administration.spec.ts` › `[S-0006-12]` (deux tests, la gouvernance)
+- **Étant donné** une copie de la démonstration sur le serveur 8793, dont la gouvernance ne garde que julien.h, sans référent ni validateur de domaine ; une proposition sur Revenu net, créée par l'API
+- **Quand** je l'ouvre dans Propositions et clique « Fusionner » ; puis claire.m devient validatrice Finance par un commit poussé, et une nouvelle proposition sur Revenu net est créée
+- **Alors** la proposition affiche « Fusionnée sans revue : aucun autre compte habilité », la fusion aboutit (« Proposition n° N fusionnée »), et le commit de tête porte le trailer `Atlas-Review: none (no other eligible approver)`
+- **Et** la nouvelle proposition affiche « Validations : 0 / 2 », sans la mention ni le bouton « Fusionner »
+- **Et** côté gouvernance, dans Administration, julien.h seul référent enregistre « fusionnée sans revue » ; après la nomination d'une deuxième référente, l'enregistrement suivant ouvre une proposition à relire (S-0017-08)
+- Limite : une proposition qui retire les autres habilités ne profite pas de l'exception ; c'est vérifié par `core/tests/repo/test_proposals.py::test_removing_the_other_referents_does_not_unlock_the_exception`. Le rendu de la mention est aussi testé en Vitest dans `app/src/screens/Proposals.test.tsx` (deux tests, sans identifiant).
 
 **Plan 0014**
 
@@ -660,6 +808,22 @@ Plan 0009, critère 1 · Test : `app/e2e/comparaison.spec.ts` › `[S-0009-01]`
 - **Quand** je clique « Lancer la comparaison » et attends « Relancer »
 - **Alors** la matrice affiche « Revenu net × nordis-de : 94 % de validation, écart max 6,1 % »
 - Limite : le nœud divergent n02 est lu dans le détail par S-0015-02 ; les valeurs exactes sont vérifiées par `core/tests/compare/test_compare.py::test_mockup_values`.
+
+### S-0009-03 — Une cellule absente d'un côté est hors tolérance
+Plan 0009, critère 3 · Test : `app/e2e/comparaison-cellules.spec.ts` › `[S-0009-03]`
+- **Étant donné** un espace isolé et une réponse simulée pour la comparaison n° 424242 : quatre cellules de nordis-de, dont une sans valeur canonique et une sans valeur de la déclinaison
+- **Quand** j'ouvre `comparaison?id=424242&variant=nordis-de`
+- **Alors** le détail compte quatre lignes ; la valeur manquante s'affiche « absente », côté canonique pour l'une, côté déclinaison pour l'autre
+- **Et** ces deux lignes sont marquées « hors tolérance » (classe `is-out`), avec « — » pour l'écart
+- Limite : la réponse du serveur est simulée ; le décompte hors tolérance est vérifié par `core/tests/compare/test_compare.py::test_cells_missing_on_one_side_are_out_of_tolerance`.
+
+### S-0009-04 — Canonique à 0 : écart nul si la déclinaison vaut 0, sinon hors tolérance
+Plan 0009, critère 4 · Test : `app/e2e/comparaison-cellules.spec.ts` › `[S-0009-04]`
+- **Étant donné** la même réponse simulée : une cellule à 0 des deux côtés, une autre à 0 au canonique et 12 dans la déclinaison
+- **Quand** j'ouvre le détail
+- **Alors** la première affiche 0 et 0, l'écart « 0,0 % », et n'est pas hors tolérance
+- **Et** la seconde affiche 0 et 12, l'écart « — », et elle est marquée « hors tolérance »
+- Limite : la réponse est simulée ; la règle de calcul est vérifiée par `core/tests/compare/test_compare.py::test_gap`.
 
 ### S-0009-05 — Une jointure contournée est signalée avant le lancement
 Plan 0009, critère 5 · Test : `app/src/screens/Comparison.test.tsx` › `[S-0009-05]` (Vitest)
@@ -757,6 +921,14 @@ Plan 0022, critère 4 · Test : `app/e2e/comparaison-refus.spec.ts` › `[S-0022
 - **Quand** je retire `factura_id` (rattachée à `commande_id`) et son rattachement, synchronise et recharge
 - **Alors** nordis-es devient désactivée, et « Non comparable : … commande_id » s'affiche
 
+### S-0022-05 — Une déclinaison sans concept commun n'est pas comparable
+Plan 0022, critère 5 · Test : `app/e2e/comparaison-refus.spec.ts` › `[S-0022-05]`
+- **Étant donné** un espace isolé où la source de nordis-es est rattachée au seul concept `client-actif`, document toujours valide ; l'espace est synchronisé
+- **Quand** j'ouvre Comparaison
+- **Alors** nordis-es est désactivée et décochée
+- **Et** « Non comparable : … aucune de ses sources n'est rattachée à un concept des sources du canonique » s'affiche
+- Limite : la source commune (date de référence lue sur Snowflake) n'est pas encore affichée, `Rebound.common` n'étant pas exposé (Reste à faire). Elle est vérifiée par `core/tests/compare/test_compare.py::test_rebound_canonical_keeps_a_common_source` ; le refus par `::test_a_variant_sharing_no_concept_is_refused`.
+
 ### S-0022-06 — nordis-es proposée, cochée, et à 75 % dans la matrice
 Plan 0022, critère 6 · Test : `app/e2e/comparaison.spec.ts` › `[S-0022-06]`
 - **Étant donné** l'écran Comparaison de Revenu net
@@ -767,6 +939,49 @@ Plan 0022, critère 6 · Test : `app/e2e/comparaison.spec.ts` › `[S-0022-06]`
 ## Connexions
 
 Les tests de `app/e2e/connexions.spec.ts` se suivent sur Groupe Nordis (anna.k, coffre en mémoire). dbx-fr pointe vers le faux Databricks, dont l'OAuth s'ouvre dans une fenêtre du navigateur et revient sur le serveur local (port 8020) ; snow-de (SSO) et snow-es (paire de clés) vers le faux Snowflake. `app/e2e/github.spec.ts` utilise le serveur 8793 et un faux GitHub (port 8792).
+
+Les tests de `app/e2e/connexions-testables.spec.ts` travaillent chacun sur un espace isolé du serveur 8793 (julien.h). Ils pilotent le faux Databricks par sa route de test `/__test__/configure` (OAuth refusé, jeton expiré, rafraîchissement refusé), remise à zéro après chaque test.
+
+**Plan 0008**
+
+### S-0008-02 — Le même point d'accès dans deux espaces : deux accès indépendants
+Plan 0008, critère 2 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-02]`
+- **Étant donné** deux espaces isolés qui déclarent chacun dbx-fr
+- **Quand** je connecte dbx-fr par OAuth dans chacun, puis révoque l'accès dans le premier
+- **Alors** le premier revient à « Jamais connecté »
+- **Et** le second reste « Connecté · session OAuth », et « Tester » y donne « Connexion OK · N ms »
+- Limite : coffre en mémoire ; les deux entrées du trousseau sont vérifiées par `core/tests/connections/test_connections.py::test_same_access_point_in_two_spaces_gives_two_entries`.
+
+### S-0008-03 — « Tester » nomme un hôte injoignable
+Plan 0008, critère 3 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-03]`
+- **Étant donné** un espace isolé où dbx-fr pointe, par un commit poussé, vers un port local libre où rien n'écoute ; un token personnel factice est rangé par l'API
+- **Quand** je clique « Tester Databricks · dbx-fr »
+- **Alors** le statut de la ligne affiche « Hôte injoignable »
+- Limite : `ok` sur un warehouse réel exige un compte : `core/tests/connections/test_connections.py::test_real_warehouse` (marqué `databricks`) ; le cas du faux serveur par `::test_test_is_ok_then_explicit_for_an_unreachable_host`.
+
+### S-0008-04 — Un jeton expiré est rafraîchi ; un refus donne « Session expirée »
+Plan 0008, critère 4 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-04]` (boucle : deux tests, rafraîchissement accepté puis refusé)
+- **Étant donné** le faux Databricks qui délivre des jetons déjà expirés, et refuse ou non le rafraîchissement
+- **Quand** je connecte dbx-fr par OAuth
+- **Alors** si le rafraîchissement est accepté, la ligne affiche « Connecté », et « Tester » donne « Connexion OK · N ms »
+- **Et** s'il est refusé, la ligne affiche « Session expirée » et le bouton « Reconnecter Databricks · dbx-fr »
+- Limite : le rafraîchissement lui-même est vérifié par `core/tests/connections/test_connections.py::test_expired_token_is_refreshed` et `::test_refused_refresh_gives_expired`.
+
+### S-0008-05 — Repli par token personnel : champ masqué, vidé, token jamais rendu
+Plan 0008, critère 5 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-05]`
+- **Étant donné** un espace isolé et le faux Databricks qui refuse l'OAuth ; avant l'échec, aucun champ « Token personnel Databricks »
+- **Quand** je clique « Se connecter à Databricks · dbx-fr » (alerte `access_denied`), puis « Utiliser un token personnel », saisis un token factice et clique « Ranger dans le coffre »
+- **Alors** le champ est de type `password`, `autocomplete="off"`, et il est vide avant que la réponse du serveur n'arrive ; la requête porte exactement le token
+- **Et** la ligne affiche « Connecté · token personnel », y compris après rechargement ; le token n'apparaît ni dans les réponses de `connections` et `connections/dbx-fr/status`, ni dans les réponses relevées pendant le test, ni dans le HTML, les champs, le stockage du navigateur ou `sessionStorage`
+- Limite : coffre en mémoire ; le trousseau est vérifié par `core/tests/connections/test_connections.py::test_personal_token_goes_to_the_vault_and_never_comes_back`. Le même repli est rendu en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0008-05]`. C'est une exception assumée à la règle du guide 10.6 (voir plus bas).
+
+### S-0008-07 — Une plateforme non autorisée est refusée à la déclaration
+Plan 0008, critère 7 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-07]`
+- **Étant donné** un espace isolé dont la gouvernance retire Databricks des plateformes autorisées, par un commit poussé ; l'espace est synchronisé
+- **Quand** j'ouvre « Mes connexions », puis déclare par l'API un point d'accès Databricks
+- **Alors** la ligne dbx-fr affiche « Plateforme retirée par le référent »
+- **Et** l'API répond 422 `invalid_access_point`, avec le problème `platform_not_allowed`
+- Limite : la déclaration passe par l'API, le panneau ne proposant plus Databricks (S-0016-06). `core/tests/connections/test_connections.py::test_platform_removed_from_allowed_platforms_cannot_be_used`.
 
 **Plan 0016**
 
@@ -803,6 +1018,13 @@ Plan 0016, critère 5 · Test : `app/e2e/connexions.spec.ts` › `[S-0016-05]`
 - **Étant donné** les valeurs `at-secret` et `rt-secret` que rend le faux serveur OAuth
 - **Quand** dbx-fr vient d'être connecté, puis révoqué
 - **Alors** ni le HTML de la page, ni `localStorage`, ni `sessionStorage` ne les contiennent, à chaque étape
+
+### S-0016-06 — Une plateforme non autorisée n'apparaît pas dans le panneau
+Plan 0016, critère 6 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0016-06]`
+- **Étant donné** le même espace isolé, Databricks retiré de la gouvernance (S-0008-07)
+- **Quand** je clique « Ajouter un point d'accès »
+- **Alors** la liste Plateforme du panneau « Nouveau point d'accès » propose Snowflake, et pas Databricks
+- Limite : les plateformes à venir, désactivées, sont vérifiées en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0016-06]`.
 
 **Plan 0018**
 
@@ -853,7 +1075,35 @@ Plan 0025, critère 6 · Test : `app/e2e/github.spec.ts` › `[S-0025-06]`
 
 ## Administration
 
-julien.h, seul référent de Groupe Nordis, a son serveur (port 8795) et son dépôt de démonstration ; les requêtes de l'app y sont relayées. Les tests qui écrivent dans le dépôt travaillent sur un espace isolé.
+julien.h, seul référent de Groupe Nordis, a son serveur (port 8795) et son dépôt de démonstration ; les requêtes de l'app y sont relayées. Les tests qui écrivent dans le dépôt travaillent sur un espace isolé. Ceux de `app/e2e/depot-testables.spec.ts` le font sur le serveur 8793, où julien.h est aussi seul référent : ils modifient le dépôt par git, du côté du dépôt nu ou du clone, puis cliquent « Synchroniser ».
+
+**Plan 0005**
+
+### S-0005-11 — Une divergence au sync est signalée, sans toucher au clone
+Plan 0005, critère 11 · Test : `app/e2e/depot-testables.spec.ts` › `[S-0005-11]`
+- **Étant donné** un espace isolé dont le clone porte un commit local, et le dépôt nu un autre commit poussé ailleurs
+- **Quand** je clique « Synchroniser » dans Administration
+- **Alors** l'alerte de la région « Dépôt Git de l'espace » dit « Le dépôt local a divergé du dépôt distant »
+- **Et** le clone garde son commit de tête, sans modification en cours ; le fichier distant n'y est pas, le fichier local est intact
+- Limite : le code `sync_conflict` n'est pas lu par l'e2e ; le test Vitest `app/src/screens/Administration.test.tsx` › `[S-0005-11]` simule la réponse 409, et `core/tests/repo/test_catalog_api.py::test_sync_conflict` la vérifie. Ce scénario a révélé un défaut : l'écran n'affichait que la conduite à tenir, sans la cause.
+
+**Plan 0006**
+
+### S-0006-10 — Pas de gouvernance sans référent ; un domaine sans référent est averti
+Plan 0006, critère 10 · Test : `app/e2e/administration.spec.ts` › `[S-0006-10]` (deux tests)
+- **Étant donné** l'administration de Groupe Nordis par julien.h, seul référent, puis un espace isolé
+- **Quand** j'ajoute le domaine Data ; puis, dans l'espace isolé, j'ouvre « Modifier Julien H. »
+- **Alors** Marketing, puis Data, affichent « Aucun référent »
+- **Et** « Retirer de l'espace » est désactivé pour le dernier référent
+- Limite : l'écran empêche de produire une gouvernance sans référent ; le refus par le serveur est vérifié par `core/tests/repo/test_governance.py::test_a_governance_without_referent_is_refused` et `core/tests/repo/test_proposals.py::test_governance_without_referent_is_refused`. L'alerte est aussi rendue en Vitest : `app/src/screens/Administration.test.tsx` › `[S-0006-10]`.
+
+### S-0006-11 — CODEOWNERS suit la gouvernance ; une modification à la main est signalée
+Plan 0006, critère 11 · Test : `app/e2e/administration.spec.ts` › `[S-0006-11]` ; `app/e2e/depot-testables.spec.ts` › `[S-0006-11]`
+- **Étant donné** un espace isolé sans CODEOWNERS ; puis un autre où un commit poussé écrit `.github/CODEOWNERS` à la main (`* @intrus`)
+- **Quand** j'enregistre le renommage d'un domaine, puis l'ajout d'un domaine sans référent ; dans le second espace, je clique « Synchroniser »
+- **Alors** le premier enregistrement change exactement `.github/CODEOWNERS` et `governance.yaml` dans la même proposition ; le second ne change que `governance.yaml`, CODEOWNERS étant régénéré à l'identique
+- **Et** la synchronisation affiche « CODEOWNERS a été modifié à la main » dans la région « Dépôt Git de l'espace »
+- Limite : l'ordre des lignes générées est vérifié par `core/tests/repo/test_governance.py::test_codeowners_is_deterministic_and_ordered`, la détection par `::test_codeowners_drift`.
 
 **Plan 0017**
 
@@ -893,7 +1143,7 @@ Plan 0017, critère 6 · Test : `app/e2e/administration.spec.ts` › `[S-0017-06
 - **Étant donné** l'écran d'administration de julien.h
 - **Quand** il s'affiche
 - **Alors** il ne contient aucun champ `password`
-- Limite : l'absence de texte de token n'est pas cherchée dans la page ; le test Vitest « sections de la maquette, référent seul, aucun champ de token » de `app/src/screens/Administration.test.tsx` la vérifie, sans identifiant.
+- Limite : l'absence de texte de token n'est pas cherchée dans la page ; le test Vitest `app/src/screens/Administration.test.tsx` › `[S-0017-06]` la vérifie.
 
 ### S-0017-07 — « Synchroniser » met à jour la date et réindexe
 Plan 0017, critère 7 · Test : `app/e2e/administration.spec.ts` › `[S-0017-07]`
@@ -924,12 +1174,20 @@ Plan 0020, critère 2 · Test : `app/e2e/administration.spec.ts` › `[S-0020-02
 - **Alors** « Déjà à jour avec le dépôt distant. » s'affiche, et la liste des tags du dépôt distant est inchangée
 - Limite : le commit sans changement de version est vérifié par `core/tests/repo/test_workspace_repo.py::test_sync_leaves_versions_tagged_by_atlas_alone`.
 
+### S-0020-03 — Une poussée de tag refusée garde le tag local et le signale
+Plan 0020, critère 3 · Test : `app/e2e/depot-testables.spec.ts` › `[S-0020-03]`
+- **Étant donné** un espace isolé où Revenu net passe en v5 par une fusion git (`--no-ff`) poussée hors d'Atlas ; le dépôt nu refuse les tags (crochet `pre-receive`)
+- **Quand** je clique « Synchroniser » dans Administration
+- **Alors** la région « Dépôt Git de l'espace » affiche « Les tags n'ont pas pu être poussés »
+- **Et** le clone porte `doc/revenu-net/v5` sur le commit de fusion, et le dépôt nu n'a pas ce tag
+- Limite : plusieurs avertissements à la fois sont rendus en Vitest : `app/src/screens/Administration.test.tsx` › `[S-0020-03]`.
+
 ### S-0020-04 — L'écran affiche l'avertissement du sync
 Plan 0020, critère 4 · Test : `app/e2e/administration.spec.ts` › `[S-0020-04]`
 - **Étant donné** la v5 fusionnée hors d'Atlas
 - **Quand** je clique « Synchroniser »
 - **Alors** le statut de la région « Dépôt Git de l'espace » contient « taguée au sync »
-- Limite : plusieurs avertissements à la fois sont vérifiés par le test Vitest « Synchroniser affiche chaque avertissement… (plan 0020) » de `app/src/screens/Administration.test.tsx`, sans identifiant.
+- Limite : plusieurs avertissements à la fois sont vérifiés par le test Vitest `app/src/screens/Administration.test.tsx` › `[S-0020-03]`.
 
 **Plan 0023**
 
@@ -1150,41 +1408,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 
 ## Sans test front, testable
 
-Un écran montre ces vérifications, mais aucun test front ne les vérifie, ou un test les vérifie sans porter leur identifiant. Ce sont des tests à écrire.
-
-| Identifiant | Vérification | Ce que l'écran montre, et le test à écrire | Couverture actuelle |
-|---|---|---|---|
-| S-0001-02 | Pour chacun des dix types, retirer un champ requis donne `missing_field`, avec `path` et `node_id` | Le panneau « Validation du document » affiche le problème et « Aller au nœud ». Ajouter à `validation.spec.ts` un cas par type de nœud | `core/tests/model/test_nodes.py::test_missing_required_field` |
-| S-0001-09 | `dump(load(f)) == f` ; un fichier aux clés désordonnées, réécrit, est ensuite stable | La vue « Éditer en YAML » montre le YAML réécrit par le serveur. Coller un YAML aux clés désordonnées, revenir au canevas, rouvrir deux fois la vue : texte réordonné, puis identique | `core/tests/model/test_io.py::test_canonical_fixtures_round_trip`, `::test_non_canonical_file_is_rewritten_then_stable` |
-| S-0001-14 | `override` sans `overrides`, `from_scratch` sans `justification` ou sans `concepts` : refusés | Le panneau de validation d'un brouillon de déclinaison. Brouillons de nordis-de sans `overrides`, de nordis-es sans `justification`, puis sans `concepts` | `core/tests/model/test_variants.py::test_override_without_overrides_is_refused`, `::test_from_scratch_requirements` |
-| S-0002-01 | Chaque code d'erreur du validateur est produit, avec le bon `node_id` | Le panneau de validation, « Aller au nœud ». Étendre `validation.spec.ts` aux codes qu'il ne couvre pas, en lisant le nœud désigné | `core/tests/model/test_graph.py` ; `core/tests/model/test_columns.py` ; `core/tests/model/test_nodes.py` |
-| S-0002-02 | `columns_at` rend la liste attendue pour chaque nœud de Revenu net | L'onglet « Colonnes en sortie » du nœud sélectionné (déjà lu par S-0021-04). Sélectionner chaque nœud et comparer à la table de vérité | `core/tests/model/test_columns.py::test_columns_at_revenu_net` |
-| S-0002-05 | Un `period` sur une colonne `timestamp` est refusé ; avec un `to_date` en amont, il passe | Le panneau de validation. Brouillon où n04 lit un horodatage, puis le même avec un `to_date` intercalé | `core/tests/model/test_columns.py::test_period_on_a_timestamp_is_refused`, `::test_period_after_an_explicit_to_date_passes` |
-| S-0002-06 | La surcharge DE remplace n03 sous le même identifiant (`declared`) ; une surcharge de n02 est `undeclared` | Déjà visible : n03 « Normal » et n02 « Divergence critique » (S-0014-03), bandeau hors points (S-0013-07). Lire n03 sous son identifiant dans le diff au canonique de la fiche nordis-de, ou ajouter l'identifiant au test des propositions | `core/tests/model/test_resolve.py::test_de_override_replaces_n03_and_classifies_overrides` |
-| S-0002-07 | Une surcharge qui change le type d'un nœud est refusée | Le formulaire ne le permet pas, la vue YAML oui, et le panneau affiche le refus. Brouillon de nordis-de dont le remplaçant de n03 est un filtre | `core/tests/model/test_resolve.py::test_override_type_change_is_refused` |
-| S-0002-11 | Un cycle de `kpi_ref` entre deux KPI est détecté | La validation de l'éditeur lit la bibliothèque de l'espace. Brouillon de Revenu net qui référence Marge brute, laquelle référence déjà Revenu net | `core/tests/model/test_graph.py::test_kpi_ref_cycle_between_two_kpis` |
-| S-0004-06 | Aucun message de résidu ne cite un littéral du SQL | L'onglet Implémentations affiche les résidus. Committer dans un espace isolé une implémentation semée de valeurs sentinelles, extraire, vérifier leur absence de la page | `core/tests/extract/test_extract.py::test_residue_messages_never_quote_the_sql` |
-| S-0005-05 | Un document invalide est indexé `invalid`, avec ses erreurs | Le catalogue a le statut « Invalide » et son filtre. Committer un YAML invalide dans un espace isolé, synchroniser, filtrer par statut | `core/tests/repo/test_index.py::test_invalid_documents_are_indexed_with_their_errors` |
-| S-0005-11 | Une divergence au `sync` renvoie `sync_conflict` sans toucher au clone | « Synchroniser » affiche « Le dépôt local a divergé du dépôt distant ». Réécrire l'historique du dépôt nu d'un espace isolé, puis synchroniser | `core/tests/repo/test_workspace_repo.py::test_divergent_history_is_a_conflict_and_leaves_the_clone_untouched` ; `core/tests/repo/test_catalog_api.py::test_sync_conflict` |
-| S-0006-01 | Validations requises : canonique Finance 2, surcharge déclarée 1, non déclarée ou from scratch 2 avec la mention | La file affiche « Validations : n / m » et la mention ; S-0014-01 lit déjà DE, ES et les canoniques. Créer une surcharge limitée aux points déclarés et lire « / 1 », puis ajouter l'identifiant | `core/tests/repo/test_proposals.py::test_declared_point_needs_one_validation`, `::test_undeclared_override_requires_canonical_validation` |
-| S-0006-02 | L'approbation de l'auteur, d'un contributeur ou d'un validateur d'un autre domaine ne compte pas | Le compteur de la file ; le refus de l'autrice est S-0014-04. Approuver par l'API depuis un compte contributeur ou validateur Supply, recharger : compteur inchangé | `core/tests/repo/test_governance.py::test_only_eligible_approvals_on_the_head_count` ; `core/tests/repo/test_proposals.py::test_rights` |
-| S-0006-03 | Un nouveau commit sur la branche remet le décompte à zéro | Le compteur de la file. Après une approbation, pousser un commit sur la branche de la proposition, recharger : « 0 / 2 » | `core/tests/repo/test_proposals.py::test_a_new_commit_resets_the_count` |
-| S-0006-05 | `stale_base` quand la base a avancé | « Fusionner » affiche l'erreur du serveur. Faire avancer la branche principale sur le document après approbation, puis fusionner | `core/tests/repo/test_proposals.py::test_stale_base` |
-| S-0006-10 | Une gouvernance sans référent est refusée ; un domaine sans référent est averti | Déjà exercé à l'écran par S-0017-02 (alerte) et S-0023-02 (dernier référent non retirable). Ajouter l'identifiant à ces tests | `core/tests/repo/test_governance.py::test_a_governance_without_referent_is_refused` ; `core/tests/repo/test_proposals.py::test_governance_without_referent_is_refused` |
-| S-0006-11 | `CODEOWNERS` régénéré dans la même proposition ; une modification à la main est signalée au `sync` | La régénération est lue par S-0017-04 ; l'avertissement du sync s'affiche dans Administration. Modifier `CODEOWNERS` par git dans un espace isolé, synchroniser, lire « CODEOWNERS a été modifié à la main… » | `core/tests/repo/test_governance.py::test_codeowners_is_deterministic_and_ordered`, `::test_codeowners_drift` |
-| S-0006-12 | Référent seul ou unique habilité : fusion sans approbation, avec mention et trailer ; l'exception tombe dès un deuxième habilité | La partie gouvernance est exercée par S-0017-08. Fusionner un document dans un domaine à un seul validateur et lire la mention ; ajouter l'identifiant à S-0017-08 | `core/tests/repo/test_proposals.py::test_single_referent_merges_governance_alone`, `::test_removing_the_other_referents_does_not_unlock_the_exception` ; `core/tests/repo/test_governance.py::test_solo_workspace_documents` |
-| S-0007-06 | Une compilation répétée donne le même SQL à l'octet | Le panneau « SQL compilé ». Relever le SQL, recharger, comparer ; faible valeur, l'identité entre processus reste un test core | `core/tests/compile/test_compile.py::test_repeated_compilation_is_byte_identical`, `::test_compilation_is_identical_across_processes` |
-| S-0008-02 | Le même point d'accès dans deux espaces donne deux entrées ; révoquer l'une laisse l'autre | « Mes connexions » de chaque espace. Deux espaces isolés avec dbx-fr, connecter les deux, révoquer dans l'un : l'autre reste « Connecté » | `core/tests/connections/test_connections.py::test_same_access_point_in_two_spaces_gives_two_entries` |
-| S-0008-03 | `test` rend `ok` sur un warehouse réel, une erreur explicite pour un hôte injoignable | « Tester » affiche le résultat. Point d'accès vers un port fermé : message explicite. La partie warehouse réel exige un compte | `core/tests/connections/test_connections.py::test_test_is_ok_then_explicit_for_an_unreachable_host`, `::test_real_warehouse` (marqué `databricks`) |
-| S-0008-04 | Un token expiré est rafraîchi ; un rafraîchissement refusé donne `expired` | « Mes connexions » affiche « Session expirée ». Il faut une commande de test au faux Databricks pour refuser le rafraîchissement | `core/tests/connections/test_connections.py::test_expired_token_is_refreshed`, `::test_refused_refresh_gives_expired` |
-| S-0008-05 | En repli, un token personnel saisi est rangé au coffre, jamais renvoyé, et le champ est vidé | Le repli existe à l'écran après un échec de l'OAuth. Test e2e à écrire : champ masqué, vidé après envoi, token absent du DOM et des réponses ; le test Vitest « échec de l'OAuth : repli par token personnel… » l'exerce, sans identifiant | `core/tests/connections/test_connections.py::test_personal_token_goes_to_the_vault_and_never_comes_back` ; `app/src/screens/Connections.test.tsx` |
-| S-0008-07 | Une plateforme non autorisée est refusée à la déclaration | Le panneau « Nouveau point d'accès » ne propose que les plateformes autorisées. Aucun test e2e ne tente de refus : vérifier qu'une plateforme retirée de la gouvernance n'est plus proposée, et que l'API refuse sa déclaration | `core/tests/connections/test_connections.py::test_platform_removed_from_allowed_platforms_cannot_be_used` ; Vitest « panneau : seules les plateformes autorisées… » de `app/src/screens/Connections.test.tsx`, sans identifiant |
-| S-0009-03 | Une cellule absente d'un côté est hors tolérance | Le détail affiche « absente » et « hors tolérance ». Il faut un jeu de comparaison où une cellule manque d'un côté | `core/tests/compare/test_compare.py::test_cells_missing_on_one_side_are_out_of_tolerance` |
-| S-0009-04 | Canonique à 0 : traitement conforme à la règle | Le détail affiche « — » pour l'écart et l'état de tolérance. Il faut un jeu où une cellule canonique vaut 0 | `core/tests/compare/test_compare.py::test_gap` |
-| S-0016-06 | Une plateforme non autorisée n'apparaît pas dans le panneau | Le panneau « Nouveau point d'accès ». Aucun test e2e : retirer une plateforme de la gouvernance, puis vérifier qu'elle disparaît du panneau | Vitest « panneau : seules les plateformes autorisées, celles à venir désactivées » de `app/src/screens/Connections.test.tsx`, sans identifiant |
-| S-0020-03 | Une poussée refusée laisse le tag local et le signale | L'avertissement du sync s'affiche dans Administration. Crochet `pre-receive` qui refuse les tags sur le dépôt nu d'un espace isolé, puis synchroniser : « Les tags n'ont pas pu être… » | `core/tests/repo/test_workspace_repo.py::test_tags_stay_local_when_they_cannot_be_pushed` ; Vitest « Synchroniser affiche chaque avertissement… » de `app/src/screens/Administration.test.tsx`, sans identifiant |
-| S-0022-05 | La date de référence reste une source commune lue sur Snowflake ; une déclinaison sans concept commun est refusée | Le refus s'affiche comme en S-0022-02 : déclinaison ES dont aucune source n'est rattachée à un concept. La source commune n'est pas encore affichée (`Rebound.common`, Reste à faire) | `core/tests/compare/test_compare.py::test_rebound_canonical_keeps_a_common_source`, `::test_a_variant_sharing_no_concept_is_refused` |
-| S-0025-04 | Un dépôt privé se rejoint après une connexion faite depuis « Rejoindre un espace » | Après un échec de clonage, le dialogue propose la connexion GitHub. Parcours possible jusqu'au faux GitHub ; le clonage d'un vrai dépôt privé exige un compte | Vitest « après un échec de clonage, la connexion GitHub relance l'adhésion avec son flux » de `app/src/screens/GitHub.test.tsx`, sans identifiant ; `core/tests/repo/test_github_device.py` |
+Il n'en reste aucune : les 31 vérifications qui figuraient ici ont reçu leur test front avec le lot des vérifications testables (plan 0027, mise en œuvre). Une vérification nouvelle s'y inscrit, au format de la section précédente, tant que son test manque.
 
 ## Exception à la règle « jamais de champ de token » : S-0008-05
 
@@ -1193,8 +1417,4 @@ Le guide de style (10.6) demande qu'on se connecte par le flux natif de la plate
 - le champ est masqué (`type="password"`, `autocomplete="off"`) et vidé avant même l'envoi ;
 - le token va au trousseau de l'OS, par utilisateur et par espace, jamais dans le dépôt Git ; aucune route ne le renvoie.
 
-Le scénario e2e vérifiera ces trois points ; il fait partie des tests à écrire.
-
-## Titres de tests à reprendre
-
-- Plusieurs tests Vitest vérifient un critère sans en porter l'identifiant : S-0015-04 (« accès manquant… » de `Comparison.test.tsx`), S-0016-06 et S-0008-05 (`Connections.test.tsx`), les critères 1 à 8 du plan 0017 et S-0020-03 (`Administration.test.tsx`, « critère n » au titre), S-0025-04 (`GitHub.test.tsx`).
+Le scénario S-0008-05 (`app/e2e/connexions-testables.spec.ts` › `[S-0008-05]`) vérifie ces trois points, avec un coffre en mémoire ; le trousseau relève du test core.

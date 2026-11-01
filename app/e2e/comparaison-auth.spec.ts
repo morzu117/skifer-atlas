@@ -1,5 +1,5 @@
-import { expect, test } from "@playwright/test";
-import { AUTH_API, isolatedDemo, relay } from "./isolation";
+import { expect } from "@playwright/test";
+import { AUTH_API, isolatedDemo, relay, test } from "./isolation";
 
 test("[S-0009-06] [S-0015-04] OAuth manquant : authentification puis reprise du lancement", async ({ page, request }) => {
   const ws = await isolatedDemo(request, AUTH_API);

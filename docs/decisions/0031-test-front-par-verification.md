@@ -19,9 +19,9 @@ Les critères d'acceptation des plans étaient vérifiés à des niveaux différ
   - « Sans test front, et pourquoi » : rien ne l'affiche à l'écran (compte réel, fenêtre native, CI de release, revue produit, logique sans écran). La ligne donne la raison et le test qui la couvre malgré tout.
   - « Sans test front, testable » : un écran la montre, mais aucun test ne la vérifie encore. C'est une dette à résorber.
 - **Chaque plan livre ses scénarios et ses tests front.** Les tests front sont écrits par un agent distinct de celui qui code la fonctionnalité (Codex), puis lancés et validés avant la PR.
-- **Une nouvelle spec qui modifie un dépôt travaille sur sa propre copie de la démonstration** (`app/e2e/isolation.ts`), sur un serveur séparé (8793), pour ne pas changer ce que voient les autres. Les identifiants créés sont uniques.
-  - Les parcours plus anciens ne sont pas encore isolés : `propositions.spec.ts` fusionne une proposition et `editor.spec.ts` en soumet une sur l'espace de démonstration partagé. `accueil` et `comparaison` enchaînent leurs tests en série.
-  - Ils sont à migrer vers des copies isolées.
+- **Une nouvelle spec qui modifie un dépôt travaille sur sa propre copie de la démonstration** (`app/e2e/isolation.ts`), pour ne pas changer ce que voient les autres. La copie est jointe au serveur du compte que joue le test, 8793 le plus souvent. Les identifiants créés sont uniques.
+  - Depuis le lot testables du 1er novembre 2026, `propositions.spec.ts` et `editor.spec.ts` utilisent une copie par test ; `isolation.ts`, après chaque test et même en échec, retire les espaces isolés du registre de chaque serveur et supprime leurs dossiers temporaires.
+  - `accueil`, `catalogue`, `comparaison`, `connexions` et `administration` conservent des séquences en série. Les serveurs restent ceux configurés pour le compte du parcours (8799 pour Anna, 8798 et 8797 pour les relecteurs, 8795 et 8793 pour Julien, 8793 pour les parcours OAuth).
 
 ## Conséquences
 

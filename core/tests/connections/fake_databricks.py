@@ -31,6 +31,7 @@ class State:
         self.valid: set[str] = set()  # jetons d'accès acceptés
         self.refresh_tokens: set[str] = set()
         self.refuse_refresh = False
+        self.refuse_authorize = False
         self.expires_in = 3600
         self.revoked: list[str] = []
         self.statements: dict[str, dict] = {}
@@ -89,6 +90,11 @@ def _handler(state: State, base: list[str]):
                 query = {k: v[0] for k, v in parse_qs(url.query).items()}
                 assert query["code_challenge_method"] == "S256"
                 assert query["scope"] == "all-apis offline_access"
+                if state.refuse_authorize:
+                    target = query["redirect_uri"] + "?" + urlencode(
+                        {"error": "access_denied", "state": query["state"]})
+                    self._send(302, None, {"Location": target})
+                    return
                 code = f"code-{next(state.counter)}"
                 state.challenges[code] = query["code_challenge"]
                 target = query["redirect_uri"] + "?" + urlencode(
@@ -108,7 +114,14 @@ def _handler(state: State, base: list[str]):
 
         def do_POST(self):
             url = urlparse(self.path)
-            if url.path == "/oidc/v1/token":
+            if url.path == "/__test__/configure":
+                # Pilotage du faux uniquement, jamais monté dans le serveur Atlas.
+                form = self._form()
+                state.refuse_authorize = bool(form.get("refuse_authorize", False))
+                state.refuse_refresh = bool(form.get("refuse_refresh", False))
+                state.expires_in = int(form.get("expires_in", 3600))
+                self._send(200, {"configured": True})
+            elif url.path == "/oidc/v1/token":
                 form = self._form()
                 state.token_requests.append(form)
                 if form["grant_type"] == "authorization_code":

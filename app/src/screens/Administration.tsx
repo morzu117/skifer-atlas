@@ -811,7 +811,10 @@ function Repository({
       );
       onSynced({ ...repository, synced_at: result.synced_at, index_fresh: true });
     } catch (reason) {
-      setMessage({ text: explain(reason).text, tone: "bad" });
+      // Le titre porte la cause (« Le dépôt local a divergé du dépôt distant ») ; le texte
+      // seul ne dit que la conduite à tenir.
+      const { title, text } = explain(reason);
+      setMessage({ text: `${title}. ${text}`, tone: "bad" });
     } finally {
       setBusy(false);
     }
@@ -841,7 +844,7 @@ function Repository({
         </button>
       )}
       {message && (
-        <span className={`tone-${message.tone} admin-message`} role="status">
+        <span className={`tone-${message.tone} admin-message`} role={message.tone === "bad" ? "alert" : "status"}>
           {message.text}
         </span>
       )}
