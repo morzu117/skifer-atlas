@@ -65,5 +65,5 @@ Donner à chaque vérification du projet un scénario de test clair et un test f
   - ruff, tsc et build : OK.
 - **Reste à faire** :
   - les 31 vérifications testables sans test front (lot suivant, confié à Codex) ;
-  - trancher S-0008-05, le repli par token personnel contre la règle « jamais de champ de token » ;
+  - S-0008-05 n'est pas un écart : le repli par token personnel est une exception assumée à la règle du guide 10.6 (analyse Q10, plan 0008, ADR 0020), confirmée le 1er novembre 2026 ; son test e2e fait partie du lot suivant ;
   - deux titres de `connexions.spec.ts` portent `[S-0008-07]` et `[S-0016-06]` sans les vérifier : ils sont comptés comme testables dans le catalogue.

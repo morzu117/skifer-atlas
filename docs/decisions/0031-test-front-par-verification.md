@@ -30,4 +30,3 @@ Les critères d'acceptation des plans étaient vérifiés à des niveaux différ
   - l'éditeur plantait sur un type de nœud inconnu ;
   - l'historique des comparaisons répondait 500 au premier accès simultané.
 - Nouveaux serveurs de test : 8791 (accueil isolé), 8792 (faux GitHub), 8793 (sans `ATLAS_COMPARE_DATA`, pour l'OAuth à la comparaison et les dépôts isolés). Les ports e2e sont 1420, 8020 et 8791 à 8799.
-- Un critère qui contredit une règle plus récente (S-0008-05, repli par token personnel, contre « jamais de champ pour saisir un token ») est signalé dans le catalogue au lieu d'être testé. Il faut le trancher.
