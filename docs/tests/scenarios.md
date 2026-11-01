@@ -48,8 +48,9 @@
 | 0024 | 4 | 2 | 2 | 0 | 0 |
 | 0025 | 6 | 6 | 0 | 0 | 0 |
 | 0026 | 9 | 9 | 0 | 0 | 0 |
+| 0028 | 3 | 2 | 0 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **221** | **164** | **5** | **52** | **0** |
+| **Total** | **224** | **166** | **5** | **53** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -222,6 +223,25 @@ Plan 0011, critère 7 · Test : `app/e2e/catalogue.spec.ts` › `[S-0011-07]`
 - **Quand** je lance par l'API une comparaison de Revenu net sur nordis-de et nordis-fr (scope `fy2026-mois-entite`), attends qu'elle soit terminée, puis recharge
 - **Alors** Revenu net affiche « 1 divergence » (nordis-de à 94 %)
 - **Et** son aperçu affiche « Dernière comparaison 9x % · à l'instant »
+
+**Plan 0028**
+
+Ces deux tests (`app/e2e/base-occupee.spec.ts`) travaillent sur une copie isolée de Nordis, jointe au serveur de julien.h (8793). Un processus Python lancé à côté ouvre la base `atlas.duckdb` de la copie, comme le ferait la CLI, et la garde quelques secondes ; il est tué en fin de test, même en échec.
+
+### S-0028-01 — La base tenue quelques secondes : le catalogue attend, puis se charge
+Plan 0028, critère 1 · Test : `app/e2e/base-occupee.spec.ts` › `[S-0028-01]`
+- **Étant donné** l'index de la copie déjà construit, et un autre processus qui tient sa base pendant 3 s
+- **Quand** j'ouvre le catalogue de la copie
+- **Alors** tant que le processus tient la base, « Revenu net » n'est pas affiché : l'écran attend
+- **Et** une fois la base libérée, « Revenu net » s'affiche, le tableau n'est plus occupé (`aria-busy="false"`), et « Base de l'espace occupée » n'apparaît nulle part
+
+### S-0028-02 — La base tenue plus de 10 s : le catalogue l'explique, puis se recharge
+Plan 0028, critère 2 · Test : `app/e2e/base-occupee.spec.ts` › `[S-0028-02]`
+- **Étant donné** un autre processus qui tient la base de la copie pendant 15 s
+- **Quand** j'ouvre le catalogue
+- **Alors** au bout de 10 s, une alerte « Base de l'espace occupée » s'affiche avec « Réessayez quand il aura fini », alors que le processus tient encore la base ; le catalogue n'est pas affiché
+- **Et** après la fin du processus, un rechargement affiche « Revenu net », sans l'alerte
+- Limite : le catalogue n'a pas de bouton « Réessayer » ; le test recharge la page. L'attente côte à côte des requêtes et la liste des espaces sans attente sont vérifiées par `core/tests/repo/test_catalog_api.py::test_requests_waiting_for_a_busy_base_wait_side_by_side`, `::test_a_busy_base_does_not_delay_the_workspace_list`.
 
 ## Fiche
 
@@ -1401,6 +1421,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0019-06 | Versions de l'app, du sidecar et de `skifer_atlas.__version__` identiques | Sources de release | `core/tests/test_release.py::test_one_version_for_app_sidecar_and_package` |
 | S-0021-01 | Division par zéro : `NULL` en DuckDB ; division entière et modulo par zéro aussi | Exécution DuckDB, absente du panneau SQL | `core/tests/compile/test_ecarts.py::test_division_by_zero_is_null_on_duckdb`, `::test_integer_division_and_modulo_keep_their_type` |
 | S-0021-07 | Les tests existants restent verts ; les SQL de référence changent délibérément | CI et revue de code | `core/tests/compile/test_compile.py` ; `core/tests/compile/test_ecarts.py` (suite complète en CI) |
+| S-0028-03 | Une autre erreur d'ouverture de la base (dossier absent) remonte sans attente | Logique serveur sans écran : aucune action de l'app ne mène à un dossier de base absent | `core/tests/test_dbfile.py::test_other_io_errors_are_not_retried` |
 | S-RAF-01 | Installation sur un poste vierge de chaque OS, puis accueil → catalogue → fiche | Fenêtre native Tauri, installateurs signés, postes vierges ; WebKit ne teste que les vues | `.github/workflows/release.yml` ; `core/tests/test_sidecar.py` ; `core/tests/test_release.py` |
 | S-RAF-09 | Keyring et connecteurs figés sous Windows | Poste Windows réel ; l'e2e utilise un coffre en mémoire | `core/tests/test_sidecar.py` ; `core/tests/connections/test_connections.py` ; `core/tests/connections/test_snowflake.py` |
 | S-RAF-10 | Extraction d'un vrai script de production anonymisé | Revue produit : le script est à fournir et valider par son propriétaire | `core/tests/extract/test_extract.py` (corpus synthétique) |

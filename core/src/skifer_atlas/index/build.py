@@ -268,15 +268,23 @@ def build_index(repo: Path, db: Path) -> str:
 
 def ensure_index(repo: Path, db: Path) -> duckdb.DuckDBPyConnection:
     """Connexion à un index à jour : reconstruit s'il manque, s'il porte sur un autre
-    commit ou sur une autre version de schéma."""
+    commit ou sur une autre version de schéma.
+
+    Le verrou ne sert qu'à la reconstruction (une seule à la fois par base) ; l'ouverture,
+    qui peut attendre une base tenue par un autre processus (ADR 0032), se fait hors du
+    verrou : sinon chaque requête en attente ajouterait la sienne à celle des précédentes.
+    La reconstruction est une transaction : un lecteur voit l'ancien index ou le nouveau."""
     with _locks_guard:
         lock = _locks.setdefault(db.resolve(), threading.Lock())
+    commit = head(repo)
+    connection = connect(db)
+    if index_state(connection) == (commit, SCHEMA_VERSION):
+        return connection
+    connection.close()
     with lock:
-        commit = head(repo)
         connection = connect(db)
-        state = index_state(connection)
-        if state == (commit, SCHEMA_VERSION):
-            return connection
+        if index_state(connection) == (commit, SCHEMA_VERSION):
+            return connection  # reconstruit pendant qu'on attendait le verrou
         connection.close()
         build_index(repo, db)
         return connect(db)

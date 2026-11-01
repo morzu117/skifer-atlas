@@ -11,6 +11,8 @@ from pathlib import Path
 
 import duckdb
 
+from ..dbfile import open_db
+
 SCHEMA_VERSION = 1
 
 DDL = """
@@ -53,7 +55,7 @@ CREATE TABLE "index".index_meta (
 
 
 def connect(db: Path) -> duckdb.DuckDBPyConnection:
-    return duckdb.connect(str(db))
+    return open_db(db)
 
 
 def index_state(connection: duckdb.DuckDBPyConnection) -> tuple[str, int] | None:

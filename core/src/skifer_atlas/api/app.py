@@ -103,6 +103,7 @@ ERROR_STATUS = {
     "platform_forbidden": 502,
     "query_failed": 502,
     "git_missing": 503,
+    "index_busy": 503,
     "vault_unavailable": 503,
     "git_timeout": 504,
     "query_timeout": 504,

@@ -16,6 +16,8 @@ from typing import Any
 
 import duckdb
 
+from ..dbfile import open_db
+
 SCHEMA_VERSION = 1
 
 DDL = """
@@ -83,7 +85,7 @@ def now() -> datetime:
 
 def connect(db: Path) -> duckdb.DuckDBPyConnection:
     db.parent.mkdir(parents=True, exist_ok=True)
-    connection = duckdb.connect(str(db))
+    connection = open_db(db)
     ensure_schema(connection)
     return connection
 
