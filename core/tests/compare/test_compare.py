@@ -24,6 +24,7 @@ from skifer_atlas.compare import (
 from skifer_atlas.compare.reconcile import dimension_value, keyed, summarize
 from skifer_atlas.compare.service import prepare_in
 from skifer_atlas.connectors.base import QueryResult
+from skifer_atlas.index.summary import _last_comparison
 from skifer_atlas.repo.git import RepoError
 
 EXAMPLE = Path(__file__).parents[3] / "examples" / "espace-nordis"
@@ -482,7 +483,8 @@ def test_cli_compare_errors(capsys, space):
 
 def test_concurrent_reads_of_the_history(tmp_path):
     """L'index existe (catalogue) sans le schéma `results` : les premières lectures
-    simultanées le créent chacune. Sans verrou, DuckDB répondait « Catalog write-write
+    simultanées (historique, dernier résultat du catalogue, résumé de la fiche) le créent
+    chacune. `matrix` passe par le même `ensure_schema`, mais lit aussi l'index. Sans verrou, DuckDB répondait « Catalog write-write
     conflict » (500 à l'ouverture de l'écran Comparaison)."""
     errors: list[Exception] = []
     for attempt in range(10):
@@ -490,14 +492,21 @@ def test_concurrent_reads_of_the_history(tmp_path):
         duckdb.connect(str(db)).close()  # l'index du catalogue, sans comparaison
         start = threading.Barrier(8)
 
-        def read(db=db, start=start):
+        def read(index, db=db, start=start):
             try:
                 start.wait()
-                store.history(db)
+                if index % 2:
+                    store.history(db)
+                else:  # catalogue et fiche lisent sur la connexion de l'index
+                    with duckdb.connect(str(db)) as connection:
+                        if index % 4:
+                            store.latest(connection)
+                        else:
+                            _last_comparison(connection, "revenu-net", 4)
             except Exception as error:  # noqa: BLE001 — remonté par l'assertion
                 errors.append(error)
 
-        threads = [threading.Thread(target=read) for _ in range(8)]
+        threads = [threading.Thread(target=read, args=(i,)) for i in range(8)]
         for thread in threads:
             thread.start()
         for thread in threads:

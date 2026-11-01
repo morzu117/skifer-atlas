@@ -12,7 +12,7 @@ test.beforeAll(async ({ request }) => {
   await ensureNordis(request);
 });
 
-test("[S-0009-01] [S-0022-01] [S-0022-06] [S-0015-01] lancement, progression, matrice à 94 % / 6,1 % pour Revenu net × DE, ES à 75 % (critères 1, 3 et 5 ; plan 0022)", async ({ page }) => {
+test("[S-0009-01] [S-0022-01] [S-0022-06] [S-0015-01] lancement, progression, matrice à 94 % / 6,1 % pour Revenu net × DE, ES à 75 % (critère 1 ; plan 0022)", async ({ page }) => {
   await page.goto(COMPARISON);
   await expect(page.getByRole("heading", { level: 1, name: "Comparaison" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "KPI" })).toHaveValue("revenu-net");

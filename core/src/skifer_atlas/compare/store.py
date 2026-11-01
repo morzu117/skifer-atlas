@@ -84,9 +84,15 @@ def now() -> datetime:
 def connect(db: Path) -> duckdb.DuckDBPyConnection:
     db.parent.mkdir(parents=True, exist_ok=True)
     connection = duckdb.connect(str(db))
-    with _lock:  # deux DDL simultanés : « Catalog write-write conflict »
-        connection.execute(DDL)
+    ensure_schema(connection)
     return connection
+
+
+def ensure_schema(connection: duckdb.DuckDBPyConnection) -> None:
+    """Crée le schéma `results` s'il manque. Toujours sous le verrou : deux créations
+    simultanées donnent « Catalog write-write conflict »."""
+    with _lock:
+        connection.execute(DDL)
 
 
 def _records(cursor: duckdb.DuckDBPyConnection) -> list[dict]:
@@ -227,14 +233,14 @@ LATEST = """
 
 def latest(connection: duckdb.DuckDBPyConnection) -> list[dict]:
     """Dernier résultat par KPI × déclinaison. `connection` est celle de l'index."""
-    connection.execute(DDL)
+    ensure_schema(connection)
     return _records(connection.execute(LATEST + " ORDER BY kpi_id, entity"))
 
 
 def matrix(connection: duckdb.DuckDBPyConnection, domain: str | None = None) -> list[dict]:
     """Synthèse 10.5 : une ligne par KPI de l'index (filtré par domaine), et la dernière
     comparaison de chacune de ses déclinaisons à sa version courante."""
-    connection.execute(DDL)
+    ensure_schema(connection)
     condition, parameters = ("AND d.domain = ?", [domain]) if domain else ("", [])
     kpis = _records(connection.execute(f"""
         SELECT d.id AS kpi_id, d.label, d.domain, d.version

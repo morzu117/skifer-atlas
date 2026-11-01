@@ -240,8 +240,7 @@ Plan 0003, critère 5 · Test : `app/e2e/diff.spec.ts` › `[S-0003-05]`
 Plan 0003, critère 6 · Test : `app/e2e/diff.spec.ts` › `[S-0003-06]`
 - **Étant donné** v1 et v2 construites par `_join_then_dedup` de `core/tests/model/test_diff.py`, l'une jointure puis dédoublonnage, l'autre l'inverse
 - **Quand** j'affiche le diff de v1 à v2
-- **Alors** un seul écart, qui contient « Ordre inversé »
-- Limite : la gravité `critical` n'est pas lue ici ; `core/tests/model/test_diff.py::test_swapping_join_and_deduplicate_is_reordered`.
+- **Alors** un seul écart, qui contient « Ordre inversé » et « Divergence critique »
 
 ### S-0003-07 — Une déclinaison from scratch affiche ses écarts et leur gravité
 Plan 0003, critère 7 · Test : `app/e2e/diff.spec.ts` › `[S-0003-07]`
@@ -386,7 +385,8 @@ Plan 0001, critère 8 · Test : `app/e2e/validation.spec.ts` › `[S-0001-08]`
 Plan 0001, critère 10 · Test : `app/e2e/editor.spec.ts` › `[S-0001-10]`
 - **Étant donné** un brouillon indépendant de Revenu net ouvert dans l'éditeur
 - **Quand** je clique « Éditer en YAML », remplace tout le texte par `base: &b {a: 1}` suivi de `other: *b`, puis clique « Revenir au canevas »
-- **Alors** une alerte qui parle d'« ancres » s'affiche, et la vue YAML reste ouverte
+- **Alors** l'alerte « YAML illisible : corriger l'erreur signalée pour revenir au canevas. » s'affiche, et la vue YAML reste ouverte
+- **Et** le panneau du bas explique « Les ancres YAML (&) ne sont pas admises (ligne 1, colonne 7) »
 
 **Plan 0002**
 
@@ -394,8 +394,7 @@ Plan 0001, critère 10 · Test : `app/e2e/editor.spec.ts` › `[S-0001-10]`
 Plan 0002, critère 3 · Test : `app/e2e/validation.spec.ts` › `[S-0002-03]`
 - **Étant donné** un brouillon où les clés de n07 deviennent `date_factur` = `date_jour`
 - **Quand** je l'ouvre et tente de soumettre
-- **Alors** le problème `unknown_column` s'affiche, avec le message rendu par le serveur, et la soumission est bloquée
-- Limite : la présence de la colonne proche (`date_facture`) dans le message n'est pas lue à part ; `core/tests/model/test_columns.py::test_unknown_join_key_suggests_the_closest_column`.
+- **Alors** le problème `unknown_column` s'affiche, propose la colonne proche `date_facture`, et la soumission est bloquée
 
 ### S-0002-04 — `NOW()` et `ROUND(x, 2)` sont refusés
 Plan 0002, critère 4 · Test : `app/e2e/validation.spec.ts` › `[S-0002-04]`
@@ -499,7 +498,7 @@ Plan 0013, critère 10 · Test : `app/e2e/editor.spec.ts` › `[S-0013-10]`
 ### S-0013-11 — Sur cinquante nœuds, la validation suit la saisie
 Plan 0013, critère 11 · Test : `app/e2e/editor.spec.ts` › `[S-0013-11]`
 - **Étant donné** un brouillon de cinquante nœuds (source, calculs en chaîne, agrégation ; `longKpi` de `app/e2e/graphe.ts`), « Compilable Databricks, Snowflake »
-- **Quand** je sélectionne le premier calcul, remplace son expression par `colonne_absente + 1`, puis par `montant_ttc - montant_taxes`
+- **Quand** je sélectionne le premier « Calcul de colonne » entièrement visible dans la région Graphe, remplace son expression par `colonne_absente + 1`, puis par `montant_ttc - montant_taxes`
 - **Alors** un problème qui nomme `colonne_absente` apparaît, puis le statut redevient « Compilable Databricks, Snowflake »
 - **Et** la durée entre la saisie et le problème est écrite dans la console, sans seuil
 - Limite : cette durée comprend la temporisation de 300 ms et le transport. Le seuil de 150 ms est vérifié par `core/tests/repo/test_editor_api.py::test_validation_of_50_nodes_under_150_ms`.
@@ -880,8 +879,8 @@ Plan 0017, critère 3 · Test : `app/e2e/administration.spec.ts` › `[S-0017-03
 Plan 0017, critère 4 · Test : `app/e2e/administration.spec.ts` › `[S-0017-04]`
 - **Étant donné** un espace isolé administré par julien.h, et le commit de tête du dépôt distant
 - **Quand** j'enregistre le renommage d'un domaine, puis l'ajout d'un nouveau domaine
-- **Alors** chaque enregistrement crée une proposition fusionnée (réponse 201) ; le premier ne change que `governance.yaml` (et au plus `.github/CODEOWNERS`)
-- **Et** le second change exactement `.github/CODEOWNERS` et `governance.yaml` : CODEOWNERS est régénéré
+- **Alors** chaque enregistrement crée une proposition fusionnée (réponse 201) ; le premier change exactement `.github/CODEOWNERS` et `governance.yaml` (le dépôt de démonstration n'a pas encore de CODEOWNERS : il est créé)
+- **Et** le second, un domaine sans référent, ne change que `governance.yaml` : CODEOWNERS est régénéré à l'identique
 
 ### S-0017-05 — Renommer un domaine ne change que son libellé
 Plan 0017, critère 5 · Test : `app/e2e/administration.spec.ts` › `[S-0017-05]`
@@ -1178,21 +1177,24 @@ Un écran montre ces vérifications, mais aucun test front ne les vérifie, ou u
 | S-0008-02 | Le même point d'accès dans deux espaces donne deux entrées ; révoquer l'une laisse l'autre | « Mes connexions » de chaque espace. Deux espaces isolés avec dbx-fr, connecter les deux, révoquer dans l'un : l'autre reste « Connecté » | `core/tests/connections/test_connections.py::test_same_access_point_in_two_spaces_gives_two_entries` |
 | S-0008-03 | `test` rend `ok` sur un warehouse réel, une erreur explicite pour un hôte injoignable | « Tester » affiche le résultat. Point d'accès vers un port fermé : message explicite. La partie warehouse réel exige un compte | `core/tests/connections/test_connections.py::test_test_is_ok_then_explicit_for_an_unreachable_host`, `::test_real_warehouse` (marqué `databricks`) |
 | S-0008-04 | Un token expiré est rafraîchi ; un rafraîchissement refusé donne `expired` | « Mes connexions » affiche « Session expirée ». Il faut une commande de test au faux Databricks pour refuser le rafraîchissement | `core/tests/connections/test_connections.py::test_expired_token_is_refreshed`, `::test_refused_refresh_gives_expired` |
-| S-0008-05 | En repli, un token personnel saisi est rangé au coffre, jamais renvoyé, et le champ est vidé | Le repli existe à l'écran après un échec de l'OAuth. Trancher d'abord l'écart ci-dessous ; le test Vitest « échec de l'OAuth : repli par token personnel… » l'exerce, sans identifiant | `core/tests/connections/test_connections.py::test_personal_token_goes_to_the_vault_and_never_comes_back` ; `app/src/screens/Connections.test.tsx` |
-| S-0008-07 | Une plateforme non autorisée est refusée à la déclaration | Le panneau « Nouveau point d'accès » ne propose que les plateformes autorisées. Le titre de `connexions.spec.ts` porte `[S-0008-07]`, mais le test déclare dbx-de sur une plateforme permise et ne tente aucun refus : vérifier qu'une plateforme retirée n'est plus proposée, ou retirer l'identifiant | `core/tests/connections/test_connections.py::test_platform_removed_from_allowed_platforms_cannot_be_used` ; Vitest « panneau : seules les plateformes autorisées… » de `app/src/screens/Connections.test.tsx`, sans identifiant |
+| S-0008-05 | En repli, un token personnel saisi est rangé au coffre, jamais renvoyé, et le champ est vidé | Le repli existe à l'écran après un échec de l'OAuth. Test e2e à écrire : champ masqué, vidé après envoi, token absent du DOM et des réponses ; le test Vitest « échec de l'OAuth : repli par token personnel… » l'exerce, sans identifiant | `core/tests/connections/test_connections.py::test_personal_token_goes_to_the_vault_and_never_comes_back` ; `app/src/screens/Connections.test.tsx` |
+| S-0008-07 | Une plateforme non autorisée est refusée à la déclaration | Le panneau « Nouveau point d'accès » ne propose que les plateformes autorisées. Aucun test e2e ne tente de refus : vérifier qu'une plateforme retirée de la gouvernance n'est plus proposée, et que l'API refuse sa déclaration | `core/tests/connections/test_connections.py::test_platform_removed_from_allowed_platforms_cannot_be_used` ; Vitest « panneau : seules les plateformes autorisées… » de `app/src/screens/Connections.test.tsx`, sans identifiant |
 | S-0009-03 | Une cellule absente d'un côté est hors tolérance | Le détail affiche « absente » et « hors tolérance ». Il faut un jeu de comparaison où une cellule manque d'un côté | `core/tests/compare/test_compare.py::test_cells_missing_on_one_side_are_out_of_tolerance` |
 | S-0009-04 | Canonique à 0 : traitement conforme à la règle | Le détail affiche « — » pour l'écart et l'état de tolérance. Il faut un jeu où une cellule canonique vaut 0 | `core/tests/compare/test_compare.py::test_gap` |
-| S-0016-06 | Une plateforme non autorisée n'apparaît pas dans le panneau | Le panneau « Nouveau point d'accès ». Le titre de `connexions.spec.ts` porte `[S-0016-06]` sans assertion correspondante : ajouter la vérification | Vitest « panneau : seules les plateformes autorisées, celles à venir désactivées » de `app/src/screens/Connections.test.tsx`, sans identifiant |
+| S-0016-06 | Une plateforme non autorisée n'apparaît pas dans le panneau | Le panneau « Nouveau point d'accès ». Aucun test e2e : retirer une plateforme de la gouvernance, puis vérifier qu'elle disparaît du panneau | Vitest « panneau : seules les plateformes autorisées, celles à venir désactivées » de `app/src/screens/Connections.test.tsx`, sans identifiant |
 | S-0020-03 | Une poussée refusée laisse le tag local et le signale | L'avertissement du sync s'affiche dans Administration. Crochet `pre-receive` qui refuse les tags sur le dépôt nu d'un espace isolé, puis synchroniser : « Les tags n'ont pas pu être… » | `core/tests/repo/test_workspace_repo.py::test_tags_stay_local_when_they_cannot_be_pushed` ; Vitest « Synchroniser affiche chaque avertissement… » de `app/src/screens/Administration.test.tsx`, sans identifiant |
 | S-0022-05 | La date de référence reste une source commune lue sur Snowflake ; une déclinaison sans concept commun est refusée | Le refus s'affiche comme en S-0022-02 : déclinaison ES dont aucune source n'est rattachée à un concept. La source commune n'est pas encore affichée (`Rebound.common`, Reste à faire) | `core/tests/compare/test_compare.py::test_rebound_canonical_keeps_a_common_source`, `::test_a_variant_sharing_no_concept_is_refused` |
 | S-0025-04 | Un dépôt privé se rejoint après une connexion faite depuis « Rejoindre un espace » | Après un échec de clonage, le dialogue propose la connexion GitHub. Parcours possible jusqu'au faux GitHub ; le clonage d'un vrai dépôt privé exige un compte | Vitest « après un échec de clonage, la connexion GitHub relance l'adhésion avec son flux » de `app/src/screens/GitHub.test.tsx`, sans identifiant ; `core/tests/repo/test_github_device.py` |
 
-## Écart de spécification : S-0008-05
+## Exception à la règle « jamais de champ de token » : S-0008-05
 
-Le critère S-0008-05 suppose la saisie d'un token personnel Databricks. Le guide de style l'interdit pour l'écran 10.6 (`docs/design/style-guide.md` : « Jamais de champ pour saisir un token à la main »), comme l'ADR 0019 pour la comparaison. Le plan 0016 et l'ADR 0020 gardent pourtant une exception, le repli par token personnel après un échec de l'OAuth (décision Q10), et le code l'implémente : `PersonalToken` dans `app/src/screens/Connections.tsx`, testé par Vitest (`app/src/screens/Connections.test.tsx`) et par `core/tests/connections/test_connections.py`. Aucun scénario de ce catalogue ne saisit de token. À trancher : retirer le repli et le critère, ou aligner le guide sur la décision Q10 ; le test e2e s'écrit ensuite.
+Le guide de style (10.6) demande qu'on se connecte par le flux natif de la plateforme, sans jamais manipuler de secret. Le repli Databricks par token personnel en est une exception assumée (analyse, Q10 ; plan 0008 ; ADR 0020), confirmée le 1er novembre 2026 :
+- il ne s'offre qu'après un échec de l'OAuth, et seulement sur une ligne Databricks déclarée ;
+- le champ est masqué (`type="password"`, `autocomplete="off"`) et vidé avant même l'envoi ;
+- le token va au trousseau de l'OS, par utilisateur et par espace, jamais dans le dépôt Git ; aucune route ne le renvoie.
+
+Le scénario e2e vérifiera ces trois points ; il fait partie des tests à écrire.
 
 ## Titres de tests à reprendre
 
-- `app/e2e/connexions.spec.ts` : les titres portent `[S-0008-07]` et `[S-0016-06]` sans assertion correspondante (voir la section précédente).
-- `app/e2e/comparaison.spec.ts` › `[S-0015-01]` : la mention « critères 1, 3 et 5 » du titre annonce les critères 3 et 5 du plan 0015, que ce test ne vérifie pas ; ils le sont par Vitest (`app/src/screens/Comparison.test.tsx` › `[S-0015-03]`, `[S-0015-05]`).
 - Plusieurs tests Vitest vérifient un critère sans en porter l'identifiant : S-0015-04 (« accès manquant… » de `Comparison.test.tsx`), S-0016-06 et S-0008-05 (`Connections.test.tsx`), les critères 1 à 8 du plan 0017 et S-0020-03 (`Administration.test.tsx`, « critère n » au titre), S-0025-04 (`GitHub.test.tsx`).
