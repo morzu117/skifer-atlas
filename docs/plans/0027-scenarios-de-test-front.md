@@ -58,6 +58,15 @@ Donner à chaque vérification du projet un scénario de test clair et un test f
 - **Défauts corrigés** :
   - **L'éditeur plantait (page blanche) sur un nœud de type inconnu.** `summary()` n'avait pas de cas par défaut. La carte affiche maintenant le type, avec « type inconnu ». Tests : `app/src/editor/summary.test.ts`, et `[S-0001-04]` en e2e.
   - **`GET …/comparisons` répondait 500 de temps en temps à l'ouverture de l'écran Comparaison.** Les premières lectures simultanées créaient chacune le schéma `results` (« Catalog write-write conflict »). Le DDL passe désormais sous le verrou du stockage. Test : `test_concurrent_reads_of_the_history`, qui échoue sans le correctif.
+- **Relecture par Codex** (1er novembre 2026). La PR #60 avait déjà été fusionnée quand Codex l'a relue, et ses points bloquants ont été corrigés à la suite :
+  - `latest()`, `matrix()` et le résumé de l'index créaient encore le schéma `results` sans verrou. Ils passent désormais tous par `store.ensure_schema`. Le test de concurrence mêle maintenant l'historique et le dernier résultat ; il échoue sans le correctif.
+  - Plusieurs titres annonçaient plus que leur test vérifiait :
+    - `[S-0003-06]` vérifie maintenant la gravité « Divergence critique » ;
+    - `[S-0002-03]` vérifie maintenant la colonne proche `date_facture` ;
+    - `[S-0008-07]` et `[S-0016-06]` sont retirés des titres de `connexions.spec.ts`, et classés « testables » ;
+    - la mention « critères 3 et 5 » est retirée du titre de `[S-0015-01]`.
+  - Le catalogue décrit maintenant exactement S-0017-04, S-0001-10 et S-0013-11.
+  - Le mécanisme `fixme` inutilisé de `validation.spec.ts` est supprimé.
 - **Résultats** :
   - `npm run e2e` : 79 réussis, sans `fixme` ;
   - `npm test` : 155 réussis ;

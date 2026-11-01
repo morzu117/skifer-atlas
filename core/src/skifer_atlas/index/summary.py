@@ -42,9 +42,9 @@ def _last_comparison(connection: duckdb.DuckDBPyConnection, kpi_id: str,
                      version: int | None) -> dict | None:
     """Dernière comparaison terminée du KPI ; son taux de validation est la part des
     cellules dans la tolérance, toutes déclinaisons confondues."""
-    from ..compare.store import DDL  # import tardif : `compare` lit l'index
+    from ..compare.store import ensure_schema  # import tardif : `compare` lit l'index
 
-    connection.execute(DDL)
+    ensure_schema(connection)
     found = _records(connection.execute("""
         SELECT c.id, c.finished_at, c.kpi_version, c.status,
                sum(s.validation_pct * s.cell_count) / nullif(sum(s.cell_count), 0)

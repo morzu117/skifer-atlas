@@ -6,12 +6,12 @@ import { AUTH_API, CORE, git, isolatedDemo, python, relay } from "./isolation";
 // autres fichiers (hors-ligne, connexions, parcours WebKit).
 test.beforeEach(async ({ page }) => { await relay(page, AUTH_API); });
 
-const cases = [
+const cases: { id: string; title: string; setup: string; text: string; severity?: string }[] = [
   { id: "S-0003-01", title: "Permuter des filtres ne produit aucun écart", setup: "base=with_filters(CONDITIONS); other=with_filters(CONDITIONS[::-1])", text: "Aucun écart : les deux graphes sont identiques." },
   { id: "S-0003-03", title: "Passer de sum à avg est critique", setup: "base=revenu_net(); other=revenu_net(); nodes(other)['n05']['measures'][0][2]='avg'", text: "Divergence critique" },
   { id: "S-0003-04", title: "Contourner une cardinalité est critique", setup: "base=with_join(revenu_net()); other=with_join(revenu_net(),check='bypass',bypass_reason='Doublons connus.')", text: "Divergence critique" },
   { id: "S-0003-05", title: "Renommer un libellé est sans effet", setup: "base=revenu_net(); other=revenu_net(); nodes(other)['n03']['label']='Montant hors taxes'", text: "Sans effet" },
-  { id: "S-0003-06", title: "Inverser jointure et dédoublonnage est critique", setup: "base=_join_then_dedup(False); other=_join_then_dedup(True)", text: "Ordre inversé" },
+  { id: "S-0003-06", title: "Inverser jointure et dédoublonnage est critique", setup: "base=_join_then_dedup(False); other=_join_then_dedup(True)", text: "Ordre inversé", severity: "Divergence critique" },
   { id: "S-0003-08", title: "Deux expressions non équivalentes restent à examiner", setup: "base=revenu_net(); other=revenu_net(); nodes(other)['n03']['expr']='montant_ttc * 0.8 - avoirs'", text: "À examiner" },
 ];
 for (const scenario of cases) {
@@ -39,6 +39,7 @@ print(json.dumps([base,other]))`, CORE)) as { data_product: { id: string; versio
     await expect(page.getByText(scenario.text, { exact: scenario.id !== "S-0003-06" }).first()).toBeVisible();
     if (scenario.id === "S-0003-01") await expect(page.locator(".diff-item")).toHaveCount(0);
     else await expect(page.locator(".diff-item")).toHaveCount(1);
+    if (scenario.severity) await expect(page.locator(".diff-item")).toContainText(scenario.severity);
   });
 }
 

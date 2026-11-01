@@ -19,9 +19,9 @@ Les critères d'acceptation des plans étaient vérifiés à des niveaux différ
   - « Sans test front, et pourquoi » : rien ne l'affiche à l'écran (compte réel, fenêtre native, CI de release, revue produit, logique sans écran). La ligne donne la raison et le test qui la couvre malgré tout.
   - « Sans test front, testable » : un écran la montre, mais aucun test ne la vérifie encore. C'est une dette à résorber.
 - **Chaque plan livre ses scénarios et ses tests front.** Les tests front sont écrits par un agent distinct de celui qui code la fonctionnalité (Codex), puis lancés et validés avant la PR.
-- **Les specs e2e ne dépendent pas les unes des autres.**
-  - Une spec qui modifie un dépôt travaille sur sa propre copie de la démonstration (`app/e2e/isolation.ts`), sur un serveur séparé (8793), pour ne pas changer ce que voient les autres.
-  - Les identifiants créés sont uniques.
+- **Une nouvelle spec qui modifie un dépôt travaille sur sa propre copie de la démonstration** (`app/e2e/isolation.ts`), sur un serveur séparé (8793), pour ne pas changer ce que voient les autres. Les identifiants créés sont uniques.
+  - Les parcours plus anciens ne sont pas encore isolés : `propositions.spec.ts` fusionne une proposition et `editor.spec.ts` en soumet une sur l'espace de démonstration partagé. `accueil` et `comparaison` enchaînent leurs tests en série.
+  - Ils sont à migrer vers des copies isolées.
 
 ## Conséquences
 

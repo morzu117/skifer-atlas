@@ -29,7 +29,7 @@ async function authorizeIn(page: Page, click: () => Promise<void>) {
   await window.close();
 }
 
-test("[S-0016-01] [S-0016-02] [S-0016-03] [S-0016-05] [S-0016-06] liste, se connecter par OAuth, tester, révoquer (critères 1, 2, 3, 5 et 6)", async ({ page }) => {
+test("[S-0016-01] [S-0016-02] [S-0016-03] [S-0016-05] liste, se connecter par OAuth, tester, révoquer (critères 1, 2, 3 et 5)", async ({ page }) => {
   await page.goto(CONNECTIONS);
   await expect(page.getByRole("heading", { level: 1, name: "Mes connexions" })).toBeVisible();
   const table = page.getByRole("table", { name: "Points d'accès de l'espace" });
@@ -57,7 +57,7 @@ test("[S-0016-01] [S-0016-02] [S-0016-03] [S-0016-05] [S-0016-06] liste, se conn
   await expectNoSecret(page);
 });
 
-test("[S-0008-07] nouveau point d'accès : OAuth et test avant de le proposer", async ({ page }) => {
+test("nouveau point d'accès : OAuth et test avant de le proposer", async ({ page }) => {
   await page.goto(CONNECTIONS);
   await page.getByRole("button", { name: "Ajouter un point d'accès" }).click();
   const panel = page.getByRole("complementary", { name: "Nouveau point d'accès" });
