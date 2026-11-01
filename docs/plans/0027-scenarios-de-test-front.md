@@ -72,7 +72,23 @@ Donner à chaque vérification du projet un scénario de test clair et un test f
   - `npm test` : 155 réussis ;
   - `pytest` : 819 réussis. Les 8 tests ignorés demandent un compte réel ou le binaire sidecar.
   - ruff, tsc et build : OK.
-- **Reste à faire** :
-  - les 31 vérifications testables sans test front (lot suivant, confié à Codex) ;
-  - S-0008-05 n'est pas un écart : le repli par token personnel est une exception assumée à la règle du guide 10.6 (analyse Q10, plan 0008, ADR 0020), confirmée le 1er novembre 2026 ; son test e2e fait partie du lot suivant ;
-  - deux titres de `connexions.spec.ts` portent `[S-0008-07]` et `[S-0016-06]` sans les vérifier : ils sont comptés comme testables dans le catalogue.
+- **Reste à faire** : réglé par le lot suivant.
+  - S-0008-05 n'est pas un écart : le repli par token personnel est une exception assumée à la règle du guide 10.6 (analyse Q10, plan 0008, ADR 0020), confirmée le 1er novembre 2026.
+
+### Lot des vérifications testables (1er novembre 2026)
+
+Les 31 vérifications « testables » du catalogue ont maintenant chacune un scénario et un test front.
+- **Nouvelles specs** :
+  - `app/e2e/validation-testables.spec.ts` : champs requis des dix types de nœuds, variantes incomplètes, YAML réécrit puis stable, codes du validateur, colonnes en sortie, `period` sur un horodatage, changement de type par surcharge, cycle de `kpi_ref` (S-0001-02, -09, -14 ; S-0002-01, -02, -05, -07, -11) ;
+  - `app/e2e/depot-testables.spec.ts` : résidus sans littéral SQL, document invalide au catalogue, divergence au sync, CODEOWNERS modifié à la main, tag refusé par le dépôt distant (S-0004-06, S-0005-05, S-0005-11, S-0006-11, S-0020-03) ;
+  - `app/e2e/propositions-testables.spec.ts` : validations requises, approbations non habilitées, décompte remis à zéro, `stale_base`, seul habilité (S-0006-01, -02, -03, -05, -12) ;
+  - `app/e2e/connexions-testables.spec.ts` : deux espaces, hôte injoignable, jeton expiré, repli par token personnel, plateforme retirée (S-0008-02, -03, -04, -05, -07 ; S-0016-06). Le faux Databricks reçoit une route de test, `/__test__/configure`, pour refuser l'OAuth ou le rafraîchissement ;
+  - `app/e2e/comparaison-cellules.spec.ts` : cellule absente, canonique à 0 (S-0009-03, -04).
+- **Tests ajoutés aux specs existantes** : S-0007-06 (`sql.spec.ts`), S-0022-05 (`comparaison-refus.spec.ts`), S-0025-04 (`github.spec.ts`).
+- **Identifiants ajoutés à des titres existants** : S-0002-06 (`propositions.spec.ts`) ; S-0006-10, -11, -12 (`administration.spec.ts`). En Vitest : S-0015-04, S-0016-06, S-0008-05, S-0017-01 à 08, S-0020-03, S-0025-04. La section « Titres de tests à reprendre » du catalogue disparaît.
+- **Défauts corrigés** :
+  - **Propositions n'affichait pas la mention « Fusionnée sans revue : aucun autre compte habilité »** que rend l'API pour un seul habilité (S-0006-12). `merge_mode` rejoint `ProposalItem` (`app/src/api.ts`), et `app/src/screens/Proposals.tsx` affiche la mention. Tests : `[S-0006-12]` en e2e, deux tests Vitest dans `Proposals.test.tsx`.
+  - **Un « Synchroniser » en échec n'affichait que la conduite à tenir**, pas la cause « Le dépôt local a divergé du dépôt distant » (S-0005-11). `app/src/screens/Administration.tsx` affiche « titre. texte », en `role="alert"`. Tests : `[S-0005-11]` en e2e et en Vitest.
+- **Isolation des parcours** (`app/e2e/isolation.ts`). Son `afterEach`, déclaré dans le module, ne s'appliquait qu'au premier fichier qui l'importait. Il devient une fixture automatique : les fichiers importent `test` d'`isolation.ts`. Après chaque test, même en échec, la page est fermée, les espaces `scenario-*` sont retirés du registre de chaque serveur et leurs dossiers temporaires supprimés. `propositions.spec.ts` et `editor.spec.ts` travaillent désormais sur une copie par test. `sharedDemo` et `releaseSharedDemo` donnent un seul espace isolé aux 88 cas de `validation-testables.spec.ts` (7,8 min ramenées à 1,5 min).
+- **Couverture**, sur 221 vérifications : 164 ont un test e2e, 5 n'ont qu'un test Vitest, 52 n'ont rien à l'écran, aucune n'est testable sans test front.
+- **Résultats** : `npm run e2e` : 187 réussis en 7,9 min ; `npm test` : 158 réussis.

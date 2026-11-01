@@ -1,5 +1,5 @@
-import { expect, test } from "@playwright/test";
-import { AUTH_API, CORE, git, isolatedDemo, python, relay } from "./isolation";
+import { expect } from "@playwright/test";
+import { AUTH_API, CORE, git, isolatedDemo, python, relay, test } from "./isolation";
 
 // Chaque scénario a son dépôt, joint au serveur de julien.h (8793) et non au serveur
 // principal : le registre de celui-ci ne garde qu'un seul « Groupe Nordis » pour les

@@ -98,7 +98,7 @@ describe("règles", () => {
 });
 
 describe("administration", () => {
-  it("sections de la maquette, référent seul, aucun champ de token (critères 6 et 8)", async () => {
+  it("[S-0017-06] [S-0017-08] sections de la maquette, référent seul, aucun champ de token (critères 6 et 8)", async () => {
     server();
     render(screenFor());
     expect(await screen.findByRole("heading", { level: 1, name: "Administration — Groupe Nordis" })).toBeInTheDocument();
@@ -129,7 +129,7 @@ describe("administration", () => {
     expect(screen.queryByLabelText(/token/i)).not.toBeInTheDocument();
   });
 
-  it("nouveau domaine sans référent : l'alerte, puis l'enregistrement fusionné (critères 2 et 8)", async () => {
+  it("[S-0006-10] [S-0017-02] [S-0017-08] nouveau domaine sans référent : l'alerte, puis l'enregistrement fusionné (critères 2 et 8)", async () => {
     let current = state();
     const api = server(() => current, ({ path, method }) => {
       if (path === `${API}/admin/governance` && method === "POST") {
@@ -164,7 +164,7 @@ describe("administration", () => {
     expect(form.getByText("Un domaine porte déjà cet identifiant.")).toBeInTheDocument();
   });
 
-  it("validateurs à 0 refusés, sur l'espace comme sur un domaine (critère 3)", async () => {
+  it("[S-0017-03] validateurs à 0 refusés, sur l'espace comme sur un domaine (critère 3)", async () => {
     server();
     render(screenFor());
     const canonical = await screen.findByRole("spinbutton", { name: "Canonique (min 1)" });
@@ -189,7 +189,7 @@ describe("administration", () => {
     expect(form.getByText("Au moins 1.")).toBeInTheDocument();
   });
 
-  it("renommer un domaine ne change que son libellé (critère 5)", async () => {
+  it("[S-0017-05] renommer un domaine ne change que son libellé (critère 5)", async () => {
     const api = server();
     render(screenFor());
     await userEvent.click(await screen.findByRole("button", { name: "Modifier le domaine Supply chain" }));
@@ -208,7 +208,7 @@ describe("administration", () => {
     expect(savedGovernance(api.calls)).toEqual(expected);
   });
 
-  it("inviter un membre et lui donner un domaine", async () => {
+  it("[S-0017-04] inviter un membre et lui donner un domaine", async () => {
     const api = server();
     render(screenFor());
     await userEvent.click(await screen.findByRole("button", { name: "Inviter" }));
@@ -310,7 +310,7 @@ describe("administration", () => {
     expect(savedGovernance(api.calls).allowed_platforms).toEqual(["databricks", "bigquery"]);
   });
 
-  it("Synchroniser met à jour la date et réindexe (critère 7)", async () => {
+  it("[S-0017-07] Synchroniser met à jour la date et réindexe (critère 7)", async () => {
     const api = server(state(), ({ path }) => {
       if (path === `${API}/sync`) return { json: { status: "fast_forward", commit: "c2", warnings: [], reindexed: true, synced_at: new Date().toISOString() } };
       return undefined;
@@ -323,7 +323,20 @@ describe("administration", () => {
     expect(api.calls.some((c) => c.method === "POST" && c.path === `${API}/sync`)).toBe(true);
   });
 
-  it("Synchroniser affiche chaque avertissement, dont une version taguée au sync (plan 0020)", async () => {
+  it("[S-0005-11] Synchroniser en divergence affiche la cause en alerte, pas seulement la conduite à tenir", async () => {
+    server(state(), ({ path }) => {
+      if (path === `${API}/sync`) return { status: 409, json: { detail: { code: "sync_conflict", message: "Historique divergent." } } };
+      return undefined;
+    });
+    render(screenFor());
+    const repository = within(await screen.findByRole("region", { name: "Dépôt Git de l'espace" }));
+    await userEvent.click(repository.getByRole("button", { name: "Synchroniser" }));
+    const alert = await repository.findByRole("alert");
+    expect(alert).toHaveTextContent("Le dépôt local a divergé du dépôt distant. Des modifications locales empêchent la mise à jour.");
+    expect(alert).toHaveClass("tone-bad");
+  });
+
+  it("[S-0020-03] Synchroniser affiche chaque avertissement, dont une version taguée au sync (plan 0020)", async () => {
     const warnings = [
       { code: "versions_tagged", message: "Version fusionnée hors d'Atlas, taguée au sync : revenu-net--nordis-fr v3." },
       { code: "tags_not_pushed", message: "Les tags n'ont pas pu être poussés sur le dépôt distant : ils restent sur ce poste." },
@@ -339,7 +352,7 @@ describe("administration", () => {
     expect(message).toHaveClass("tone-warn");
   });
 
-  it("deux référents : proposition à relire, rappel Code Owners, sans bandeau (critère 8)", async () => {
+  it("[S-0017-08] deux référents : proposition à relire, rappel Code Owners, sans bandeau (critère 8)", async () => {
     const two = structuredClone(GOVERNANCE);
     two.members[1].roles = [{ role: "referent", domains: [] }];
     server(state({ governance: two, single_referent: false, space_referents: ["claire.m", "julien.h"] }), ({ path, method }) => {
@@ -371,7 +384,7 @@ describe("administration", () => {
     await waitFor(() => expect(api.calls.filter((c) => c.path === `${API}/admin`)).toHaveLength(2));
   });
 
-  it("un compte qui n'est pas référent de l'espace reçoit un refus (critère 1)", async () => {
+  it("[S-0017-01] un compte qui n'est pas référent de l'espace reçoit un refus (critère 1)", async () => {
     server(state(), ({ path }) => (path === `${API}/admin` ? { status: 403, json: { detail: { code: "forbidden", message: "L'administration est réservée aux référents de l'espace." } } } : undefined));
     render(screenFor());
     expect(await screen.findByText("Réservée aux référents de l'espace")).toBeInTheDocument();

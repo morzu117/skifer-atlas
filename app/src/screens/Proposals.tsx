@@ -383,6 +383,8 @@ function Detail({
       {open && shown.explanation && !shown.ready_to_merge && shown.explanation !== counted(shown) && (
         <p className="proposal-status muted">{shown.explanation}</p>
       )}
+      {/* Seul habilité (ADR 0008) : la fusion se fait sans revue, et la proposition le dit. */}
+      {open && shown.merge_mode === "no_other_eligible" && shown.mention && <p className="proposal-status muted">{shown.mention}</p>}
       {failure && (
         <Banner tone="bad" title={failure.title}>
           {failure.text}

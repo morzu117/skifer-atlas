@@ -1,18 +1,20 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { expect, test, type Page } from "@playwright/test";
-import { API, ensureNordis, seriousViolations } from "./demo";
+import { expect, type Page } from "@playwright/test";
+import { API, seriousViolations } from "./demo";
+import { isolatedDemo, test } from "./isolation";
 import { longKpi, type Raw } from "./graphe";
 import type { APIRequestContext } from "@playwright/test";
 
-// Plan 0013 de bout en bout, sur l'espace de démonstration : Revenu net reconstruit à la
+// Plan 0013 de bout en bout, une copie isolée par test : Revenu net reconstruit à la
 // souris, puis l'édition d'une version, la vue YAML et le mode surcharge.
 
-const EDITOR = `${API}/api/workspaces/groupe-nordis/editor`;
+let ws: Awaited<ReturnType<typeof isolatedDemo>>;
+let EDITOR: string;
 const FIXTURE = fileURLToPath(new URL("../../core/tests/fixtures/documents/revenu-net.yaml", import.meta.url));
-
-test.beforeAll(async ({ request }) => {
-  await ensureNordis(request);
+test.beforeEach(async ({ request }) => {
+  ws = await isolatedDemo(request, API);
+  EDITOR = `${ws.api}/editor`;
 });
 
 const props = (page: Page) => page.getByRole("complementary", { name: "Propriétés" });
@@ -46,7 +48,7 @@ const COLUMNS: [string, string, string?, string?][] = [
 test("[S-0013-01] [S-0013-04] [S-0013-09] [S-0013-10] Revenu net reconstruit à la souris : YAML identique, soumission (critères 1, 4, 9, 10)", async ({ page, request }) => {
   test.setTimeout(120_000);
   const id = `revenu-net-e2e-${Date.now().toString(36)}`;
-  await page.goto("/#/w/groupe-nordis/catalogue");
+  await page.goto(`${ws.root}/catalogue`);
   await page.getByRole("link", { name: "Nouveau concept ou KPI" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Nouveau concept ou KPI" })).toBeFocused();
   await page.getByLabel(/^Libellé/).fill("Revenu net");
@@ -148,14 +150,14 @@ test("[S-0013-01] [S-0013-04] [S-0013-09] [S-0013-10] Revenu net reconstruit à 
   await dialog.getByLabel(/Justification/).fill("Revenu net reconstruit dans l'éditeur.");
   await dialog.getByRole("button", { name: "Soumettre" }).click();
   await expect(page.getByRole("heading", { name: /Proposition n° \d+ créée/ })).toBeVisible();
-  const proposals = (await (await request.get(`${API}/api/workspaces/groupe-nordis/proposals`)).json()) as { document_id: string }[];
+  const proposals = (await (await request.get(`${ws.api}/proposals`)).json()) as { document_id: string }[];
   expect(proposals.map((p) => p.document_id)).toContain(id);
   expect((await (await request.get(`${EDITOR}/documents/${id}`)).status())).toBe(404);
 });
 
 test("[S-0013-03] [S-0013-06] [S-0013-08] édition d'une version : cycle refusé, SQL par plateforme, YAML aller-retour (critères 3, 6, 8)", async ({ page, request }) => {
   await request.delete(`${EDITOR}/documents/revenu-net/draft`);
-  await page.goto("/#/w/groupe-nordis/editeur?from=revenu-net");
+  await page.goto(`${ws.root}/editeur?from=revenu-net`);
   await expect(page.getByRole("heading", { level: 1, name: "Revenu net : v5 · brouillon" })).toBeVisible();
   await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
@@ -207,7 +209,7 @@ test("[S-0013-03] [S-0013-06] [S-0013-08] édition d'une version : cycle refusé
 });
 
 test("[S-0013-07] mode surcharge : remplacer n02 signale la validation canonique (critère 7)", async ({ page, request }) => {
-  await page.goto("/#/w/groupe-nordis/editeur?from=revenu-net--nordis-fr");
+  await page.goto(`${ws.root}/editeur?from=revenu-net--nordis-fr`);
   await expect(page.getByRole("heading", { level: 1, name: /v3 · brouillon/ })).toBeVisible();
   await expect(palette(page).getByRole("button", { name: "Filtre", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Ajouter une arête" })).toBeDisabled();
@@ -238,7 +240,7 @@ async function isolatedDraft(request: APIRequestContext, count?: number) {
 test("[S-0013-02] Clés amont et colonne supprimée : problème sur la jointure", async ({ page, request }) => {
   const { id } = await isolatedDraft(request);
   try {
-    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    await page.goto(`${ws.root}/editeur?from=${id}`);
     // La démonstration actuelle porte la jointure en n07 ; n04 est le mois fiscal.
     await canvasNode(page, "n07").click();
     const options = async (label: string) => props(page).getByLabel(label).locator("option").evaluateAll(
@@ -262,7 +264,7 @@ test("[S-0013-05] Vingt opérations : ajout, champ, connexion, suppression, annu
   const { id, document } = await isolatedDraft(request);
   const current = async () => (await (await request.get(`${EDITOR}/documents/${id}`)).json()).draft.document;
   try {
-    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    await page.goto(`${ws.root}/editeur?from=${id}`);
     await expect(canvasNode(page, "n01")).toBeVisible();
     for (let i = 0; i < 5; i++) {
       const node = `n${String(8 + i).padStart(2, "0")}`;
@@ -293,7 +295,7 @@ test("[S-0013-05] Vingt opérations : ajout, champ, connexion, suppression, annu
 test("[S-0013-11] Cinquante nœuds : modifier un champ actualise la validation", async ({ page, request }) => {
   const { id } = await isolatedDraft(request, 50);
   try {
-    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    await page.goto(`${ws.root}/editeur?from=${id}`);
     await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
     // Au zoom d'ensemble, la chaîne déborde de la vue : premier calcul entièrement visible.
     const view = (await page.getByRole("region", { name: "Graphe" }).boundingBox())!;
@@ -322,7 +324,7 @@ test("[S-0013-11] Cinquante nœuds : modifier un champ actualise la validation",
 test("[S-0001-10] Une ancre ou un alias YAML empêche le retour au canevas", async ({ page, request }) => {
   const { id } = await isolatedDraft(request);
   try {
-    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    await page.goto(`${ws.root}/editeur?from=${id}`);
     await page.getByRole("button", { name: "Éditer en YAML" }).click();
     const yaml = page.getByRole("textbox", { name: "YAML de Revenu net" });
     await yaml.click();

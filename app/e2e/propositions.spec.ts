@@ -1,5 +1,6 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { API, ensureNordis, seriousViolations } from "./demo";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { isolatedDemo, test } from "./isolation";
+import { API, seriousViolations } from "./demo";
 
 // Plan 0014 de bout en bout, sur les cinq propositions de démonstration
 // (examples/propositions-nordis.py). Trois comptes, trois serveurs : anna.k (l'auteure de
@@ -7,8 +8,9 @@ import { API, ensureNordis, seriousViolations } from "./demo";
 
 const CLAIRE = "http://127.0.0.1:8798";
 const MARC = "http://127.0.0.1:8797";
-const QUEUE = "/#/w/groupe-nordis/propositions";
-// Les cinq propositions du script ; l'éditeur (editor.spec.ts) peut en avoir ajouté une.
+let ws: Awaited<ReturnType<typeof isolatedDemo>>;
+let QUEUE: string;
+// Les cinq propositions du script, sur une nouvelle copie pour chaque test.
 const SEEDED = [
   "Revenu net · nordis-de",
   "Revenu net · nordis-fr",
@@ -20,18 +22,16 @@ const SEEDED = [
 /** Chaque validateur rejoint, depuis son poste, le même dépôt distant que anna.k. */
 async function join(request: APIRequestContext, server: string, remote: string) {
   const listed = (await (await request.get(`${server}/api/workspaces`)).json()) as { id: string }[];
-  if (listed.some((ws) => ws.id === "groupe-nordis")) return;
+  if (listed.some((item) => item.id === ws.id)) return;
   const joined = await request.post(`${server}/api/workspaces/join`, { data: { remote_url: remote } });
   if (!joined.ok()) throw new Error(await joined.text());
 }
 
-test.beforeAll(async ({ request }) => {
-  await ensureNordis(request);
-  const [nordis] = ((await (await request.get(`${API}/api/workspaces`)).json()) as { id: string; git_remote: string }[]).filter(
-    (ws) => ws.id === "groupe-nordis",
-  );
-  await join(request, CLAIRE, nordis.git_remote);
-  await join(request, MARC, nordis.git_remote);
+test.beforeEach(async ({ request }) => {
+  ws = await isolatedDemo(request, API);
+  QUEUE = `${ws.root}/propositions`;
+  await join(request, CLAIRE, ws.remote);
+  await join(request, MARC, ws.remote);
 });
 
 /** L'app parle au serveur de claire.m : ses requêtes sont relayées vers son port. */
@@ -81,7 +81,7 @@ test("[S-0014-01] [S-0014-04] file de anna.k : badges, compteurs ; l'auteure ne 
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test("[S-0003-02] [S-0006-04] [S-0006-07] [S-0014-02] [S-0014-03] [S-0014-04] [S-0014-05] [S-0014-06] [S-0014-07] claire.m : Finance d'abord, diff de la surcharge DE, changements, approbation, fusion (critères 2 à 7)", async ({
+test("[S-0002-06] [S-0003-02] [S-0006-04] [S-0006-07] [S-0014-02] [S-0014-03] [S-0014-04] [S-0014-05] [S-0014-06] [S-0014-07] claire.m : Finance d'abord, diff de la surcharge DE, changements, approbation, fusion (critères 2 à 7)", async ({
   page,
   request,
 }) => {
@@ -130,7 +130,7 @@ test("[S-0003-02] [S-0006-04] [S-0006-07] [S-0014-02] [S-0014-03] [S-0014-04] [S
   await expect(selection(page)).toContainText("Claire M. a approuvé");
 
   // marc.d approuve depuis son poste : la proposition est prête.
-  const approved = await request.post(`${MARC}/api/workspaces/groupe-nordis/proposals/5/reviews`, { data: { event: "approve" } });
+  const approved = await request.post(`${MARC}/api/workspaces/${ws.id}/proposals/5/reviews`, { data: { event: "approve" } });
   expect(approved.ok()).toBe(true);
   await page.reload();
   await expect(entry(page, "Revenu net · nordis-de")).toContainText("Validations : 2 / 2 (canonique requis) · prête à fusionner");
@@ -142,7 +142,7 @@ test("[S-0003-02] [S-0006-04] [S-0006-07] [S-0014-02] [S-0014-03] [S-0014-04] [S
   await expect(entry(page, "Revenu net · nordis-de")).toHaveCount(0);
   await expect(queue(page).getByRole("link")).toHaveCount(before - 1);
   await page.getByRole("status").filter({ hasText: "fusionnée" }).getByRole("link", { name: "Voir la fiche" }).click();
-  await expect(page).toHaveURL(/#\/w\/groupe-nordis\/fiche\/revenu-net--nordis-de$/);
+  await expect(page).toHaveURL(`${ws.root}/fiche/revenu-net--nordis-de`);
   await expect(page.getByText(/^v4 · validée le/)).toBeVisible();
 
   await page.goto(`${QUEUE}?status=merged`);

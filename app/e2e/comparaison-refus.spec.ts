@@ -1,5 +1,5 @@
-import { expect, test } from "@playwright/test";
-import { AUTH_API, git, isolatedDemo, python, relay } from "./isolation";
+import { expect } from "@playwright/test";
+import { AUTH_API, git, isolatedDemo, python, relay, test } from "./isolation";
 
 test("[S-0022-02] Une source non réassociable nomme avoirs à l'écran", async ({ page, request }) => {
   const ws = await isolatedDemo(request, AUTH_API);
@@ -68,4 +68,22 @@ p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work);
   await page.reload();
   await expect(page.getByRole("checkbox", { name: /nordis-es/ })).toBeDisabled();
   await expect(page.getByText(/Non comparable :.*commande_id/)).toBeVisible();
+});
+
+test("[S-0022-05] Une déclinaison sans concept commun n'est pas comparable", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  python(`import sys,yaml
+from pathlib import Path
+p=Path(sys.argv[1])/'variants/revenu-net/nordis-es.yaml'
+d=yaml.safe_load(p.read_text())
+# Document toujours valide : sa source est rattachée à un autre concept que celles du canonique.
+d['graph']['nodes'][0]['concept']='client-actif'; d['graph']['nodes'][0]['binding']={'sociedad':'entite'}
+d['concepts']=['client-actif']
+p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work);
+  git(ws.work, "add", "."); git(ws.work, "commit", "-qm", "ES sans concept commun"); git(ws.work, "push", "origin", "main");
+  expect((await request.post(`${ws.api}/sync`)).ok()).toBe(true);
+  await relay(page, AUTH_API); await page.goto(`${ws.root}/comparaison`);
+  const es = page.getByRole("checkbox", { name: /nordis-es/ });
+  await expect(es).toBeDisabled(); await expect(es).not.toBeChecked();
+  await expect(page.getByText(/Non comparable :.*aucune de ses sources n'est rattachée à un concept des sources du canonique/)).toBeVisible();
 });

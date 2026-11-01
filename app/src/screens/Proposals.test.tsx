@@ -371,6 +371,22 @@ describe("propositions", () => {
     expect(server.calls.find((c) => c.method === "POST")).toMatchObject({ path: `${API}/2/merge`, body: {} });
     expect(server.calls.filter((c) => c.path.startsWith(`${API}/queue`)).length).toBeGreaterThan(1);
   });
+
+  it("seul habilité : la proposition porte la mention « Fusionnée sans revue » (critère 12)", async () => {
+    const solo = item(2, { ...SERVICE, merge_mode: "no_other_eligible", mention: "Fusionnée sans revue : aucun autre compte habilité" });
+    window.location.hash = "#/w/groupe-nordis/propositions?domain=tous&n=2";
+    proposalServer({ queue: { ...QUEUE, items: [solo] } });
+    render(<Harness />);
+    expect(await within(await screen.findByRole("region", { name: "Proposition sélectionnée" })).findByText("Fusionnée sans revue : aucun autre compte habilité")).toBeInTheDocument();
+  });
+
+  it("revue ordinaire : pas de mention « sans revue »", async () => {
+    window.location.hash = "#/w/groupe-nordis/propositions?domain=tous&n=2";
+    proposalServer({ queue: { ...QUEUE, items: [{ ...SERVICE, merge_mode: "reviewed" }] } });
+    render(<Harness />);
+    expect(await screen.findByRole("heading", { level: 2, name: "Nouvelle version de Taux de service (v3)" })).toBeInTheDocument();
+    expect(within(selection()).queryByText(/sans revue/)).not.toBeInTheDocument();
+  });
 });
 
 describe("diffMarks", () => {

@@ -91,3 +91,21 @@ test("[S-0021-05] La semaine Snowflake ne dépend pas de WEEK_START", async ({ p
     await request.delete(`${editor}/documents/${id}/draft`);
   }
 });
+
+test("[S-0007-06] Une compilation répétée donne le même SQL à l'octet", async ({ page, request }) => {
+  await ensureNordis(request);
+  await page.goto("/#/w/groupe-nordis/editeur?from=revenu-net");
+  const panel = page.getByRole("region", { name: "Validation du document" });
+  for (const dialect of ["Databricks", "Snowflake"]) {
+    await panel.getByRole("tab", { name: "SQL compilé" }).click();
+    await panel.getByRole("radio", { name: dialect }).check();
+    const output = panel.getByLabel(`SQL ${dialect.toLowerCase()}`);
+    await expect(output).toContainText("SELECT");
+    const sql = await output.textContent();
+    await page.reload();
+    await panel.getByRole("tab", { name: "SQL compilé" }).click();
+    await panel.getByRole("radio", { name: dialect }).check();
+    await expect(output).toHaveText(sql!, { useInnerText: false });
+    expect(await output.textContent()).toBe(sql);
+  }
+});

@@ -229,7 +229,7 @@ describe("comparaison", () => {
     });
   });
 
-  it("accès manquant : connexion sur place, puis le lancement reprend (critère 4)", async () => {
+  it("[S-0015-04] accès manquant : connexion sur place, puis le lancement reprend (critère 4)", async () => {
     let connected = false;
     let statusReads = 0;
     const server = comparisonServer(({ method, path }) => {

@@ -99,7 +99,7 @@ describe("Mes connexions : dépôt GitHub de l'espace (plan 0025)", () => {
 });
 
 describe("Rejoindre un dépôt GitHub privé (plan 0025, critère 4)", () => {
-  it("après un échec de clonage, la connexion GitHub relance l'adhésion avec son flux", async () => {
+  it("[S-0025-04] après un échec de clonage, la connexion GitHub relance l'adhésion avec son flux", async () => {
     const joined = vi.fn();
     const fake = fakeServer((call: Call) => {
       if (call.path === "/api/workspaces/join") {

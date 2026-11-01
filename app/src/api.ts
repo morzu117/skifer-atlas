@@ -497,6 +497,7 @@ export type ProposalItem = {
   approvers?: string[];
   changes_requested_by?: string[];
   ready_to_merge?: boolean;
+  merge_mode?: "reviewed" | "no_other_eligible";
   mention?: string | null;
   explanation?: string;
 };
