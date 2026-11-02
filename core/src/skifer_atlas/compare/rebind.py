@@ -8,15 +8,18 @@ Le canonique s'évalue sur les mêmes données que la déclinaison comparée :
   déclinaison rattachée au même concept.
   - Une colonne compte pour l'attribut auquel son `binding` la rattache, sinon pour son
     propre nom (convention du diff, plan 0003), des deux côtés. Elle se retrouve par cet
-    attribut, sinon par son nom.
+    attribut, sinon par son nom. Deux colonnes de la candidate rattachées au même
+    attribut le rendent ambigu : aucune n'est prise.
   - Le type doit être le même, ou un entier là où le canonique attend un décimal ou un
-    flottant (élargissement sans perte).
+    flottant (élargissement sans perte). Une colonne trouvée par attribut mais d'un autre
+    type ne cède pas la place à une colonne du même nom : le `binding` dit le sens.
   - Seules comptent les colonnes que le graphe du canonique lit, et celles qu'il
     rattache au concept (le scope filtre et regroupe sur elles). Une autre colonne
     introuvable est retirée de la source rebranchée.
   - Une source du canonique dont le concept n'a aucune source dans la déclinaison reste
-    une **source commune** : même table, lue sur la plateforme de la déclinaison.
-    Au moins une source doit être rebranchée.
+    une **source commune** : même table, lue sur la plateforme de la déclinaison. Une
+    déclinaison dont les sources sont sur plusieurs plateformes n'en a pas une seule pour
+    ses sources communes : refus. Au moins une source doit être rebranchée.
 
 La source rebranchée garde les noms de colonnes du canonique ; celles qui portent un autre
 nom dans la table de la déclinaison se lisent sous ce nom (`renames`, plan 0007).
@@ -103,12 +106,18 @@ def _attempt(source: Any, candidate: Any, needs: _Needs) -> _Attempt:
     mapping, problems = {}, []
     for column in source.columns:
         attribute = _attribute(source, column.name)
-        found = next(iter(by_attribute.get(attribute, [])), None)
-        if found is None and column.name in types:
+        matches = by_attribute.get(attribute, [])
+        found = matches[0] if len(matches) == 1 else None
+        if not matches and column.name in types:
             found = column.name
         if found is not None and compatible(column.type, types[found]):
             mapping[column.name] = found
-        elif needs(source, column.name):
+        elif not needs(source, column.name):
+            continue
+        elif len(matches) > 1:
+            problems.append(f"{column.name} (attribut {attribute} porté par "
+                            f"{', '.join(matches)})")
+        else:
             problems.append(column.name if found is None else
                             f"{column.name} ({column.type} attendu, {types[found]} dans {found})")
     return _Attempt(candidate, mapping, problems)
@@ -116,7 +125,8 @@ def _attempt(source: Any, candidate: Any, needs: _Needs) -> _Attempt:
 
 def _from_scratch(canonical: Any, variant: Any, entity: str, library: Library | None) -> Rebound:
     candidates = [n for n in variant.graph.nodes if n.type == "source"]
-    platform = candidates[0].platform if candidates else None
+    platforms = sorted({c.platform for c in candidates})
+    platform = platforms[0] if platforms else None
     needs = _Needs(canonical, library)
     replaced: dict[str, Any] = {}
     renames: dict[str, dict[str, str]] = {}
@@ -124,6 +134,10 @@ def _from_scratch(canonical: Any, variant: Any, entity: str, library: Library | 
     for source in (n for n in canonical.graph.nodes if n.type == "source"):
         same = [c for c in candidates if source.concept and c.concept == source.concept]
         if not same:  # rien côté déclinaison pour ce concept : source commune
+            if len(platforms) > 1:
+                raise _refuse(entity, f"{source.id} serait une source commune, mais les "
+                              f"sources de la déclinaison sont sur plusieurs plateformes "
+                              f"({', '.join(platforms)})")
             common.append(source.id)
             replaced[source.id] = source.model_copy(update={"platform": platform})
             continue

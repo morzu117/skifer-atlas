@@ -69,10 +69,17 @@ def is_space_referent(workspace: Workspace) -> bool:
     return governance is not None and workspace.account in space_referents(governance)
 
 
-def _document_counts(workspace_id: str, kinds: tuple[str, ...]) -> dict[str, int]:
+def _document_counts(workspace_id: str, kinds: tuple[str, ...],
+                     strict: bool = False) -> dict[str, int]:
+    """Documents par domaine. Index indisponible : `{}` pour l'affichage, ou, en `strict`,
+    `index_unavailable` (un contrôle ne doit pas laisser passer faute de pouvoir compter)."""
     try:
         connection = ensure_index(repo_dir(workspace_id), index_path(workspace_id))
-    except (RepoError, OSError, duckdb.Error):
+    except (RepoError, OSError, duckdb.Error) as error:
+        if strict:
+            raise RepoError("index_unavailable", "L'index de l'espace est indisponible : "
+                            "impossible de vérifier qu'un domaine retiré ne porte plus de "
+                            "document. Réessayer après la synchronisation.") from error
         return {}
     try:
         rows = connection.execute('SELECT domain, count(*) FROM "index".documents '
@@ -91,8 +98,11 @@ def _check_removed_domains(workspace_id: str, old: Governance, new: Governance) 
     """Un domaine retiré ne doit plus porter de document : ses KPI, concepts et
     déclinaisons perdraient leurs référents et leurs validateurs (plan 0023)."""
     kept = {d.id for d in new.domains}
-    counts = _document_counts(workspace_id, ("concept", "kpi", "variant"))
-    used = [(d.label, counts[d.id]) for d in old.domains if d.id not in kept and counts.get(d.id)]
+    removed = [d for d in old.domains if d.id not in kept]
+    if not removed:
+        return
+    counts = _document_counts(workspace_id, ("concept", "kpi", "variant"), strict=True)
+    used = [(d.label, counts[d.id]) for d in removed if counts.get(d.id)]
     if used:
         detail = ", ".join(f"« {label} » ({n} document{'s' if n > 1 else ''})"
                            for label, n in used)
@@ -182,10 +192,25 @@ def describe_changes(old: Governance, new: Governance) -> list[str]:
     return [change[:-1] if change.endswith("..") else change for change in changes]
 
 
+def _without_redundant_reader(data: dict) -> dict:
+    """Le rôle lecteur est compris dans tout autre rôle : à côté d'eux, il est retiré."""
+    members = []
+    for member in data.get("members") or []:
+        roles = member.get("roles") if isinstance(member, dict) else None
+        if isinstance(roles, list) and any(isinstance(r, dict) and r.get("role") != "lecteur"
+                                           for r in roles):
+            member = {**member, "roles": [r for r in roles
+                                          if not (isinstance(r, dict)
+                                                  and r.get("role") == "lecteur")]}
+        members.append(member)
+    return {**data, "members": members} if "members" in data else data
+
+
 def save_governance(workspace_id: str, data: dict, base_digest: str) -> dict:
     """Crée la proposition « Gouvernance » ; la fusionne aussitôt si aucun autre compte
     n'est habilité à l'approuver (référent seul, ADR 0008)."""
     workspace, governance, _ = _current(workspace_id)
+    data = _without_redundant_reader(data)
     try:
         proposed = Governance.model_validate(data)
     except ValueError:

@@ -7,7 +7,10 @@ import yaml
 from test_proposals import AUTH, WS, as_, client, code, joined
 from workspace_helpers import atlas_env, commit_all, git, remote
 
+from skifer_atlas import admin
+from skifer_atlas.governance.model import Governance
 from skifer_atlas.governance.rules import NO_REVIEW_MENTION
+from skifer_atlas.repo import RepoError
 
 __all__ = ["as_", "atlas_env", "client", "joined", "remote"]  # fixtures importées
 
@@ -143,6 +146,58 @@ def test_a_domain_that_still_has_documents_cannot_be_removed(client, joined, as_
     response = save(client, state, change)
     assert code(response) == (422, "domain_in_use")
     assert "« Supply chain » (1 document)" in response.json()["detail"]["message"]
+
+
+def test_a_domain_is_not_removed_when_the_index_cannot_count_its_documents(
+        client, joined, as_, monkeypatch):
+    """Faute d'index, le retrait d'un domaine est refusé au lieu
+    de passer sans contrôle ; une modification qui ne retire aucun domaine passe."""
+    as_("julien.h")
+    state = client.get(ADMIN).json()
+
+    def unavailable(*args):
+        raise RepoError("index_busy", "L'index de l'espace est en cours de reconstruction.")
+
+    monkeypatch.setattr(admin, "ensure_index", unavailable)
+    removed = save(client, state, lambda g: g.update(
+        domains=[d for d in g["domains"] if d["id"] != "marketing"]))
+    assert code(removed) == (503, "index_unavailable")
+    kept = save(client, state, lambda g: g.update(allowed_platforms=["databricks"]))
+    assert kept.status_code == 201, kept.text
+
+
+def test_a_reader_role_next_to_other_roles_is_dropped(client, joined, as_):
+    """Le rôle lecteur est compris dans les autres : à côté d'eux, il n'est pas enregistré."""
+    bare, _ = joined
+    as_("julien.h")
+    state = client.get(ADMIN).json()
+
+    def change(governance):
+        anna = next(m for m in governance["members"] if m["account"] == "anna.k")
+        anna["roles"] = [{"role": "lecteur", "domains": []},
+                         {"role": "referent", "domains": ["ventes"]}]
+
+    response = save(client, state, change)
+    assert response.status_code == 201, response.text
+    assert "Anna K. (anna.k) : referent (ventes), entité nordis-de." in response.json()[
+        "changes"]
+    anna = next(m for m in main_governance(bare)["members"] if m["account"] == "anna.k")
+    assert anna["roles"] == [{"role": "referent", "domains": ["ventes"]}]
+
+
+def test_a_name_ending_with_a_period_ends_the_sentence(client, joined, as_):
+    """Un nom abrégé termine la phrase ; seul le point ajouté est retiré, si bien que des
+    points de suspension restent entiers (#42)."""
+    as_("julien.h")
+    governance = client.get(ADMIN).json()["governance"]
+    for name, sentence in (("Claire M.", "Validateurs de « Finance » : Claire M."),
+                           ("Claire...", "Validateurs de « Finance » : Claire...")):
+        old = copy.deepcopy(governance)
+        next(m for m in old["members"] if m["account"] == "claire.m")["name"] = name
+        new = copy.deepcopy(old)
+        new["domains"][0]["validators"] = ["claire.m"]
+        assert admin.describe_changes(Governance.model_validate(old),
+                                      Governance.model_validate(new)) == [sentence]
 
 
 def test_zero_validators_is_refused(client, joined, as_):
