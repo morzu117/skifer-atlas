@@ -40,7 +40,6 @@ def aggregate(function: str, source: str) -> exp.Expression:
     return builders[function](this=column)
 
 
-
 def wall_clock(column: exp.Expression, zone: str, dialect: str) -> exp.Expression:
     """Colonne `timestamp` d'une source, lue en heure murale de son fuseau déclaré.
 
@@ -52,8 +51,11 @@ def wall_clock(column: exp.Expression, zone: str, dialect: str) -> exp.Expressio
     if dialect != "databricks":
         return column
     epoch = exp.cast(exp.Literal.string("1970-01-01 00:00:00"), WALL_CLOCK)
+    # Les deux branches du CASE sont typées avant l'exécution : le cast explicite garde
+    # `UNIX_MICROS` valide pour une colonne sans fuseau ou texte, sans rien changer à un
+    # instant.
     utc: exp.Expression = exp.TimestampAdd(this=epoch, expression=exp.UnixMicros(
-        this=column.copy()), unit=exp.var("MICROSECOND"))
+        this=exp.cast(column.copy(), "timestamp")), unit=exp.var("MICROSECOND"))
     if zone != "UTC":
         utc = exp.ConvertTimezone(source_tz=exp.Literal.string("UTC"),
                                   target_tz=exp.Literal.string(zone), timestamp=utc)
@@ -61,6 +63,7 @@ def wall_clock(column: exp.Expression, zone: str, dialect: str) -> exp.Expressio
                         expression=exp.Literal.string("timestamp"))
     return exp.Case(ifs=[exp.If(this=is_instant, true=utc)],
                     default=exp.cast(column.copy(), WALL_CLOCK))
+
 
 def ordered(column: str, direction: str) -> exp.Ordered:
     """Tri à l'ordre des nulls explicite (nulls en dernier en croissant, en premier en

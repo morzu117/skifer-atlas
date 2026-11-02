@@ -13,6 +13,7 @@ def test_layout_ignores_document_order():
     document = load_document(EXAMPLE / "kpis" / "revenu-net.yaml")
     shuffled = document.model_copy(deep=True)
     shuffled.graph.nodes.reverse()
+
     def placed(found):
         return {n["id"]: (n["layer"], n["rank"]) for n in found["nodes"]}
     assert placed(layout(document)) == placed(layout(shuffled))

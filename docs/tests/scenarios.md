@@ -667,7 +667,7 @@ Les trois scénarios partent du même test (`app/e2e/fuseau-de-session.spec.ts`)
 ### S-0030-01 — En Databricks, une colonne `timestamp` est lue en heure murale de son fuseau
 Plan 0030, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-01]`
 - **Quand** j'affiche le SQL Databricks
-- **Alors** la source lit `passee_le` par `WHEN TYPEOF(passee_le) = 'timestamp'`, `THEN CONVERT_TIMEZONE('UTC', 'Europe/Paris', DATE_ADD(MICROSECOND, UNIX_MICROS(passee_le), …))` et `ELSE CAST(passee_le AS TIMESTAMP_NTZ)`
+- **Alors** la source lit `passee_le` par `WHEN TYPEOF(passee_le) = 'timestamp'`, `THEN CONVERT_TIMEZONE('UTC', 'Europe/Paris', DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), …))` et `ELSE CAST(passee_le AS TIMESTAMP_NTZ)`
 - **Et** en Snowflake, aucun `TYPEOF`
 - Limite : la relecture par SQLGlot et le fuseau `UTC` sont vérifiés par `core/tests/compile/test_ecarts.py::test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
 
@@ -675,7 +675,7 @@ Plan 0030, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030
 Plan 0030, critère 2 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-02]`
 - **Quand** j'affiche le SQL Databricks, puis Snowflake
 - **Alors** le littéral du filtre s'écrit `CAST('2025-01-01 00:00:00' AS TIMESTAMP_NTZ)` en Databricks, `… AS TIMESTAMPNTZ)` en Snowflake
-- **Et** aucun des deux ne contient `AS TIMESTAMP)`
+- **Et** aucun des deux ne contient `AS TIMESTAMP)`, hormis `UNIX_MICROS(CAST(passee_le AS TIMESTAMP))` dans la branche instant de Databricks (cast d'un instant vers lui-même)
 - Limite : la conversion vers le même fuseau et le `NULL` typé d'une union sont vérifiés par `core/tests/compile/test_ecarts.py::test_no_timestamp_cast_depends_on_the_session`.
 
 ### S-0030-04 — Le panneau SQL montre la lecture en heure murale

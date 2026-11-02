@@ -14,7 +14,7 @@ Le YAML déclare le fuseau d'origine de chaque colonne `timestamp` (ADR 0010). I
 
 - **Le compilateur raisonne en heure murale.** Tout cast d'horodatage s'écrit avec le type sans fuseau : `TIMESTAMP_NTZ` en Databricks, `TIMESTAMPNTZ` en Snowflake, `TIMESTAMP` en DuckDB.
 - **Databricks lit chaque colonne `timestamp` d'une source en heure murale de son fuseau déclaré**, à la source, une seule fois. `TYPEOF` choisit à l'exécution :
-  - instant (`'timestamp'`) : microsecondes depuis l'époque (`UNIX_MICROS`), ajoutées à `1970-01-01 00:00:00` sans fuseau, ce qui donne l'heure UTC, puis `CONVERT_TIMEZONE('UTC', '<fuseau>', …)` ;
+  - instant (`'timestamp'`) : microsecondes depuis l'époque (`UNIX_MICROS(CAST(c AS TIMESTAMP))`), ajoutées à `1970-01-01 00:00:00` sans fuseau, ce qui donne l'heure UTC, puis `CONVERT_TIMEZONE('UTC', '<fuseau>', …)`. Les deux branches sont typées avant l'exécution : le cast explicite, sans effet sur un instant, garde la requête valide pour une colonne sans fuseau ou texte ;
   - heure murale (`'timestamp_ntz'`) : la colonne telle quelle.
 - **Pas de requête de métadonnées.** Lire le type physique dans `information_schema` aurait demandé une connexion avant de compiler, et fait différer le SQL du panneau de celui des comparaisons. `TYPEOF` donne le même résultat dans un SQL qui se suffit.
 - **Pas d'aller-retour par l'heure de la session.** `CONVERT_TIMEZONE(current_timezone(), …)` aurait aussi été indépendant de la session, sauf pendant l'heure doublée du passage à l'heure d'hiver, où deux instants ont la même heure murale. Le passage par l'époque n'a pas cette ambiguïté.

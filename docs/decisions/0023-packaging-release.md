@@ -108,7 +108,7 @@ Points à trancher :
     - arrêt quand le chargeur puis l'app sont tués ;
     - Snowflake (plan 0018).
   - `scripts/smoke-app.sh` (macOS), sur l'app release :
-    - démarrage en moins de 10 s ;
+    - démarrage en moins de 10 s (`SMOKE_LIMIT_SECONDS`). Le runner macOS Intel de la CI a une limite de 20 s : il a mis de 6 à 15 s pour une même app, alors que le runner arm64 met 2 à 4 s. Le critère de 10 s vaut pour la machine de référence, où la mesure reste manuelle (S-0019-03) ;
     - aucun processus serveur après Cmd-Q ;
     - aucun processus serveur après un `kill -9` de l'app.
   - `app/src/offline.test.ts` (3 tests).

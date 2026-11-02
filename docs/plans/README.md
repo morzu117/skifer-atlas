@@ -88,6 +88,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 - Rafraîchissement des jetons GitHub à durée limitée (0025).
 
 **Réglé** depuis la mise à jour précédente :
+- Test de fumée de l'app trop juste sur le runner macOS Intel de la CI (6 à 15 s pour 10 s) : limite de 20 s sur ce runner seulement, ADR 0023 (#72).
 - Deux `git fetch` concurrents sur un même clone (synchronisation pendant le chargement de l'écran Propositions), vus dans l'e2e S-0006-12 : ADR 0035.
 - Paramètres de session : fuseau de session de Databricks et `TIMESTAMP_TYPE_MAPPING` de Snowflake : plan 0030, ADR 0034.
 - Sources communes d'une comparaison, annoncées avant lancement et listées dans le résultat : plan 0029, ADR 0033.

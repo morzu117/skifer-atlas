@@ -19,7 +19,7 @@ Le YAML déclare, pour chaque colonne `timestamp` d'une source, son fuseau d'ori
 - **Colonne Databricks lue en heure murale.** Une source Databricks lit chaque colonne `timestamp` en heure murale de son fuseau déclaré, quel que soit son type physique, sans requête de métadonnées :
   ```sql
   CASE WHEN TYPEOF(c) = 'timestamp'
-    THEN CONVERT_TIMEZONE('UTC', '<fuseau>', DATE_ADD(MICROSECOND, UNIX_MICROS(c), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)))
+    THEN CONVERT_TIMEZONE('UTC', '<fuseau>', DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(c AS TIMESTAMP)), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)))
     ELSE CAST(c AS TIMESTAMP_NTZ)
   END AS c
   ```
@@ -30,7 +30,7 @@ Le YAML déclare, pour chaque colonne `timestamp` d'une source, son fuseau d'ori
 
 ## Critères d'acceptation
 1. Le SQL Databricks d'une source à colonne `timestamp` lit cette colonne par `TYPEOF`, `UNIX_MICROS` et `CONVERT_TIMEZONE`, et se relit dans son dialecte.
-2. Aucun SQL Databricks ou Snowflake ne contient plus `AS TIMESTAMP)` : littéraux, conversions et `NULL` typés portent le type sans fuseau.
+2. Aucun SQL Databricks ou Snowflake ne contient plus `AS TIMESTAMP)` : littéraux, conversions et `NULL` typés portent le type sans fuseau. Seule exception, `UNIX_MICROS(CAST(c AS TIMESTAMP))` dans la branche instant : le cast d'un instant vers lui-même, sans effet de session (suivi de #71).
 3. La lecture d'un instant, traduite vers DuckDB, rend l'heure murale du fuseau déclaré quel que soit le fuseau de session, y compris pendant l'heure doublée du passage à l'heure d'hiver ; et les trois dialectes, traduits vers DuckDB, rendent toujours les mêmes jours locaux, session hors UTC.
 4. Le panneau SQL de l'éditeur montre, en Databricks, la lecture en heure murale d'une colonne `timestamp`.
 
@@ -52,3 +52,8 @@ Le YAML déclare, pour chaque colonne `timestamp` d'une source, son fuseau d'ori
 - Reste à faire : colonnes `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` d'une source Snowflake.
 - Test front `app/e2e/fuseau-de-session.spec.ts` (S-0030-01, 02, 04), écrit par un agent Claude ; S-0030-03 n'a pas d'écran.
 - Vérifications : core 838 réussis, 8 ignorés (binaire du sidecar absent), plus `test_validation_of_50_nodes_under_150_ms`, en échec sous une charge machine de 25 à 40 mais réussi seul trois fois sur trois (la validation ne compile pas de SQL) ; `npm test` 163 réussis ; `npm run e2e` 191 réussis et un échec sans lien avec le plan, S-0006-12 (`git fetch` concurrent sur un même clone), réussi ensuite trois fois sur trois ; spec `fuseau-de-session` réussie quatre fois sur quatre.
+
+### Suivi de la relecture (#72, 2 novembre 2026)
+
+- Les deux branches du `CASE` sont typées avant l'exécution, quelle que soit la valeur de `TYPEOF`. `UNIX_MICROS` reçoit donc un cast explicite, `UNIX_MICROS(CAST(c AS TIMESTAMP))` : la requête reste valide pour une colonne `TIMESTAMP_NTZ` ou texte, sans s'en remettre à une conversion implicite, et le cast ne change rien à un instant. Le critère 2 admet cette seule exception.
+- Toujours pas de vérification sur un vrai entrepôt Databricks.

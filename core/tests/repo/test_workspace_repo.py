@@ -127,7 +127,6 @@ def test_sync_fast_forwards(remote):
     assert get_workspace("groupe-nordis").entities[-1] == "nordis-it"
 
 
-
 def test_fetches_of_one_clone_never_overlap(remote, monkeypatch):
     """Une synchronisation et le fetch d'un écran de propositions, lancés ensemble, passent
     l'un après l'autre : deux `git fetch` concurrents sur un clone, le second échouait
@@ -164,7 +163,9 @@ def test_fetches_of_one_clone_never_overlap(remote, monkeypatch):
         thread.start()
     for thread in threads:
         thread.join(10)
+    assert not any(thread.is_alive() for thread in threads), "un fetch est resté bloqué"
     assert errors == [] and overlaps == [1, 1]
+
 
 NORDIS_FR = "variants/revenu-net/nordis-fr.yaml"
 

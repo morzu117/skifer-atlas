@@ -84,7 +84,6 @@ def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
     return result.stdout
 
 
-
 _clone_locks: dict[Path, threading.RLock] = {}
 _clone_locks_guard = threading.Lock()
 
@@ -99,6 +98,7 @@ def clone_lock(repo: Path) -> Iterator[None]:
         lock = _clone_locks.setdefault(Path(repo).resolve(), threading.RLock())
     with lock:
         yield
+
 
 def check_remote_url(url: str) -> None:
     """Refuse une URL qui porte un identifiant (`https://jeton@hôte/…`)."""

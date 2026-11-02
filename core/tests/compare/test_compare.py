@@ -285,6 +285,7 @@ CREATE TABLE results.summaries (
     differences_json VARCHAR NOT NULL);
 """
 
+
 def test_a_base_from_before_plan_0029_is_migrated(db):
     """Plan 0029, critère 3 : une base créée sans la colonne reçoit `common_json` ; ses
     anciennes synthèses n'ont aucune source commune, les nouvelles la gardent."""

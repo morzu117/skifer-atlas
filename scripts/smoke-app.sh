@@ -3,7 +3,7 @@
 #
 #   scripts/smoke-app.sh "app/src-tauri/target/release/bundle/macos/Skifer Atlas.app"
 #
-# 1. L'app démarre et son serveur répond sur /health en moins de 10 s.
+# 1. L'app démarre et son serveur répond sur /health en moins de 10 s (SMOKE_LIMIT_SECONDS).
 # 2. Fermeture normale (Cmd-Q, par AppleScript) : aucun processus serveur ne reste.
 # 3. App tuée net (kill -9) : le serveur s'arrête seul (ATLAS_PARENT_PID, lifeline.py).
 set -euo pipefail
@@ -11,7 +11,9 @@ APP="${1:?usage : smoke-app.sh <chemin du .app>}"
 APP="$(cd "$(dirname "$APP")" && pwd)/$(basename "$APP")"
 EXE="$APP/Contents/MacOS/skifer-atlas"
 SERVER="$APP/Contents/MacOS/skifer-atlas-server"
-LIMIT_SECONDS=10
+# Plan 0019, critère 3 : 10 s. Le runner macOS Intel de la CI, plus lent que la machine
+# de référence, passe une limite plus large (SMOKE_LIMIT_SECONDS, ADR 0023).
+LIMIT_SECONDS="${SMOKE_LIMIT_SECONDS:-10}"
 [ -x "$EXE" ] && [ -x "$SERVER" ] || { echo "Exécutable ou sidecar absent de $APP" >&2; exit 1; }
 
 servers() { pgrep -f "$SERVER" || true; }
