@@ -103,6 +103,7 @@ const RUN: Run = {
       divergent_node: "n02",
       divergent: { node_id: "n02", node_type: "filter", classification: "override_undeclared", message: "", label: "Factures validées" },
       bypass_nodes: [],
+      common_sources: [],
       cells: [
         { dims: { mois_fiscal: "2026-02-01", entite: "DE" }, canonical_value: 3850200, variant_value: 3861750, gap_pct: 0.3, within_tolerance: true, missing: null },
         { dims: { mois_fiscal: "2026-09-01", entite: "DE" }, canonical_value: 4410720, variant_value: 4679780.125, gap_pct: EXACT_GAP, within_tolerance: false, missing: null },
@@ -227,6 +228,23 @@ describe("comparaison", () => {
         tolerance: 2,
       });
     });
+  });
+
+  it("[S-0029-01] [S-0029-02] source commune : annoncée avant le lancement, listée dans le détail", async () => {
+    const common = { node: "n06", label: "Jours comptables", table: "gold.finance.dim_date", platform: "snowflake" };
+    const alert = { code: "common_source", entity: "nordis-es", nodes: ["n06"], message: "nordis-es : n06 · Jours comptables (gold.finance.dim_date) n'a pas d'équivalent dans la déclinaison ; la table du canonique est lue sur snowflake, des deux côtés." };
+    const run = { ...RUN, results: [{ ...RUN.results[0], entity: "nordis-es", platform: "snowflake", common_sources: [common] }] };
+    comparisonServer(({ method, path }) => {
+      if (path === `${API}/preview` && method === "POST") return { json: { ...PREVIEW, alerts: [alert] } };
+      if (path === `${API}/7`) return { json: run };
+      return undefined;
+    });
+    window.location.hash = "#/w/groupe-nordis/comparaison?id=7&variant=nordis-es";
+    render(<Harness />);
+    const banner = (await screen.findByText("Source commune")).closest(".banner")!;
+    expect(banner).toHaveAttribute("role", "status");
+    expect(banner).toHaveTextContent(alert.message);
+    expect(await screen.findByText("Sources communes, lues sur snowflake des deux côtés : n06 · Jours comptables (gold.finance.dim_date).")).toBeInTheDocument();
   });
 
   it("[S-0015-04] accès manquant : connexion sur place, puis le lancement reprend (critère 4)", async () => {

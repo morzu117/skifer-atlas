@@ -93,4 +93,4 @@ Décisions : [ADR 0026](../decisions/0026-comparaison-from-scratch.md). L'ADR 00
   - relancer `npm run e2e` (scénario de comparaison modifié) : fait, 35 tests passés ;
   - une comparaison réelle d'ES sur Snowflake, avec la table commune des jours comptables sur ce compte (compte Snowflake reporté, plan 0018) ;
   - la correspondance de valeurs entre vocabulaires locaux et du groupe, hors périmètre : aujourd'hui, la source doit porter la colonne du groupe ;
-  - signaler à l'écran les sources communes d'une comparaison (`Rebound.common` n'est pas encore exposé).
+  - signaler à l'écran les sources communes d'une comparaison (`Rebound.common` n'est pas encore exposé) : fait, plan 0029, ADR 0033.

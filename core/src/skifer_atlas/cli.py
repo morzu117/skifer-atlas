@@ -392,6 +392,8 @@ def _compare_request(args: argparse.Namespace):
 
 
 def _compare_text(found: dict) -> str:
+    from .compare.orchestrate import common_label  # import tardif, comme le reste de compare
+
     lines = [(f"{found['kpi_id']} v{found['kpi_version']} · scope {found['scope']['id']} · "
               f"tolérance {_number(found['tolerance_pct'])} % · comparaison {found['id']} "
               f"({found['status']})")]
@@ -405,6 +407,9 @@ def _compare_text(found: dict) -> str:
         if result["divergent"]:
             lines.append(f"  nœud divergent : {result['divergent']['node_id']} — "
                          f"{result['divergent']['message']}")
+        if result.get("common_sources"):
+            lines.append("  sources communes : "
+                         f"{', '.join(common_label(c) for c in result['common_sources'])}")
         if result["bypass_nodes"]:
             lines.append(f"  contrôle de cardinalité contourné : "
                          f"{', '.join(result['bypass_nodes'])}")

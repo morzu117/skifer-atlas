@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS results.summaries (
     bypass_nodes VARCHAR[] NOT NULL,
     differences_json VARCHAR NOT NULL
 );
+-- Plan 0029 : ajoutée après coup, en dernière colonne ; les bases déjà créées la reçoivent
+-- ici, et leurs anciennes synthèses la laissent à NULL (aucune source commune connue).
+ALTER TABLE results.summaries ADD COLUMN IF NOT EXISTS common_json VARCHAR;
 """
 
 _lock = threading.RLock()  # `connect` le reprend sous `create` et `finish`
@@ -139,13 +142,14 @@ def finish(db: Path, number: int, status: str, error: str | None, runs: list[dic
             if summaries:
                 connection.executemany(
                     "INSERT INTO results.summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                    "?)", [[number, s["variant_id"], s["entity"], s["variant_version"],
-                            s["platform"], s["access_point"], s["cell_count"],
-                            s["validation_pct"], s["max_gap_pct"], s["divergent_node"],
-                            json.dumps(s["divergent"], ensure_ascii=False),
-                            s["bypass_nodes"],
-                            json.dumps(s["differences"], ensure_ascii=False)]
-                           for s in summaries])
+                    "?, ?)", [[number, s["variant_id"], s["entity"], s["variant_version"],
+                               s["platform"], s["access_point"], s["cell_count"],
+                               s["validation_pct"], s["max_gap_pct"], s["divergent_node"],
+                               json.dumps(s["divergent"], ensure_ascii=False),
+                               s["bypass_nodes"],
+                               json.dumps(s["differences"], ensure_ascii=False),
+                               json.dumps(s.get("common_sources", []), ensure_ascii=False)]
+                              for s in summaries])
             connection.execute(
                 "UPDATE results.comparisons SET status = ?, error = ?, finished_at = ? "
                 "WHERE id = ?", [status, error, now(), number])
@@ -166,6 +170,7 @@ def _comparison(row: dict) -> dict:
 def _summary(row: dict) -> dict:
     row["divergent"] = json.loads(row.pop("divergent_json") or "null")
     row["differences"] = json.loads(row.pop("differences_json"))
+    row["common_sources"] = json.loads(row.pop("common_json", None) or "[]")
     row.pop("comparison_id", None)
     return row
 

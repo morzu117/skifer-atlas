@@ -241,6 +241,8 @@ export type ComparisonCell = {
   missing: "canonical" | "variant" | null;
 };
 
+export type CommonSource = { node: string; label: string | null; table: string; platform: string };
+
 export type ComparisonResult = {
   variant_id: string;
   entity: string;
@@ -253,6 +255,9 @@ export type ComparisonResult = {
   divergent_node: string | null;
   divergent: { node_id: string; node_type: string; classification: string; message: string; label?: string | null } | null;
   bypass_nodes: string[];
+  /** Sources du canonique gardées telles quelles (from scratch, plan 0029) ; absent d'une
+   * réponse d'avant ce plan. */
+  common_sources?: CommonSource[];
   cells: ComparisonCell[];
 };
 
