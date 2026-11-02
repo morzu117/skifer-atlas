@@ -252,3 +252,8 @@ def test_from_scratch_es_compares_through_the_api(client, joined, local):
     [result] = found["results"]
     assert (result["entity"], result["platform"], result["validation_pct"]) == (
         "nordis-es", "snowflake", 75)
+    # Plan 0029 : l'aperçu annonce la source commune, la synthèse la garde.
+    preview = client.post(f"{COMPARISONS}/preview", json={**BODY, "variants": ["nordis-es"]})
+    assert [(a["code"], a["nodes"]) for a in preview.json()["alerts"]] == [
+        ("common_source", ["n06"])]
+    assert [c["node"] for c in result["common_sources"]] == ["n06"]

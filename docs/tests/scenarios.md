@@ -49,8 +49,9 @@
 | 0025 | 6 | 6 | 0 | 0 | 0 |
 | 0026 | 9 | 9 | 0 | 0 | 0 |
 | 0028 | 3 | 2 | 0 | 1 | 0 |
+| 0029 | 4 | 2 | 0 | 2 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **224** | **166** | **5** | **53** | **0** |
+| **Total** | **228** | **168** | **5** | **55** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -947,7 +948,7 @@ Plan 0022, critère 5 · Test : `app/e2e/comparaison-refus.spec.ts` › `[S-0022
 - **Quand** j'ouvre Comparaison
 - **Alors** nordis-es est désactivée et décochée
 - **Et** « Non comparable : … aucune de ses sources n'est rattachée à un concept des sources du canonique » s'affiche
-- Limite : la source commune (date de référence lue sur Snowflake) n'est pas encore affichée, `Rebound.common` n'étant pas exposé (Reste à faire). Elle est vérifiée par `core/tests/compare/test_compare.py::test_rebound_canonical_keeps_a_common_source` ; le refus par `::test_a_variant_sharing_no_concept_is_refused`.
+- Limite : le refus est vérifié par `core/tests/compare/test_compare.py::test_a_variant_sharing_no_concept_is_refused`. La source commune d'une déclinaison comparable s'affiche depuis le plan 0029 (S-0029-01, S-0029-02).
 
 ### S-0022-06 — nordis-es proposée, cochée, et à 75 % dans la matrice
 Plan 0022, critère 6 · Test : `app/e2e/comparaison.spec.ts` › `[S-0022-06]`
@@ -955,6 +956,24 @@ Plan 0022, critère 6 · Test : `app/e2e/comparaison.spec.ts` › `[S-0022-06]`
 - **Quand** je lis le panneau de lancement, puis lance la comparaison
 - **Alors** nordis-es est active et cochée avant le lancement
 - **Et** la matrice l'affiche à 75 %
+
+**Plan 0029**
+
+nordis-es, déclinaison from scratch de Revenu net, garde n06 · Jours comptables (`gold.finance.dim_date`) du canonique, lue sur Snowflake des deux côtés.
+
+### S-0029-01 — L'aperçu annonce la source commune, en information, sans rien lancer
+Plan 0029, critère 1 · Test : `app/e2e/sources-communes.spec.ts` › `[S-0029-01]`
+- **Étant donné** l'écran Comparaison de Revenu net (`groupe-nordis`)
+- **Quand** je coche successivement les trois déclinaisons, nordis-de et nordis-fr, nordis-es seule, puis nordis-de et nordis-es, en attendant chaque fois l'aperçu de la sélection
+- **Alors** avec nordis-es, un seul bandeau « Source commune » s'affiche, en `role="status"` (ton info, jamais `alert`), avec « nordis-es : n06 · Jours comptables (gold.finance.dim_date) n'a pas d'équivalent dans la déclinaison ; la table du canonique est lue sur snowflake, des deux côtés. »
+- **Et** sans nordis-es, aucun bandeau ; aucune violation axe sérieuse ; aucune progression ni `POST …/comparisons`
+
+### S-0029-02 — Le détail du résultat nordis-es nomme ses sources communes
+Plan 0029, critère 2 · Test : `app/e2e/sources-communes.spec.ts` › `[S-0029-02]`
+- **Étant donné** un espace isolé, comparé en local dans DuckDB, nordis-es seule cochée
+- **Quand** je lance la comparaison, attends « Relancer », puis ouvre « Revenu net × nordis-es : 75 % »
+- **Alors** le détail affiche « Sources communes, lues sur snowflake des deux côtés : n06 · Jours comptables (gold.finance.dim_date). », sans violation axe sérieuse
+- **Et** après un rechargement, la ligne est toujours là, relue depuis la base
 
 ## Connexions
 
@@ -1422,6 +1441,8 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0021-01 | Division par zéro : `NULL` en DuckDB ; division entière et modulo par zéro aussi | Exécution DuckDB, absente du panneau SQL | `core/tests/compile/test_ecarts.py::test_division_by_zero_is_null_on_duckdb`, `::test_integer_division_and_modulo_keep_their_type` |
 | S-0021-07 | Les tests existants restent verts ; les SQL de référence changent délibérément | CI et revue de code | `core/tests/compile/test_compile.py` ; `core/tests/compile/test_ecarts.py` (suite complète en CI) |
 | S-0028-03 | Une autre erreur d'ouverture de la base (dossier absent) remonte sans attente | Logique serveur sans écran : aucune action de l'app ne mène à un dossier de base absent | `core/tests/test_dbfile.py::test_other_io_errors_are_not_retried` |
+| S-0029-03 | Une base créée avant le plan 0029 s'ouvre ; ses anciennes synthèses n'ont aucune source commune | Logique serveur sans écran : l'app ne crée pas de base ancienne | `core/tests/compare/test_compare.py::test_a_base_from_before_plan_0029_is_migrated` |
+| S-0029-04 | `atlas compare … --variants nordis-es` nomme la source commune | Sortie de la CLI, sans écran | `core/tests/compare/test_compare.py::test_cli_compare_lists_common_sources` |
 | S-RAF-01 | Installation sur un poste vierge de chaque OS, puis accueil → catalogue → fiche | Fenêtre native Tauri, installateurs signés, postes vierges ; WebKit ne teste que les vues | `.github/workflows/release.yml` ; `core/tests/test_sidecar.py` ; `core/tests/test_release.py` |
 | S-RAF-09 | Keyring et connecteurs figés sous Windows | Poste Windows réel ; l'e2e utilise un coffre en mémoire | `core/tests/test_sidecar.py` ; `core/tests/connections/test_connections.py` ; `core/tests/connections/test_snowflake.py` |
 | S-RAF-10 | Extraction d'un vrai script de production anonymisé | Revue produit : le script est à fournir et valider par son propriétaire | `core/tests/extract/test_extract.py` (corpus synthétique) |

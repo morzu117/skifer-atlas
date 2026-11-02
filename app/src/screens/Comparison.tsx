@@ -8,6 +8,7 @@ import {
   type ComparisonProgress,
   type ComparisonRequest,
   type ComparisonSetup,
+  type CommonSource,
   type HistoryEntry,
   type MatrixRow,
   type MissingAccess,
@@ -40,6 +41,12 @@ export const STATUSES: Record<string, string> = {
   interrupted: "interrompue",
 };
 const STATES: Record<string, string> = { pending: "En attente", running: "En cours", done: "Terminé", cancelled: "Annulé", failed: "Échec" };
+/** Titre du bandeau par code d'alerte ; une source commune informe, le reste avertit. */
+const ALERT_TITLES: Record<string, string> = {
+  cardinality_bypass: "Contrôle de cardinalité contourné",
+  undeclared_override: "Surcharge hors des points déclarés",
+  common_source: "Source commune",
+};
 const POLL_MS = 400;
 const ALL = "tous";
 
@@ -73,6 +80,11 @@ export function tone(validation: number | null | undefined): "pass" | "warn" | "
   if (validation === null || validation === undefined) return "bad";
   if (validation >= PASS_THRESHOLD) return "pass";
   return validation >= WARN_THRESHOLD ? "warn" : "bad";
+}
+
+/** « n06 · Jours comptables (gold.finance.dim_date) », comme la CLI. */
+function commonLabel(source: CommonSource): string {
+  return `${source.node}${source.label ? ` · ${source.label}` : ""} (${source.table})`;
 }
 
 /** Horodatage UTC du serveur (sans fuseau) → « 30/10/2026 14:05 », à l'heure du poste. */
@@ -400,7 +412,7 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
         />
       </div>
       {alerts.map((alert) => (
-        <Banner key={`${alert.code}-${alert.entity}`} tone="warn" title={alert.code === "cardinality_bypass" ? "Contrôle de cardinalité contourné" : "Surcharge hors des points déclarés"}>
+        <Banner key={`${alert.code}-${alert.entity}`} tone={alert.code === "common_source" ? "info" : "warn"} title={ALERT_TITLES[alert.code] ?? "Surcharge hors des points déclarés"}>
           {alert.message}
         </Banner>
       ))}
@@ -626,6 +638,7 @@ function Detail({ ws, id, variant, labels }: { ws: Workspace; id: number; varian
   }
   const found = run.value;
   const result = found.results.find((r) => r.entity === variant) ?? found.results[0];
+  const common = result?.common_sources ?? [];
   const kpi = labels[found.kpi_id] ?? found.kpi_id;
   const dims = found.scope.granularity ?? (result ? Object.keys(result.cells[0]?.dims ?? {}) : []);
   const meta = [
@@ -677,6 +690,11 @@ function Detail({ ws, id, variant, labels }: { ws: Workspace; id: number; varian
           {result.divergent && <p className="muted">Le nœud divergent est une piste tirée du diff structurel, pas une preuve.</p>}
           {result.bypass_nodes.length > 0 && (
             <p className="fact-warn">Contrôle de cardinalité contourné : {result.bypass_nodes.join(", ")}.</p>
+          )}
+          {common.length > 0 && (
+            <p className="muted">
+              Sources communes, lues sur {common[0].platform} des deux côtés : {common.map(commonLabel).join(", ")}.
+            </p>
           )}
           <div className="table-wrap">
             <table className="table detail-table">

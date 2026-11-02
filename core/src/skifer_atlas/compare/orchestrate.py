@@ -76,9 +76,20 @@ class VariantPlan:
     differences: list[dict]
     divergent: dict | None
     bypass: list[str]
+    # Sources du canonique gardées telles quelles (from scratch, ADR 0026) : nœud, libellé,
+    # table, et plateforme de la déclinaison où elles sont lues.
+    common: list[dict] = field(default_factory=list)
 
     def alerts(self) -> list[dict]:
         found = []
+        if self.common:
+            names = ", ".join(common_label(c) for c in self.common)
+            verb = "n'ont" if len(self.common) > 1 else "n'a"
+            found.append({"code": "common_source", "entity": self.entity,
+                          "nodes": [c["node"] for c in self.common],
+                          "message": f"{self.entity} : {names} {verb} pas d'équivalent dans la "
+                                     f"déclinaison ; la table du canonique est lue sur "
+                                     f"{self.platform}, des deux côtés."})
         if self.bypass:
             found.append({"code": "cardinality_bypass", "entity": self.entity,
                           "nodes": self.bypass,
@@ -111,7 +122,19 @@ class Prepared:
         return [alert for plan in self.plans for alert in plan.alerts()]
 
 
+def common_label(source: dict) -> str:
+    """« n06 · Jours comptables (gold.finance.dim_date) »."""
+    label = f" · {source['label']}" if source.get("label") else ""
+    return f"{source['node']}{label} ({source['table']})"
+
+
 # --- préparation ---------------------------------------------------------------------------
+
+def _common(kpi: KpiDocument, ids: list[str], platform: str) -> list[dict]:
+    nodes = {n.id: n for n in kpi.graph.nodes}
+    return [{"node": i, "label": nodes[i].label, "table": nodes[i].table, "platform": platform}
+            for i in ids]
+
 
 def _scope(kpi: KpiDocument, request: CompareRequest) -> KpiScope:
     if request.scope_id is not None and request.scope is not None:
@@ -228,7 +251,8 @@ def prepare(analysis: Analysis, calendars: dict, governance_tolerance: float,
         plans.append(VariantPlan(
             variant_id, entity, variant.data_product.version, variant.mode, platform,
             access_point, canonical, own, differences, divergent,
-            sorted(set(canonical.compiled.bypassed) | set(own.compiled.bypassed))))
+            sorted(set(canonical.compiled.bypassed) | set(own.compiled.bypassed)),
+            _common(kpi, rebound.common, platform)))
     return Prepared(kpi, declared, granularity, tolerance, plans)
 
 
@@ -386,7 +410,7 @@ def _execute(job: Job, runner: Runner) -> None:
                 "validation_pct": summary.validation_pct, "max_gap_pct": summary.max_gap_pct,
                 "divergent_node": (plan.divergent or {}).get("node_id"),
                 "divergent": plan.divergent, "bypass_nodes": plan.bypass,
-                "differences": plan.differences})
+                "differences": plan.differences, "common_sources": plan.common})
     if job.cancel.is_set():
         status = "cancelled"
     elif len(summaries) == len(prepared.plans):

@@ -252,6 +252,37 @@ def test_from_scratch_es_compares_with_fr_and_de(db):
     assert tables["gold.finance.dim_date"] == ["date_jour", "date_comptable"]  # commune
 
 
+def test_common_sources_are_announced_then_kept_with_the_result(db):
+    """Plan 0029, critères 1 et 2 : la source commune d'ES est annoncée avant l'exécution,
+    puis conservée avec sa synthèse ; FR n'en a pas."""
+    prepared, found = compare(EXAMPLE, db, "nordis-fr", "nordis-es")
+    common = [{"node": "n06", "label": "Jours comptables", "table": "gold.finance.dim_date",
+               "platform": "snowflake"}]
+    [alert] = [a for a in prepared.alerts() if a["code"] == "common_source"]
+    assert (alert["entity"], alert["nodes"]) == ("nordis-es", ["n06"])
+    assert alert["message"] == (
+        "nordis-es : n06 · Jours comptables (gold.finance.dim_date) n'a pas d'équivalent dans "
+        "la déclinaison ; la table du canonique est lue sur snowflake, des deux côtés.")
+    results = {r["entity"]: r for r in found["results"]}
+    assert results["nordis-es"]["common_sources"] == common
+    assert results["nordis-fr"]["common_sources"] == []
+
+
+def test_a_base_from_before_plan_0029_is_migrated(db):
+    """Plan 0029, critère 3 : une base créée sans la colonne reçoit `common_json` ; ses
+    anciennes synthèses n'ont aucune source commune, les nouvelles la gardent."""
+    old_ddl = store.DDL.split("-- Plan 0029")[0]
+    with duckdb.connect(str(db)) as connection:
+        connection.execute(old_ddl)
+        connection.execute("INSERT INTO results.comparisons VALUES (1, now(), now(), 'anna.k', "
+                           "'revenu-net', 4, '{\"id\": \"x\"}', 1.5, 'done', NULL, 1)")
+        connection.execute("INSERT INTO results.summaries VALUES (1, 'v', 'nordis-fr', 4, "
+                           "'databricks', NULL, 0, NULL, NULL, NULL, 'null', [], '[]')")
+    assert store.get(db, 1)["results"][0]["common_sources"] == []
+    _, found = compare(EXAMPLE, db, "nordis-es")
+    assert found["id"] == 2 and found["results"][0]["common_sources"][0]["node"] == "n06"
+
+
 def test_rebound_canonical_keeps_a_common_source(space):
     """Date de référence : aucune source ES rattachée à ce concept, la table du canonique
     reste, lue sur la plateforme de la déclinaison."""
@@ -470,6 +501,14 @@ def test_cli_compare(capsys, db):
     found = json.loads(capsys.readouterr().out)
     assert code == 0 and found["results"][0]["validation_pct"] == 100
     assert found["scope"]["period"] == {"from": "2026-02-01", "to": "2026-09-30"}
+
+
+def test_cli_compare_lists_common_sources(capsys, db):
+    """Plan 0029, critère 4 : la sortie texte nomme la source commune d'ES."""
+    main(["compare", str(EXAMPLE), "revenu-net", "--variants", "nordis-es",
+          "--scope", SCOPE, "--duckdb-data", str(DATA), "--db", str(db)])
+    assert ("  sources communes : n06 · Jours comptables (gold.finance.dim_date)"
+            in capsys.readouterr().out)
 
 
 def test_cli_compare_errors(capsys, space):

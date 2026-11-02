@@ -32,6 +32,7 @@ Statut : plans validés le 30 octobre 2026, développement lancé par le plan 00
 | 0026 | Parcours WebKit de bout en bout | parcours 0010–0016, graphe de 200 nœuds et axe sous WebKit | 0010–0016, 0024 | S |
 | 0027 | Scénarios de test front | un scénario et un test front par vérification, catalogue `docs/tests/scenarios.md` | 0010–0026 | M |
 | 0028 | Base partagée entre processus | la CLI et l'app ouvrent la même base : attente, puis « Base de l'espace occupée » | 0005, 0009 | S |
+| 0029 | Sources communes d'une comparaison | sources du canonique gardées telles quelles : annoncées avant lancement, listées dans le résultat | 0009, 0015, 0022 | S |
 
 **Chemin critique** : 0001 → 0002 → 0003 → 0005 → 0006 → 0010 → 0011 → 0012 → 0013 → 0014. La branche « chiffrée » 0007 → 0008 → 0009 → 0018 peut avancer en parallèle dès 0002, et l'extraction 0004 dès 0003.
 
@@ -75,7 +76,6 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 **Développement** :
 - Route de révision d'une proposition, si l'écran en a besoin (0006).
 - Autres paramètres de session : fuseau de Databricks, `TIMESTAMP_TYPE_MAPPING` de Snowflake pour `CAST(… AS TIMESTAMP)` (0021).
-- Afficher à l'écran les sources communes d'une comparaison : `Rebound.common` n'est pas encore exposé (0022).
 - Onglets de la fiche au clavier sous WebKit macOS : Tab seul ne passe pas par les liens (⌥Tab, ou réglage macOS). Deux pistes : des boutons à la place des liens, ou l'option WKWebView qui fait passer Tab par les liens (0026, ADR 0030).
 
 **Hors périmètre, à décider** :
@@ -87,6 +87,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 - Rafraîchissement des jetons GitHub à durée limitée (0025).
 
 **Réglé** depuis la mise à jour précédente :
+- Sources communes d'une comparaison, annoncées avant lancement et listées dans le résultat : plan 0029, ADR 0033.
 - Base d'un espace ouverte en même temps par la CLI et l'app : attente, puis « Base de l'espace occupée » (issue #61) : plan 0028, ADR 0032 ; suivi de la relecture (#65) inclus.
 - Ports e2e occupés : la configuration Playwright les vérifie avant de lancer quoi que ce soit, et nomme chaque port pris avec son processus (`app/e2e/ports.ts`, issue #61).
 - Parcours des plans 0010 à 0016 et graphe de 200 nœuds sous WebKit, le moteur de Tauri macOS, avec axe : plan 0026, ADR 0030.
