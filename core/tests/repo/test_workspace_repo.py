@@ -1,11 +1,16 @@
 """Dépôt d'un espace : disposition, Git, création, adhésion, synchronisation, versions."""
 
+import threading
+import time
+
 import pytest
 import yaml
 from workspace_helpers import EXAMPLE, REVENU_NET, USER, atlas_env, commit_all, git, remote
 
+from skifer_atlas.proposals import common as proposals_common
 from skifer_atlas.repo import RepoError
 from skifer_atlas.repo import git as repo_git
+from skifer_atlas.repo import sync as repo_sync
 from skifer_atlas.repo.layout import WorkspaceMeta, document_files, read_meta
 from skifer_atlas.repo.sync import create_workspace, join_workspace, sync_workspace
 from skifer_atlas.repo.versions import document_at, versions
@@ -121,6 +126,45 @@ def test_sync_fast_forwards(remote):
     assert git(repo_dir("groupe-nordis"), "rev-parse", "HEAD").strip() == pushed
     assert get_workspace("groupe-nordis").entities[-1] == "nordis-it"
 
+
+
+def test_fetches_of_one_clone_never_overlap(remote, monkeypatch):
+    """Une synchronisation et le fetch d'un écran de propositions, lancés ensemble, passent
+    l'un après l'autre : deux `git fetch` concurrents sur un clone, le second échouait
+    (« cannot lock ref 'refs/remotes/origin/main' », vu dans l'e2e S-0006-12)."""
+    bare, _ = remote
+    join_workspace(str(bare))
+    running, overlaps, errors = [0], [], []
+    real = repo_git.run_git
+
+    def slow_git(args, *rest, **options):
+        if args[0] == "fetch":
+            running[0] += 1
+            overlaps.append(running[0])
+            time.sleep(0.2)  # élargit la fenêtre où deux fetchs se recouvriraient
+            try:
+                return real(args, *rest, **options)
+            finally:
+                running[0] -= 1
+        return real(args, *rest, **options)
+
+    monkeypatch.setattr(repo_sync, "run_git", slow_git)
+    monkeypatch.setattr(proposals_common, "run_git", slow_git)
+
+    def call(action):
+        try:
+            action()
+        except RepoError as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=call, args=(lambda: sync_workspace("groupe-nordis"),)),
+               threading.Thread(target=call, args=(lambda: proposals_common.open_context(
+                   "groupe-nordis"),))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+    assert errors == [] and overlaps == [1, 1]
 
 NORDIS_FR = "variants/revenu-net/nordis-fr.yaml"
 
