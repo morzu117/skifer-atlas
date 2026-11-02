@@ -6,14 +6,22 @@ WITH n01 AS (
     client_id,
     statut,
     montant,
-    passee_le
+    CASE
+      WHEN TYPEOF(CAST(passee_le AS VARIANT)) IN ('TIMESTAMP_LTZ', 'TIMESTAMP_TZ')
+      THEN CAST(CONVERT_TIMEZONE('UTC', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)
+      ELSE CAST(passee_le AS TIMESTAMPNTZ)
+    END AS passee_le
   FROM ventes.commandes
 ), n02 AS (
   SELECT
     id,
     client,
     montant_web,
-    horodatage
+    CASE
+      WHEN TYPEOF(CAST(horodatage AS VARIANT)) IN ('TIMESTAMP_LTZ', 'TIMESTAMP_TZ')
+      THEN CAST(CONVERT_TIMEZONE('UTC', CAST(horodatage AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)
+      ELSE CAST(horodatage AS TIMESTAMPNTZ)
+    END AS horodatage
   FROM ventes.commandes_web
 ), n03 AS (
   SELECT

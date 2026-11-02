@@ -277,8 +277,7 @@ def test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone():
     assert ("THEN DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), "
             "CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)) ELSE") in flat(
                 sql(orders(), "databricks"))
-    for dialect in ("snowflake", "duckdb"):
-        assert "TYPEOF" not in sql(orders("Europe/Paris"), dialect).upper()
+    assert "TYPEOF" not in sql(orders("Europe/Paris"), "duckdb").upper()
 
 
 def test_an_instant_is_read_without_the_session_zone():
@@ -298,6 +297,39 @@ def test_an_instant_is_read_without_the_session_zone():
             assert [r[0] for r in connection.execute(query).fetchall()] == [
                 datetime.datetime(2025, 10, 1, 1, 0), datetime.datetime(2025, 10, 26, 2, 30),
                 datetime.datetime(2025, 10, 26, 2, 30)], zone
+
+
+def test_snowflake_reads_a_source_timestamp_as_wall_clock_of_its_zone():
+    """Plan 0031, critère 1 : `TIMESTAMP_LTZ`, `TIMESTAMP_TZ` ou `TIMESTAMP_NTZ`, la colonne
+    est lue dans son fuseau déclaré."""
+    text = sql(orders("Europe/Paris"), "snowflake")
+    assert ("CASE WHEN TYPEOF(CAST(passee_le AS VARIANT)) IN ('TIMESTAMP_LTZ', 'TIMESTAMP_TZ') "
+            "THEN CAST(CONVERT_TIMEZONE('Europe/Paris', CAST(passee_le AS TIMESTAMPTZ)) AS "
+            "TIMESTAMPNTZ) ELSE CAST(passee_le AS TIMESTAMPNTZ) END AS passee_le") in flat(text)
+    reparse(text, "snowflake")
+    # Fuseau UTC : un TIMESTAMP_LTZ passe quand même à l'heure UTC.
+    assert ("THEN CAST(CONVERT_TIMEZONE('UTC', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)"
+            in flat(sql(orders(), "snowflake")))
+
+
+def test_a_snowflake_instant_is_read_without_the_session_zone():
+    """Plan 0031, critère 2 : la branche instant, traduite en DuckDB, rend l'heure de Paris
+    quelle que soit la session, y compris pendant l'heure doublée du passage à l'heure
+    d'hiver, et pour un instant écrit avec un autre décalage (`TIMESTAMP_TZ`)."""
+    branch = wall_clock(exp.column("t"), "Europe/Paris", "snowflake").args["ifs"][0].args["true"]
+    query = sqlglot.transpile(exp.select(branch.as_("v")).from_("x").sql("snowflake"),
+                              read="snowflake", write="duckdb")[0]
+    instants = ["2025-09-30 23:00:00+00", "2025-10-26 00:30:00+00", "2025-10-26 01:30:00+00",
+                "2025-10-26 07:00:00+05:30"]
+    for zone in ("UTC", "America/New_York", "Europe/Paris"):
+        with duckdb.connect() as connection:
+            connection.execute(f"SET TimeZone = '{zone}'")
+            connection.execute("CREATE TABLE x (t TIMESTAMPTZ)")
+            for instant in instants:
+                connection.execute("INSERT INTO x VALUES (CAST(? AS TIMESTAMPTZ))", [instant])
+            assert [r[0] for r in connection.execute(query).fetchall()] == [
+                datetime.datetime(2025, 10, 1, 1, 0), datetime.datetime(2025, 10, 26, 2, 30),
+                datetime.datetime(2025, 10, 26, 2, 30), datetime.datetime(2025, 10, 26, 2, 30)], zone
 
 
 # Seul `TIMESTAMP` permis : le cast d'un instant vers lui-même, dans la branche instant de
