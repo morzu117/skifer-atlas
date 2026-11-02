@@ -31,6 +31,8 @@ export default defineConfig({
   use: { baseURL: "http://localhost:1420", viewport: { width: 1280, height: 820 } },
   // Chromium pour tous les scénarios ; WebKit, le moteur de la vue Tauri sous macOS, pour
   // les rendus et parcours des plans 0010–0016 et 0024 (*.webkit.spec.ts, plan 0026).
+  // WebKit réutilise les serveurs et le dossier de données de Chromium, sans dépendre de
+  // son passage (`--project=webkit` seul réussit) ; un seul worker garde les deux en série.
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 820 } }, testIgnore: /\.webkit\.spec\.ts$/ },
     { name: "webkit", use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 820 } }, testMatch: /\.webkit\.spec\.ts$/ },
