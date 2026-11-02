@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..githost import GitHost, host_for, remote_token
 from ..governance.model import ROLE_RANK, Governance, parse_governance, role_of
-from ..repo.git import RepoError, run_git
+from ..repo.git import RepoError, clone_lock, run_git
 from ..repo.layout import GOVERNANCE_FILE, read_meta
 from ..repo.sync import sync_workspace
 from ..workspaces import Workspace, get_workspace, repo_dir
@@ -60,8 +60,9 @@ def open_context(workspace_id: str, sync: bool = False, fetch: bool = True) -> C
     if sync:
         sync_workspace(workspace_id)
     elif fetch:
-        run_git(["fetch", "--quiet", "--prune", "origin"], repo, error_code="fetch_failed",
-                token=token)
+        with clone_lock(repo):
+            run_git(["fetch", "--quiet", "--prune", "origin"], repo,
+                    error_code="fetch_failed", token=token)
     base = run_git(["rev-parse", "--verify", f"refs/remotes/origin/{main_branch}"],
                    repo).strip()
     try:

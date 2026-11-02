@@ -12,6 +12,9 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import cache
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -80,6 +83,22 @@ def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
         raise RepoError(error_code, f"git {args[0]} a échoué : {message}")
     return result.stdout
 
+
+
+_clone_locks: dict[Path, threading.RLock] = {}
+_clone_locks_guard = threading.Lock()
+
+
+@contextmanager
+def clone_lock(repo: Path) -> Iterator[None]:
+    """Un seul fetch ou une seule synchronisation à la fois par clone, dans ce processus.
+    Deux `git fetch` concurrents se disputent le verrou des références distantes, et le
+    second échoue (« cannot lock ref 'refs/remotes/origin/main' »). Réentrant : une
+    synchronisation peut suivre un fetch sous le même verrou."""
+    with _clone_locks_guard:
+        lock = _clone_locks.setdefault(Path(repo).resolve(), threading.RLock())
+    with lock:
+        yield
 
 def check_remote_url(url: str) -> None:
     """Refuse une URL qui porte un identifiant (`https://jeton@hôte/…`)."""

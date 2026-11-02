@@ -87,6 +87,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 - Rafraîchissement des jetons GitHub à durée limitée (0025).
 
 **Réglé** depuis la mise à jour précédente :
+- Deux `git fetch` concurrents sur un même clone (synchronisation pendant le chargement de l'écran Propositions), vus dans l'e2e S-0006-12 : ADR 0035.
 - Sources communes d'une comparaison, annoncées avant lancement et listées dans le résultat : plan 0029, ADR 0033.
 - Base d'un espace ouverte en même temps par la CLI et l'app : attente, puis « Base de l'espace occupée » (issue #61) : plan 0028, ADR 0032 ; suivi de la relecture (#65) inclus.
 - Ports e2e occupés : la configuration Playwright les vérifie avant de lancer quoi que ce soit, et nomme chaque port pris avec son processus (`app/e2e/ports.ts`, issue #61).

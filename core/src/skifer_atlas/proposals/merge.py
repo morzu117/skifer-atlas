@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 
 from ..governance.rules import decide
-from ..repo.git import RepoError, run_git
+from ..repo.git import RepoError, clone_lock, run_git
 from ..repo.sync import sync_workspace
 from ..repo.versions import tag_name
 from .common import open_context, parse_body, push
@@ -51,8 +51,9 @@ def merge_proposal(workspace_id: str, number: int) -> dict:
     tag = None
     if target["kind"] not in SHARED_FILES:
         tag = tag_name(target["id"], block["version"])
-        run_git(["fetch", "--quiet", "origin"], context.repo, error_code="fetch_failed",
-                token=context.token)
+        with clone_lock(context.repo):
+            run_git(["fetch", "--quiet", "origin"], context.repo, error_code="fetch_failed",
+                    token=context.token)
         run_git(["tag", tag, merged], context.repo)
         push(context, f"refs/tags/{tag}")
     synced = sync_workspace(workspace_id)

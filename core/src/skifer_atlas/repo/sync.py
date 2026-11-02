@@ -26,7 +26,7 @@ from ..governance.model import (
 )
 from ..paths import data_dir
 from ..workspaces import Workspace, add_workspace, get_workspace, repo_dir, update_workspace
-from .git import RepoError, check_remote_url, head, run_git
+from .git import RepoError, check_remote_url, clone_lock, head, run_git
 from .layout import GOVERNANCE_FILE, META_FILE, WorkspaceMeta, read_governance, read_meta
 from .versions import missing_tags
 
@@ -198,6 +198,11 @@ def _warnings(repo: Path) -> list[dict]:
 def sync_workspace(workspace_id: str) -> dict:
     """`git fetch` puis avance rapide de la branche principale. Un historique divergent
     lève `sync_conflict` sans toucher au clone : aucune résolution automatique."""
+    with clone_lock(repo_dir(workspace_id)):
+        return _sync(workspace_id)
+
+
+def _sync(workspace_id: str) -> dict:
     workspace = _workspace(workspace_id)
     repo = repo_dir(workspace_id)
     branch = read_meta(repo).main_branch
