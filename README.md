@@ -33,7 +33,7 @@ Prérequis : [uv](https://docs.astral.sh/uv/), Node 20+, Rust stable (toolchain 
 
 ```bash
 # cœur Python
-cd core && uv sync && uv run pytest
+cd core && uv sync && uv run pytest   # sans les tests lents (démo) : uv run pytest -m slow
 
 # application (lance Vite + Tauri ; en dev, le serveur démarre via `uv run` depuis core/)
 cd app && npm install && npm run tauri dev

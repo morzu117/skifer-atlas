@@ -10,7 +10,7 @@ Depuis la racine du dépôt, sur un Mac de développement (uv, Node, Rust, comme
 examples/demo/lancer-demo.sh            # dossier ~/atlas-demo, compte julien.h
 ```
 
-Le script crée l'espace Groupe Nordis dans `~/atlas-demo`, avec l'historique de Revenu net, cinq propositions et trois points d'accès, puis ouvre l'app (Tauri, mode dev). Le premier lancement compile la partie Rust et prend plusieurs minutes : il faut le faire la veille. Chaque lancement recrée le dossier, si bien que la démo repart toujours du même état. Pour arrêter, il suffit de fermer la fenêtre. Avec `DEMO_SANS_APP=1`, le script s'arrête après la préparation (c'est ce que vérifie `core/tests/test_demo.py`).
+Le script crée l'espace Groupe Nordis dans `~/atlas-demo`, avec l'historique de Revenu net, cinq propositions et trois points d'accès, puis ouvre l'app (Tauri, mode dev). Le premier lancement compile la partie Rust et prend plusieurs minutes : il faut le faire la veille. Chaque lancement recrée le dossier, si bien que la démo repart toujours du même état. Pour arrêter, il suffit de fermer la fenêtre. Avec `DEMO_SANS_APP=1`, le script s'arrête après la préparation (c'est ce que vérifie `core/tests/test_demo.py`, hors du pytest par défaut : `cd core && uv run pytest -m slow`).
 
 Rien ne touche aux vraies données :
 - les comparaisons tournent sur les données de test (`core/tests/fixtures/compare/revenu-net`) ;

@@ -56,7 +56,9 @@ markers = [
     "databricks: test réel contre un SQL warehouse Databricks (ATLAS_DATABRICKS_*), hors CI",
     "snowflake: test réel contre un compte Snowflake (ATLAS_SNOWFLAKE_*), hors CI",
     "sidecar: binaire figé construit par scripts/build-sidecar.sh, hors CI",
+    "slow: test lent (préparation de la démo), hors du pytest par défaut",
 ]
+addopts = "-m 'not slow'"
 
 [tool.uv.sources]
 skifer = { git = "https://github.com/morzu117/skifer.git", rev = "v4.0.0" }

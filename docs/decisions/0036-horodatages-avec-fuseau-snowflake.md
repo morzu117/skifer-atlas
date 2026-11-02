@@ -25,5 +25,7 @@ Le SQL doit se suffire (ADR 0025) : pas de paramètre de session, pas de nouveau
 - Un instant n'a qu'une heure murale par fuseau : pas d'ambiguïté pendant l'heure doublée du passage à l'heure d'hiver.
 - Le reste du graphe ne voit que des heures murales, en Snowflake comme en Databricks.
 - Cette décision lève la limite Snowflake de l'ADR 0034.
+- Une colonne `TIMESTAMP_NTZ` est supposée écrite dans son fuseau déclaré, comme avant : si un outil de chargement y écrit de l'UTC, la colonne déclare `timezone: UTC` (rappel dans `core/README.md`).
+- **Limite : élagage.** Le `CASE` est évalué par ligne dans la CTE de la source : un filtre posé ensuite sur la colonne (`passee_le > …`) ne permet probablement plus à Snowflake d'élaguer les micro-partitions. Non mesuré, faute de compte (#82) ; le même constat vaut pour le `CASE` Databricks (ADR 0034).
 - **Vérification.** Aucun test n'exécute le SQL sur un vrai compte Snowflake. La branche instant est exécutée en DuckDB, après traduction, sous trois fuseaux de session et pour un instant écrit avec un autre décalage ; le SQL Snowflake est relu par SQLGlot ; les chaînes rendues par `TYPEOF` (`TIMESTAMP_LTZ`, `TIMESTAMP_TZ`) viennent de la documentation de Snowflake.
 - Tests : `core/tests/compile/test_ecarts.py` (section plan 0031) ; référence `core/tests/fixtures/compile/golden/ventes.snowflake.sql`.

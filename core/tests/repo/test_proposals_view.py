@@ -148,18 +148,28 @@ def test_the_tag_fetch_of_a_merge_waits_for_a_concurrent_sync(client, monkeypatc
     """ADR 0035 : une synchronisation lancée pendant le fetch qui précède le tag d'une
     fusion attend son tour. Taux de service v3 (#2) est prête à fusionner (Supply, 1 / 1)."""
     running, overlaps, errors = [0], [], []
-    real = repo_sync.run_git
+    counting = threading.Lock()
+    sync_waits = threading.Event()  # la synchronisation attend le verrou, ou fetche déjà
+    real, real_lock = repo_sync.run_git, repo_sync.clone_lock
 
     def slow_git(args, *rest, **options):
         if args[0] != "fetch":
             return real(args, *rest, **options)
-        running[0] += 1
-        overlaps.append(running[0])
+        with counting:
+            running[0] += 1
+            overlaps.append(running[0])
+        if threading.current_thread() is sync:
+            sync_waits.set()
         time.sleep(0.3)  # élargit la fenêtre où deux fetchs se recouvriraient
         try:
             return real(args, *rest, **options)
         finally:
-            running[0] -= 1
+            with counting:
+                running[0] -= 1
+
+    def sync_lock(repo):
+        sync_waits.set()
+        return real_lock(repo)
 
     def call(action):
         try:
@@ -173,10 +183,11 @@ def test_the_tag_fetch_of_a_merge_waits_for_a_concurrent_sync(client, monkeypatc
     def tag_fetch(args, *rest, **options):
         if args[0] == "fetch" and not sync.is_alive():
             sync.start()  # la synchronisation démarre pendant le fetch du tag
-            time.sleep(0.05)
+            assert sync_waits.wait(10)
         return slow_git(args, *rest, **options)
 
     monkeypatch.setattr(repo_sync, "run_git", slow_git)
+    monkeypatch.setattr(repo_sync, "clone_lock", sync_lock)
     monkeypatch.setattr(proposals_common, "run_git", slow_git)
     monkeypatch.setattr(proposals_merge, "run_git", tag_fetch)
     as_account(monkeypatch, "sami.b")

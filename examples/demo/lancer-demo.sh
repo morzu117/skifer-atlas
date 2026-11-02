@@ -65,7 +65,7 @@ if [[ -z "$ready" ]]; then
 fi
 if ! joined=$(curl -s -w '\n%{http_code}' -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/json' -d "{\"remote_url\":\"$demo/distant.git\"}" \
-    "http://127.0.0.1:$port/api/workspaces/join") || [[ "${joined##*$'\n'}" != 201 ]]; then
+    "http://127.0.0.1:$port/api/workspaces/join") || [[ "${joined##*$'\n'}" != 2?? ]]; then
   echo "L'espace n'a pas pu être rejoint : ${joined%$'\n'*}" >&2
   exit 1
 fi
