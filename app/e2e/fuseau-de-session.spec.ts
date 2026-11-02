@@ -41,8 +41,8 @@ test("[S-0030-01] [S-0030-02] [S-0030-04] Horodatage d'une source lu en heure mu
         "ELSE CAST(passee_le AS TIMESTAMP_NTZ) END AS passee_le",
     );
     expect(dbx).toContain("passee_le > CAST('2025-01-01 00:00:00' AS TIMESTAMP_NTZ)");
-    // Seul `TIMESTAMP` permis : le cast d'un instant vers lui-même, dans la branche instant.
-    expect(dbx.replaceAll("UNIX_MICROS(CAST(passee_le AS TIMESTAMP))", "")).not.toContain("AS TIMESTAMP)");
+    // Seule exception, quelle que soit la colonne : le cast d'un instant vers lui-même.
+    expect(dbx.replace(/UNIX_MICROS\(CAST\(\w+ AS TIMESTAMP\)\)/g, "")).not.toContain("AS TIMESTAMP)");
 
     // Snowflake : ni TYPEOF ni cast dépendant de TIMESTAMP_TYPE_MAPPING.
     await panel.getByRole("radio", { name: "Snowflake" }).check();

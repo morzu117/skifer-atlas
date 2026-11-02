@@ -57,3 +57,4 @@ Le YAML déclare, pour chaque colonne `timestamp` d'une source, son fuseau d'ori
 
 - Les deux branches du `CASE` sont typées avant l'exécution, quelle que soit la valeur de `TYPEOF`. `UNIX_MICROS` reçoit donc un cast explicite, `UNIX_MICROS(CAST(c AS TIMESTAMP))` : la requête reste valide pour une colonne `TIMESTAMP_NTZ` ou texte, sans s'en remettre à une conversion implicite, et le cast ne change rien à un instant. Le critère 2 admet cette seule exception.
 - Toujours pas de vérification sur un vrai entrepôt Databricks.
+- Suivi #76 : les tests retirent cette exception pour toute colonne (`UNIX_MICROS\(CAST\(\w+ AS TIMESTAMP\)\)`), et `test_no_reference_sql_casts_to_a_session_timestamp` vérifie le critère 2 sur les références Databricks et Snowflake (`horodatage` dans `ventes.databricks.sql`).

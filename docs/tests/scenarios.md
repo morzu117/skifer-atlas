@@ -675,8 +675,8 @@ Plan 0030, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030
 Plan 0030, critère 2 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-02]`
 - **Quand** j'affiche le SQL Databricks, puis Snowflake
 - **Alors** le littéral du filtre s'écrit `CAST('2025-01-01 00:00:00' AS TIMESTAMP_NTZ)` en Databricks, `… AS TIMESTAMPNTZ)` en Snowflake
-- **Et** aucun des deux ne contient `AS TIMESTAMP)`, hormis `UNIX_MICROS(CAST(passee_le AS TIMESTAMP))` dans la branche instant de Databricks (cast d'un instant vers lui-même)
-- Limite : la conversion vers le même fuseau et le `NULL` typé d'une union sont vérifiés par `core/tests/compile/test_ecarts.py::test_no_timestamp_cast_depends_on_the_session`.
+- **Et** aucun des deux ne contient `AS TIMESTAMP)`, hormis `UNIX_MICROS(CAST(<colonne> AS TIMESTAMP))` dans la branche instant de Databricks (cast d'un instant vers lui-même)
+- Limite : la conversion vers le même fuseau et le `NULL` typé d'une union sont vérifiés par `core/tests/compile/test_ecarts.py::test_no_timestamp_cast_depends_on_the_session`, les références SQL par `test_no_reference_sql_casts_to_a_session_timestamp`.
 
 ### S-0030-04 — Le panneau SQL montre la lecture en heure murale
 Plan 0030, critère 4 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-04]`

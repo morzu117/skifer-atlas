@@ -3,12 +3,18 @@ propositions (`examples/depot-nordis.sh` puis `examples/propositions-nordis.py`)
 
 import subprocess
 import sys
+import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
 from workspace_helpers import EXAMPLE, atlas_env
 
 from skifer_atlas.api.app import create_app
+from skifer_atlas.proposals import common as proposals_common
+from skifer_atlas.proposals import merge as proposals_merge
+from skifer_atlas.repo import RepoError
+from skifer_atlas.repo import sync as repo_sync
 
 __all__ = ["atlas_env"]  # fixture importée
 
@@ -136,3 +142,49 @@ def test_full_cycle_until_merge(client, monkeypatch):
     assert (sheet["version"], sheet["version_count"]) == (4, 1)
     # Après la fusion, le diff se relit sur le commit fusionné.
     assert client.get(f"{API}/proposals/5/graphs").json()["base"]["label"] == "Canonique v4"
+
+
+def test_the_tag_fetch_of_a_merge_waits_for_a_concurrent_sync(client, monkeypatch):
+    """ADR 0035 : une synchronisation lancée pendant le fetch qui précède le tag d'une
+    fusion attend son tour. Taux de service v3 (#2) est prête à fusionner (Supply, 1 / 1)."""
+    running, overlaps, errors = [0], [], []
+    real = repo_sync.run_git
+
+    def slow_git(args, *rest, **options):
+        if args[0] != "fetch":
+            return real(args, *rest, **options)
+        running[0] += 1
+        overlaps.append(running[0])
+        time.sleep(0.3)  # élargit la fenêtre où deux fetchs se recouvriraient
+        try:
+            return real(args, *rest, **options)
+        finally:
+            running[0] -= 1
+
+    def call(action):
+        try:
+            action()
+        except RepoError as error:
+            errors.append(error)
+
+    sync = threading.Thread(target=call, args=(lambda: repo_sync.sync_workspace(
+        "groupe-nordis"),))
+
+    def tag_fetch(args, *rest, **options):
+        if args[0] == "fetch" and not sync.is_alive():
+            sync.start()  # la synchronisation démarre pendant le fetch du tag
+            time.sleep(0.05)
+        return slow_git(args, *rest, **options)
+
+    monkeypatch.setattr(repo_sync, "run_git", slow_git)
+    monkeypatch.setattr(proposals_common, "run_git", slow_git)
+    monkeypatch.setattr(proposals_merge, "run_git", tag_fetch)
+    as_account(monkeypatch, "sami.b")
+    merge = threading.Thread(target=call, args=(lambda: proposals_merge.merge_proposal(
+        "groupe-nordis", 2),))
+    merge.start()
+    merge.join(20)
+    sync.join(20)
+    assert not merge.is_alive() and not sync.is_alive(), "un fetch est resté bloqué"
+    assert errors == [] and set(overlaps) == {1}
+    assert client.get(f"{API}/documents/taux-de-service/sheet").json()["version"] == 3
