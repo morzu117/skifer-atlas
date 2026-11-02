@@ -50,4 +50,4 @@ L'ADR 0010 laissait quatre écarts connus entre Databricks, Snowflake et DuckDB.
 - Une division de montants rend un `DOUBLE`. Une somme de `DOUBLE` dépend de l'ordre d'agrégation de chaque moteur, à la dernière décimale près. La comparaison chiffrée (plan 0009) normalise les valeurs à 1e-9 : cela reste invisible.
 - Une requête avec contrôles est une union, et non plus un `SELECT`. Les appelants exécutent le SQL tel quel ; aucun ne l'enveloppait.
 - L'échec Snowflake (`CAST(message AS INT)`) et les trois règles ci-dessus ne sont vérifiés, en Databricks et en Snowflake, que par la forme du SQL et sa relecture par SQLGlot, d'après la documentation des moteurs. Le test réel sur un compte reste à faire (plan 0018).
-- D'autres paramètres de session restent hors de ce plan : le fuseau de session de Databricks, et `TIMESTAMP_TYPE_MAPPING` en Snowflake, dont dépend `CAST(… AS TIMESTAMP)`.
+- D'autres paramètres de session restent hors de ce plan : le fuseau de session de Databricks, et `TIMESTAMP_TYPE_MAPPING` en Snowflake, dont dépend `CAST(… AS TIMESTAMP)`. Ils sont réglés par l'ADR 0034.

@@ -3,7 +3,8 @@
 SQLGlot traduit l'AST ; ce module dit seulement où sa traduction ne serait pas fidèle
 (`NotCompilable`) et fournit les quelques expressions qu'on écrit à la main : agrégats,
 tri explicite des nulls, échec volontaire d'une requête, division et début de semaine
-identiques d'un moteur à l'autre (plan 0021, ADR 0025).
+identiques d'un moteur à l'autre (plan 0021, ADR 0025), horodatages lus sans dépendre de
+la session (plan 0030, ADR 0034).
 """
 
 from __future__ import annotations
@@ -15,6 +16,10 @@ from .errors import NotCompilable
 
 DIALECTS = ("databricks", "snowflake", "duckdb")
 DISTINCT_FUNCTIONS = frozenset({"count_distinct", "sum_distinct"})
+# Horodatage sans fuseau (heure murale) : TIMESTAMP_NTZ en Databricks, TIMESTAMPNTZ en
+# Snowflake, TIMESTAMP en DuckDB. `TIMESTAMP` seul suit en Databricks le fuseau de session,
+# en Snowflake `TIMESTAMP_TYPE_MAPPING`.
+WALL_CLOCK = "timestampntz"
 
 
 def aggregate(function: str, source: str) -> exp.Expression:
@@ -34,6 +39,28 @@ def aggregate(function: str, source: str) -> exp.Expression:
     }
     return builders[function](this=column)
 
+
+
+def wall_clock(column: exp.Expression, zone: str, dialect: str) -> exp.Expression:
+    """Colonne `timestamp` d'une source, lue en heure murale de son fuseau déclaré.
+
+    En Databricks, la colonne peut être un instant (`TIMESTAMP`, type par défaut) ou une
+    heure murale (`TIMESTAMP_NTZ`) : `TYPEOF` le dit à l'exécution, sans métadonnées. Un
+    instant passe par ses microsecondes depuis l'époque, qui ne dépendent pas de la session,
+    puis par l'heure UTC, puis par le fuseau déclaré. Snowflake et DuckDB lisent la colonne
+    telle quelle : leur type de colonne par défaut est déjà une heure murale."""
+    if dialect != "databricks":
+        return column
+    epoch = exp.cast(exp.Literal.string("1970-01-01 00:00:00"), WALL_CLOCK)
+    utc: exp.Expression = exp.TimestampAdd(this=epoch, expression=exp.UnixMicros(
+        this=column.copy()), unit=exp.var("MICROSECOND"))
+    if zone != "UTC":
+        utc = exp.ConvertTimezone(source_tz=exp.Literal.string("UTC"),
+                                  target_tz=exp.Literal.string(zone), timestamp=utc)
+    is_instant = exp.EQ(this=exp.Typeof(this=column.copy()),
+                        expression=exp.Literal.string("timestamp"))
+    return exp.Case(ifs=[exp.If(this=is_instant, true=utc)],
+                    default=exp.cast(column.copy(), WALL_CLOCK))
 
 def ordered(column: str, direction: str) -> exp.Ordered:
     """Tri à l'ordre des nulls explicite (nulls en dernier en croissant, en premier en

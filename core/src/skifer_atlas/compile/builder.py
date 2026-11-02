@@ -31,12 +31,14 @@ from . import cardinality
 from .calendar import CIVIL, Calendar, aligned
 from .dialects import (
     DIALECTS,
+    WALL_CLOCK,
     aggregate,
     check_expression,
     check_window,
     mark_strings,
     ordered,
     safe_division,
+    wall_clock,
     week_start,
 )
 from .errors import CompileError, NotCompilable, compile_error
@@ -169,7 +171,7 @@ class _Unit:
                                     "AAAA-MM-JJ.", node_id)
             return exp.cast(exp.Literal.string(value), "date")
         if kind == "timestamp":
-            return exp.cast(exp.Literal.string(value), "timestamp")
+            return exp.cast(exp.Literal.string(value), WALL_CLOCK)
         if kind is None and _NUMBER.match(value):  # type à compléter : comme le moteur
             return exp.Literal.number(value)
         return exp.Literal.string(value)
@@ -307,8 +309,15 @@ class _Unit:
         self.builder.sources.setdefault(node.table, SourceTable(node.table, tuple(
             (physical.get(c.name, c.name), None if c.type == TODO else c.type)
             for c in node.columns)))
-        items = [exp.column(physical[c.name]).as_(c.name) if c.name in physical
-                 else exp.column(c.name) for c in node.columns]
+        items = []
+        for c in node.columns:
+            column = exp.column(physical.get(c.name, c.name))
+            if c.type == "timestamp" and c.timezone and c.timezone != TODO:
+                read = wall_clock(column, c.timezone, self.dialect)
+                if read is not column:
+                    items.append(read.as_(c.name))
+                    continue
+            items.append(column.as_(c.name) if c.name in physical else column)
         return exp.select(*items).from_(exp.to_table(node.table))
 
     def _filter(self, node: Any) -> exp.Select:
@@ -551,12 +560,12 @@ class _Unit:
 GRAIN_RANK = {"day": 0, "week": 1, "month": 2, "quarter": 3, "year": 4}
 _SQL_TYPES = {"string": "text", "integer": "bigint", "decimal": "decimal(38, 10)",
               "double": "double", "boolean": "boolean", "date": "date",
-              "timestamp": "timestamp"}
+              "timestamp": WALL_CLOCK}
 
 
 def _convert(column: exp.Expression, origin: str, target: str) -> exp.Expression:
     if origin == target:
-        return exp.cast(column, "timestamp")
+        return exp.cast(column, WALL_CLOCK)
     return exp.ConvertTimezone(source_tz=exp.Literal.string(origin),
                                target_tz=exp.Literal.string(target), timestamp=column)
 

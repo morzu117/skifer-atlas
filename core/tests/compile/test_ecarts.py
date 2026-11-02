@@ -1,4 +1,5 @@
-"""Écarts de compilation entre moteurs (plan 0021, ADR 0025) : critères 1 à 6.
+"""Écarts de compilation entre moteurs (plan 0021, ADR 0025) : critères 1 à 6. Horodatages
+indépendants de la session (plan 0030, ADR 0034) : critères 1 à 3.
 
 Le SQL DuckDB est exécuté ; celui de Databricks et de Snowflake est vérifié dans sa forme
 et relu par SQLGlot, faute de compte réel."""
@@ -14,7 +15,7 @@ from compile_support import FIXTURES, run
 from sqlglot import exp
 
 from skifer_atlas.compile import DIALECTS, compile_document, reparse
-from skifer_atlas.compile.dialects import week_start
+from skifer_atlas.compile.dialects import wall_clock, week_start
 from skifer_atlas.model import validate_data
 from skifer_atlas.model.functions import infer_type, parse_sql
 from skifer_atlas.run import open_database
@@ -235,3 +236,98 @@ def test_anomaly_on_an_empty_output_fails_on_duckdb(clean):
 def test_no_anomaly_gives_the_rows_and_only_them(clean):
     assert run(cardinality_kpi(), clean) == [{"pays": "DE", "ca": "50"},
                                              {"pays": "FR", "ca": "130"}]
+
+
+
+# --- plan 0030 : horodatages indépendants de la session -----------------------------------
+
+FUSEAU = FIXTURES / "fuseau"
+
+
+def orders(timezone: str = "UTC", after: list[dict] | None = None):
+    """Le KPI `fuseau` (commandes par mois du jour de Paris), en calendrier civil, source
+    déclarée dans `timezone` ; `after` remplace les nœuds qui suivent la source."""
+    data = yaml.safe_load((FUSEAU / "kpi.yaml").read_text(encoding="utf-8"))
+    data["semantics"]["calendar"] = {"key": "civil"}
+    nodes = data["graph"]["nodes"]
+    nodes[0]["columns"][1]["timezone"] = timezone
+    if after:
+        nodes[1:] = after
+        data["graph"]["output"] = after[-1]["id"]
+    result = validate_data(data)
+    assert result.valid, [i.to_dict() for i in result.issues]
+    return result.document
+
+
+def test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone():
+    """Critère 1 : instant ou heure murale, la colonne est lue dans son fuseau déclaré."""
+    text = sql(orders("Europe/Paris"), "databricks")
+    assert "WHEN TYPEOF(passee_le) = 'timestamp'" in text
+    assert ("THEN CONVERT_TIMEZONE(\n        'UTC',\n        'Europe/Paris',\n        "
+            "DATE_ADD(MICROSECOND, UNIX_MICROS(passee_le), CAST('1970-01-01 00:00:00' AS "
+            "TIMESTAMP_NTZ))") in text
+    assert "ELSE CAST(passee_le AS TIMESTAMP_NTZ)\n    END AS passee_le" in text
+    reparse(text, "databricks")
+    # Fuseau UTC : la branche instant s'arrête à l'heure UTC.
+    assert "THEN DATE_ADD(MICROSECOND, UNIX_MICROS(passee_le)" in sql(orders(), "databricks")
+    for dialect in ("snowflake", "duckdb"):
+        assert "TYPEOF" not in sql(orders("Europe/Paris"), dialect).upper()
+
+
+def test_an_instant_is_read_without_the_session_zone():
+    """Critère 1 : la branche instant, traduite en DuckDB, rend l'heure de Paris quelle que
+    soit la session, y compris pendant l'heure doublée du passage à l'heure d'hiver."""
+    branch = wall_clock(exp.column("t"), "Europe/Paris", "databricks").args["ifs"][0].args["true"]
+    query = sqlglot.transpile(exp.select(branch.as_("v")).from_("x").sql("databricks"),
+                              read="databricks", write="duckdb")[0]
+    instants = ["2025-09-30 23:00:00", "2025-10-26 00:30:00", "2025-10-26 01:30:00"]
+    for zone in ("UTC", "America/New_York", "Europe/Paris"):
+        with duckdb.connect() as connection:
+            connection.execute(f"SET TimeZone = '{zone}'")
+            connection.execute("CREATE TABLE x (t TIMESTAMPTZ)")
+            for instant in instants:
+                connection.execute("INSERT INTO x VALUES (CAST(? || '+00' AS TIMESTAMPTZ))",
+                                   [instant])
+            assert [r[0] for r in connection.execute(query).fetchall()] == [
+                datetime.datetime(2025, 10, 1, 1, 0), datetime.datetime(2025, 10, 26, 2, 30),
+                datetime.datetime(2025, 10, 26, 2, 30)], zone
+
+
+def test_no_timestamp_cast_depends_on_the_session():
+    """Critère 2 : littéral, conversion vers le même fuseau et NULL typé d'une union portent
+    le type sans fuseau en Databricks et en Snowflake."""
+    document = orders(after=[
+        {"id": "n05", "type": "filter", "inputs": ["n01"], "nulls": "drop",
+         "condition": "passee_le:greater_than:2025-01-01 00:00:00"},
+        {"id": "n06", "type": "temporal", "inputs": ["n05"], "operation": "convert_timezone",
+         "column": "passee_le", "target": "passee_le_utc", "to": "UTC"},
+        {"id": "n07", "type": "union", "inputs": ["n06", "n05"], "mode": "all", "columns": [
+            {"name": "commande_id", "from": {"n06": "commande_id", "n05": "commande_id"}},
+            {"name": "passee_le_utc", "from": {"n06": "passee_le_utc"}}]},
+        {"id": "n08", "type": "aggregate", "inputs": ["n07"], "group_by": ["passee_le_utc"],
+         "measures": [["*", "commandes", "count"]]},
+    ])
+    for dialect, ntz in (("databricks", "AS TIMESTAMP_NTZ)"), ("snowflake", "AS TIMESTAMPNTZ)")):
+        text = sql(document, dialect)
+        assert "AS TIMESTAMP)" not in text, dialect
+        assert f"CAST('2025-01-01 00:00:00' {ntz}" in text
+        assert f"CAST(passee_le {ntz} AS passee_le_utc" in text
+        assert f"CAST(NULL {ntz} AS passee_le_utc" in text
+        reparse(text, dialect)
+
+
+@pytest.mark.parametrize("dialect", DIALECTS)
+def test_the_paris_day_does_not_depend_on_the_session_zone(dialect):
+    """Critère 3 : chaque dialecte, traduit en DuckDB, rend les mois du jour de Paris,
+    session de DuckDB à New York. C2 (23 h UTC le 30 septembre) tombe le 1er octobre à
+    Paris, C3 et C4 le 4 et le 5 novembre."""
+    compiled = compile_document(orders(), dialect)
+    connection = open_database(compiled.sources, FUSEAU)
+    try:
+        connection.execute("SET TimeZone = 'America/New_York'")
+        found = connection.execute(sqlglot.transpile(
+            compiled.sql, read=dialect, write="duckdb")[0]).fetchall()
+    finally:
+        connection.close()
+    assert sorted(found) == [(datetime.date(2025, 9, 1), 1), (datetime.date(2025, 10, 1), 1),
+                             (datetime.date(2025, 11, 1), 2)]
