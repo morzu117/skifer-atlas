@@ -412,7 +412,7 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
         />
       </div>
       {alerts.map((alert) => (
-        <Banner key={`${alert.code}-${alert.entity}`} tone={alert.code === "common_source" ? "info" : "warn"} title={ALERT_TITLES[alert.code] ?? "Surcharge hors des points déclarés"}>
+        <Banner key={`${alert.code}-${alert.entity}`} tone={alert.code === "common_source" ? "info" : "warn"} title={ALERT_TITLES[alert.code] ?? "Alerte"}>
           {alert.message}
         </Banner>
       ))}
@@ -691,11 +691,11 @@ function Detail({ ws, id, variant, labels }: { ws: Workspace; id: number; varian
           {result.bypass_nodes.length > 0 && (
             <p className="fact-warn">Contrôle de cardinalité contourné : {result.bypass_nodes.join(", ")}.</p>
           )}
-          {common.length > 0 && (
-            <p className="muted">
-              Sources communes, lues sur {common[0].platform} des deux côtés : {common.map(commonLabel).join(", ")}.
+          {[...new Set(common.map((c) => c.platform))].map((platform) => (
+            <p key={platform} className="muted">
+              Sources communes, lues sur {platform} des deux côtés : {common.filter((c) => c.platform === platform).map(commonLabel).join(", ")}.
             </p>
-          )}
+          ))}
           <div className="table-wrap">
             <table className="table detail-table">
               <thead>

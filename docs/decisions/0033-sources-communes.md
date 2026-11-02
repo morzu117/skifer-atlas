@@ -12,6 +12,8 @@ En from scratch (ADR 0026), une source du canonique sans équivalent dans la dé
 - **Garder avec le résultat.** Chaque synthèse enregistre ses sources communes (nœud, libellé, table, plateforme) dans `results.summaries.common_json`. Le détail d'une comparaison ancienne montre ce qui valait au moment de l'exécution, même si le canonique a changé depuis.
 - **Migrer sur place.** La colonne s'ajoute en fin de table par `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, joué à chaque ouverture comme le reste du DDL. Une synthèse antérieure garde `NULL`, lu comme une liste vide : on ne sait pas, après coup, quelles sources étaient communes, et on ne l'invente pas.
 - **Même libellé partout.** « n06 · Jours comptables (gold.finance.dim_date) » dans l'alerte, la CLI (`common_label`) et l'écran.
+- **Une ligne par plateforme.** Le détail regroupe les sources communes par plateforme de lecture. Aujourd'hui, une déclinaison n'en a qu'une, donc une seule ligne ; rien n'est à revoir si cela change.
+- **Titre générique pour un code inconnu.** Un code d'alerte que l'écran ne connaît pas encore s'affiche sous le titre « Alerte », avec son message, et non sous le titre d'un autre code.
 
 ## Conséquences
 

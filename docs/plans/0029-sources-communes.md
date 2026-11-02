@@ -41,3 +41,11 @@ Le plan 0022 (ADR 0026) rebranche le canonique sur les sources d'une déclinaiso
 - `app/src/screens/Comparison.tsx` : titres des bandeaux par code (`ALERT_TITLES`), « Source commune » en ton info ; ligne des sources communes dans le détail. `common_sources` est facultatif côté app : une réponse qui ne le porte pas affiche le détail sans cette ligne (relevé par le test e2e, une réponse simulée de `comparaison-cellules.spec.ts` ne le portait pas et vidait l'écran).
 - Scénarios S-0029-01 et S-0029-02 au catalogue (`docs/tests/scenarios.md`), test écrit par un agent Claude ; S-0029-03 et S-0029-04 n'ont pas d'écran.
 - Vérifications : core 833 réussis (8 ignorés, binaire du sidecar absent) ; `npm test` 162 réussis ; `npm run e2e` 191 réussis, 0 échec, 0 instable ; spec `sources-communes` réussie quatre fois sur quatre.
+
+### Suivi de la relecture (#68, 2 novembre 2026)
+
+- Un code d'alerte inconnu de l'écran prend le titre « Alerte », et non « Surcharge hors des points déclarés ».
+- Le test de migration fige les deux tables d'avant le plan au lieu de couper le DDL courant ; il échoue bien si l'`ALTER` disparaît.
+- Le détail écrit une ligne par plateforme de lecture des sources communes.
+- Test Vitest : « code d'alerte inconnu : titre générique ; sources communes regroupées par plateforme ».
+- Vérifications : `npm test` 163 réussis ; `npm run e2e` 191 réussis, 0 instable.

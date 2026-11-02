@@ -268,12 +268,28 @@ def test_common_sources_are_announced_then_kept_with_the_result(db):
     assert results["nordis-fr"]["common_sources"] == []
 
 
+# Les deux tables lues par `store.get`, telles qu'avant le plan 0029, figées ici : le DDL
+# courant peut évoluer sans que ce test cesse de simuler une base ancienne.
+BEFORE_0029 = """
+CREATE SCHEMA results;
+CREATE TABLE results.comparisons (
+    id INTEGER PRIMARY KEY, started_at TIMESTAMP NOT NULL, finished_at TIMESTAMP,
+    user_account VARCHAR, kpi_id VARCHAR NOT NULL, kpi_version INTEGER NOT NULL,
+    scope_json VARCHAR NOT NULL, tolerance_pct DOUBLE NOT NULL, status VARCHAR NOT NULL,
+    error VARCHAR, schema_version INTEGER NOT NULL);
+CREATE TABLE results.summaries (
+    comparison_id INTEGER NOT NULL, variant_id VARCHAR NOT NULL, entity VARCHAR NOT NULL,
+    variant_version INTEGER NOT NULL, platform VARCHAR NOT NULL, access_point VARCHAR,
+    cell_count INTEGER NOT NULL, validation_pct DOUBLE, max_gap_pct DOUBLE,
+    divergent_node VARCHAR, divergent_json VARCHAR, bypass_nodes VARCHAR[] NOT NULL,
+    differences_json VARCHAR NOT NULL);
+"""
+
 def test_a_base_from_before_plan_0029_is_migrated(db):
     """Plan 0029, critère 3 : une base créée sans la colonne reçoit `common_json` ; ses
     anciennes synthèses n'ont aucune source commune, les nouvelles la gardent."""
-    old_ddl = store.DDL.split("-- Plan 0029")[0]
     with duckdb.connect(str(db)) as connection:
-        connection.execute(old_ddl)
+        connection.execute(BEFORE_0029)
         connection.execute("INSERT INTO results.comparisons VALUES (1, now(), now(), 'anna.k', "
                            "'revenu-net', 4, '{\"id\": \"x\"}', 1.5, 'done', NULL, 1)")
         connection.execute("INSERT INTO results.summaries VALUES (1, 'v', 'nordis-fr', 4, "
