@@ -46,6 +46,7 @@ jobs:
             runner: macos-15-intel
             target: x86_64-apple-darwin
             bundles: app,dmg  # le .app sert au test de fumée
+            smoke_limit: 20  # runner Intel lent : 6 à 15 s observés (#72)
           - name: Windows x64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
@@ -138,6 +139,8 @@ jobs:
       - name: Test de fumée de l'app (critère 3)
         if: runner.os == 'macOS'
         timeout-minutes: 5
+        env:
+          SMOKE_LIMIT_SECONDS: ${{ matrix.smoke_limit || 10 }}
         run: bash scripts/smoke-app.sh "app/src-tauri/target/release/bundle/macos/Skifer Atlas.app"
 
       - name: Signature et notarisation

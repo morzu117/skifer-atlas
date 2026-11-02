@@ -6,6 +6,7 @@ et relu par SQLGlot, faute de compte réel."""
 
 import copy
 import datetime
+import re
 
 import duckdb
 import pytest
@@ -238,7 +239,6 @@ def test_no_anomaly_gives_the_rows_and_only_them(clean):
                                              {"pays": "FR", "ca": "130"}]
 
 
-
 # --- plan 0030 : horodatages indépendants de la session -----------------------------------
 
 FUSEAU = FIXTURES / "fuseau"
@@ -259,17 +259,24 @@ def orders(timezone: str = "UTC", after: list[dict] | None = None):
     return result.document
 
 
+def flat(text: str) -> str:
+    """SQL sur une ligne, sans espace après « ( » ni avant « ) » : la mise en page de
+    SQLGlot coupe les lignes selon leur longueur."""
+    return re.sub(r"\(\s+", "(", re.sub(r"\s+\)", ")", " ".join(text.split())))
+
+
 def test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone():
     """Critère 1 : instant ou heure murale, la colonne est lue dans son fuseau déclaré."""
     text = sql(orders("Europe/Paris"), "databricks")
-    assert "WHEN TYPEOF(passee_le) = 'timestamp'" in text
-    assert ("THEN CONVERT_TIMEZONE(\n        'UTC',\n        'Europe/Paris',\n        "
-            "DATE_ADD(MICROSECOND, UNIX_MICROS(passee_le), CAST('1970-01-01 00:00:00' AS "
-            "TIMESTAMP_NTZ))") in text
-    assert "ELSE CAST(passee_le AS TIMESTAMP_NTZ)\n    END AS passee_le" in text
+    assert ("CASE WHEN TYPEOF(passee_le) = 'timestamp' THEN CONVERT_TIMEZONE('UTC', "
+            "'Europe/Paris', DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), "
+            "CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ))) ELSE CAST(passee_le AS "
+            "TIMESTAMP_NTZ) END AS passee_le") in flat(text)
     reparse(text, "databricks")
     # Fuseau UTC : la branche instant s'arrête à l'heure UTC.
-    assert "THEN DATE_ADD(MICROSECOND, UNIX_MICROS(passee_le)" in sql(orders(), "databricks")
+    assert ("THEN DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), "
+            "CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)) ELSE") in flat(
+                sql(orders(), "databricks"))
     for dialect in ("snowflake", "duckdb"):
         assert "TYPEOF" not in sql(orders("Europe/Paris"), dialect).upper()
 
@@ -309,7 +316,9 @@ def test_no_timestamp_cast_depends_on_the_session():
     ])
     for dialect, ntz in (("databricks", "AS TIMESTAMP_NTZ)"), ("snowflake", "AS TIMESTAMPNTZ)")):
         text = sql(document, dialect)
-        assert "AS TIMESTAMP)" not in text, dialect
+        # Seul `TIMESTAMP` permis : le cast d'un instant vers lui-même (branche instant).
+        assert "AS TIMESTAMP)" not in text.replace(
+            "UNIX_MICROS(CAST(passee_le AS TIMESTAMP))", ""), dialect
         assert f"CAST('2025-01-01 00:00:00' {ntz}" in text
         assert f"CAST(passee_le {ntz} AS passee_le_utc" in text
         assert f"CAST(NULL {ntz} AS passee_le_utc" in text

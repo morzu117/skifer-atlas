@@ -33,14 +33,16 @@ test("[S-0030-01] [S-0030-02] [S-0030-04] Horodatage d'une source lu en heure mu
     const databricks = panel.getByLabel("SQL databricks");
     await expect(databricks).toContainText(id);
     const dbx = (await databricks.textContent())!;
-    expect(dbx).toContain("WHEN TYPEOF(passee_le) = 'timestamp'");
-    expect(dbx).toContain(
-      "THEN CONVERT_TIMEZONE(\n        'UTC',\n        'Europe/Paris',\n        " +
-        "DATE_ADD(MICROSECOND, UNIX_MICROS(passee_le), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ))",
+    // La mise en page coupe les lignes selon leur longueur : on compare le SQL sur une ligne.
+    const flat = dbx.split(/\s+/).join(" ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+    expect(flat).toContain(
+      "CASE WHEN TYPEOF(passee_le) = 'timestamp' THEN CONVERT_TIMEZONE('UTC', 'Europe/Paris', " +
+        "DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ))) " +
+        "ELSE CAST(passee_le AS TIMESTAMP_NTZ) END AS passee_le",
     );
-    expect(dbx).toContain("ELSE CAST(passee_le AS TIMESTAMP_NTZ)\n    END AS passee_le");
     expect(dbx).toContain("passee_le > CAST('2025-01-01 00:00:00' AS TIMESTAMP_NTZ)");
-    expect(dbx).not.toContain("AS TIMESTAMP)");
+    // Seul `TIMESTAMP` permis : le cast d'un instant vers lui-même, dans la branche instant.
+    expect(dbx.replaceAll("UNIX_MICROS(CAST(passee_le AS TIMESTAMP))", "")).not.toContain("AS TIMESTAMP)");
 
     // Snowflake : ni TYPEOF ni cast dépendant de TIMESTAMP_TYPE_MAPPING.
     await panel.getByRole("radio", { name: "Snowflake" }).check();

@@ -8,7 +8,11 @@ WITH n01 AS (
     montant,
     CASE
       WHEN TYPEOF(passee_le) = 'timestamp'
-      THEN DATE_ADD(MICROSECOND, UNIX_MICROS(passee_le), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ))
+      THEN DATE_ADD(
+        MICROSECOND,
+        UNIX_MICROS(CAST(passee_le AS TIMESTAMP)),
+        CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)
+      )
       ELSE CAST(passee_le AS TIMESTAMP_NTZ)
     END AS passee_le
   FROM ventes.commandes
@@ -19,7 +23,11 @@ WITH n01 AS (
     montant_web,
     CASE
       WHEN TYPEOF(horodatage) = 'timestamp'
-      THEN DATE_ADD(MICROSECOND, UNIX_MICROS(horodatage), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ))
+      THEN DATE_ADD(
+        MICROSECOND,
+        UNIX_MICROS(CAST(horodatage AS TIMESTAMP)),
+        CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)
+      )
       ELSE CAST(horodatage AS TIMESTAMP_NTZ)
     END AS horodatage
   FROM ventes.commandes_web

@@ -104,7 +104,9 @@ curl -H "$H" -H "$J" -d '{"governance":{…},"base_digest":"…"}' $API/acme/adm
 curl -H "$H" -H "$J" -d '{"remote_url":"/chemin/vers/depot.git"}' $API/acme/remote
 ```
 
-L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/…` ou SSH), ou un dépôt nu local (`LocalHost`, pour les tests et les démonstrations). Le jeton GitHub s'obtient par le device flow et va au coffre de l'espace (`<espace>/@github`, plan 0025, ADR 0029). Les fetchs d'un même clone passent un à un (synchronisation, propositions, fusion ; ADR 0035). Git le reçoit par un assistant d'identification, jamais dans l'URL ni dans `.git/config` (ADR 0009) :
+Les fetchs d'un même clone passent un à un : synchronisation, écran Propositions et fusion attendent leur tour au lieu de se disputer les références (ADR 0035).
+
+L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/…` ou SSH), ou un dépôt nu local (`LocalHost`, pour les tests et les démonstrations). Le jeton GitHub s'obtient par le device flow et va au coffre de l'espace (`<espace>/@github`, plan 0025, ADR 0029). Git le reçoit par un assistant d'identification, jamais dans l'URL ni dans `.git/config` (ADR 0009) :
 
 ```bash
 curl -H "$H" $API/acme/github                                         # configured, applies, state, source, account : jamais de jeton
