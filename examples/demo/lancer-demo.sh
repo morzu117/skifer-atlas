@@ -15,12 +15,13 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 demo=${1:-$HOME/atlas-demo}
 account=${DEMO_COMPTE:-julien.h}
 marker="$demo/.atlas-demo"
+echo "· Démo dans $demo (compte $account)"
 
 if [[ -e "$demo" && ! -e "$marker" && -n "$(ls -A "$demo")" ]]; then
   echo "$demo existe et n'est pas un dossier de démo : choisir un autre dossier." >&2
   exit 1
 fi
-if [[ -z "${DEMO_SANS_APP:-}" ]] && lsof -iTCP:1420 -sTCP:LISTEN >/dev/null 2>&1; then
+if [[ -z "${DEMO_SANS_APP:-}" ]] && lsof -nP -iTCP:1420 -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Le port 1420 (Vite) est pris : fermer l'autre app ou les tests e2e." >&2
   exit 1
 fi
