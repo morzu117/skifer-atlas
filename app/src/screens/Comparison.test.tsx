@@ -247,6 +247,22 @@ describe("comparaison", () => {
     expect(await screen.findByText("Sources communes, lues sur snowflake des deux côtés : n06 · Jours comptables (gold.finance.dim_date).")).toBeInTheDocument();
   });
 
+  it("code d'alerte inconnu : titre générique ; sources communes regroupées par plateforme", async () => {
+    const source = (node: string, platform: string) => ({ node, label: null, table: `t_${node}`, platform });
+    const run = { ...RUN, results: [{ ...RUN.results[0], common_sources: [source("n06", "snowflake"), source("n07", "databricks"), source("n08", "snowflake")] }] };
+    comparisonServer(({ method, path }) => {
+      if (path === `${API}/preview` && method === "POST") return { json: { ...PREVIEW, alerts: [{ code: "nouveau_code", entity: "nordis-de", nodes: [], message: "Un message." }] } };
+      if (path === `${API}/7`) return { json: run };
+      return undefined;
+    });
+    window.location.hash = "#/w/groupe-nordis/comparaison?id=7&variant=nordis-de";
+    render(<Harness />);
+    expect(await screen.findByText("Alerte")).toBeInTheDocument();
+    expect(screen.queryByText("Surcharge hors des points déclarés")).not.toBeInTheDocument();
+    expect(await screen.findByText("Sources communes, lues sur snowflake des deux côtés : n06 (t_n06), n08 (t_n08).")).toBeInTheDocument();
+    expect(screen.getByText("Sources communes, lues sur databricks des deux côtés : n07 (t_n07).")).toBeInTheDocument();
+  });
+
   it("[S-0015-04] accès manquant : connexion sur place, puis le lancement reprend (critère 4)", async () => {
     let connected = false;
     let statusReads = 0;
