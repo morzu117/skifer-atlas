@@ -284,3 +284,32 @@ def test_requests_waiting_for_a_busy_base_wait_side_by_side(joined, monkeypatch)
         holder.wait()
     assert codes == ["index_busy"] * 3
     assert elapsed < 1.5  # l'une après l'autre : 1,8 s
+
+
+def test_a_rebuild_in_progress_does_not_delay_the_workspace_list(client, joined):
+    """ADR 0032 : pendant qu'une requête reconstruit l'index, les compteurs n'attendent pas
+    la fin de la reconstruction ; ils reviennent ensuite."""
+    import threading
+
+    import duckdb
+
+    from skifer_atlas.index import build
+
+    assert client.get(f"{WS}/catalog").status_code == 200  # index construit
+    db = index_path("groupe-nordis")
+    with duckdb.connect(str(db)) as connection:  # puis périmé : à reconstruire
+        connection.execute('UPDATE "index".index_meta SET "commit" = \'ancien\'')
+    with build._locks_guard:
+        lock = build._locks.setdefault(db.resolve(), threading.Lock())
+    responses = []
+    listing = threading.Thread(target=lambda: responses.append(client.get("/api/workspaces")))
+    with lock:  # une reconstruction en cours
+        listing.start()
+        listing.join(3)
+        answered_during_rebuild = bool(responses)
+    listing.join()
+    assert answered_during_rebuild
+    counts = responses[0].json()[0]["counts"]
+    assert (counts["kpi"], counts["concept"]) == (None, None)
+    counts = client.get("/api/workspaces").json()[0]["counts"]
+    assert counts["kpi"] > 0

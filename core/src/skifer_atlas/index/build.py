@@ -20,6 +20,7 @@ from typing import Any
 
 import duckdb
 
+from ..dbfile import waiting
 from ..model.check import check_document
 from ..model.document import KpiDocument, validate_data
 from ..model.errors import Issue
@@ -281,13 +282,20 @@ def ensure_index(repo: Path, db: Path) -> duckdb.DuckDBPyConnection:
     if index_state(connection) == (commit, SCHEMA_VERSION):
         return connection
     connection.close()
-    with lock:
+    # Sous `without_waiting` (compteurs de l'accueil), une reconstruction en cours ne fait
+    # pas attendre non plus : `index_busy` aussitôt.
+    if not lock.acquire(blocking=waiting()):
+        raise RepoError("index_busy", "L'index de l'espace est en cours de reconstruction. "
+                        "Réessayer dans un instant.")
+    try:
         connection = connect(db)
         if index_state(connection) == (commit, SCHEMA_VERSION):
             return connection  # reconstruit pendant qu'on attendait le verrou
         connection.close()
         build_index(repo, db)
         return connect(db)
+    finally:
+        lock.release()
 
 
 def index_fresh(repo: Path, db: Path) -> bool:

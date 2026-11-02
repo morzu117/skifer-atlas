@@ -3,9 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
+import { assertPortsFree } from "./e2e/ports";
 
 // Bout en bout : l'app Vite contre un vrai serveur Python, sur un dossier de données
-// temporaire. Le dossier est créé une fois par le lanceur ; les workers en héritent.
+// temporaire. Le dossier est créé une fois par le lanceur ; les workers en héritent. Le
+// lanceur vérifie d'abord que les ports fixes sont libres : sinon, un message les nomme
+// avec le processus qui les tient, au lieu d'un serveur qui ne démarre pas.
+if (!process.env.ATLAS_E2E_DATA) assertPortsFree();
 process.env.ATLAS_E2E_DATA ??= mkdtempSync(join(tmpdir(), "atlas-e2e-"));
 const API_PORT = 8799;
 // Comparaisons chiffrées en local dans DuckDB, sans plateforme (plan 0009).

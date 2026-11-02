@@ -11,6 +11,13 @@ async function joinReviewer(request: APIRequestContext, remote: string, server: 
   expect((await request.post(`${server}/api/workspaces/join`, { data: { remote_url: remote } })).status()).toBe(201);
 }
 
+
+/** Synchronise l'espace ; en cas d'échec, le message dit pourquoi. */
+async function sync(request: APIRequestContext, api: string) {
+  const response = await request.post(`${api}/sync`);
+  expect(response.ok(), `sync : ${response.status()} ${await response.text()}`).toBe(true);
+}
+
 test("[S-0006-01] Canonique, hors points et from scratch demandent deux validations ; point déclaré une", async ({ page, request }) => {
   const ws = await isolatedDemo(request, API);
   const text = readFileSync(join(ws.work, "variants/revenu-net/nordis-fr.yaml"), "utf8").replace("TVA française à 20 %.", "TVA française, taux normal.");
@@ -36,7 +43,7 @@ finance=next(x for x in d['domains'] if x['id']=='finance'); finance['validators
 next(m for m in d['members'] if m['account']=='marc.d')['roles']=[{'role':'validateur','domains':['supply']}]
 p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work);
   git(ws.work, "add", "."); git(ws.work, "commit", "-qm", "Marc valide Supply uniquement"); git(ws.work, "push", "origin", "main");
-  expect((await request.post(`${ws.api}/sync`)).ok()).toBe(true);
+  await sync(request, ws.api);
   // Validateur Supply seulement, son approbation de la v5 Finance ne compte plus.
   await page.reload();
   await expect(entry(page, "Revenu net · canonique v5")).toContainText("Validations : 0 / 2");
@@ -102,7 +109,7 @@ d['members']=[m for m in d['members'] if m['account']=='julien.h']
 for domain in d['domains']: domain['referents']=[]; domain['validators']=[]
 p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work);
   git(ws.work, "add", "."); git(ws.work, "commit", "-qm", "Un seul habilité"); git(ws.work, "push", "origin", "main");
-  expect((await request.post(`${ws.api}/sync`)).ok()).toBe(true);
+  await sync(request, ws.api);
   const text = readFileSync(join(ws.work, "kpis/revenu-net.yaml"), "utf8").replace("label: Revenu net", "label: Revenu net solo");
   const created = await request.post(`${ws.api}/proposals`, { data: { document_yaml: text, justification: "Révision seul", base_version: 4 } });
   expect(created.status()).toBe(201);
@@ -119,7 +126,7 @@ p=Path(sys.argv[1])/'governance.yaml'; d=yaml.safe_load(p.read_text())
 d['members'].append({'account':'claire.m','name':'Claire M.','roles':[{'role':'validateur','domains':['finance']}]})
 p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work);
   git(ws.work, "add", "."); git(ws.work, "commit", "-qm", "Deuxième habilitée"); git(ws.work, "push", "origin", "main");
-  expect((await request.post(`${ws.api}/sync`)).ok()).toBe(true);
+  await sync(request, ws.api);
   const second = await request.post(`${ws.api}/proposals`, { data: { document_yaml: readFileSync(join(ws.work, "kpis/revenu-net.yaml"), "utf8").replace("Revenu net solo", "Revenu net avec revue"), justification: "Nouvelle revue", base_version: 5 } });
   expect(second.status()).toBe(201);
   const next = await second.json();
