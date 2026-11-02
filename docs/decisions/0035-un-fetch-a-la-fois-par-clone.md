@@ -21,4 +21,4 @@ Rien ne les empêchait de tourner en même temps. Deux `git fetch` concurrents s
 
 - La synchronisation et l'écran Propositions ne se gênent plus dans l'app.
 - **Limite.** Entre deux processus (la CLI pendant que l'app tourne), git garde son propre verrou, et le second fetch peut encore échouer. C'est rare, et un nouvel essai suffit.
-- Test : `core/tests/repo/test_workspace_repo.py::test_fetches_of_one_clone_never_overlap`. Il échoue sans le verrou.
+- Tests : `core/tests/repo/test_workspace_repo.py::test_fetches_of_one_clone_never_overlap` (synchronisation et écran Propositions) et `core/tests/repo/test_proposals_view.py::test_the_tag_fetch_of_a_merge_waits_for_a_concurrent_sync` (fetch du tag d'une fusion, suivi #76). Chacun échoue sans le verrou.

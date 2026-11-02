@@ -10,7 +10,7 @@ Depuis la racine du dépôt, sur un Mac de développement (uv, Node, Rust, comme
 examples/demo/lancer-demo.sh            # dossier ~/atlas-demo, compte julien.h
 ```
 
-Le script crée l'espace Groupe Nordis dans `~/atlas-demo`, avec l'historique de Revenu net, cinq propositions et trois points d'accès, puis ouvre l'app (Tauri, mode dev). Le premier lancement compile la partie Rust et prend plusieurs minutes : il faut le faire la veille. Chaque lancement recrée le dossier, si bien que la démo repart toujours du même état. Pour arrêter, il suffit de fermer la fenêtre.
+Le script crée l'espace Groupe Nordis dans `~/atlas-demo`, avec l'historique de Revenu net, cinq propositions et trois points d'accès, puis ouvre l'app (Tauri, mode dev). Le premier lancement compile la partie Rust et prend plusieurs minutes : il faut le faire la veille. Chaque lancement recrée le dossier, si bien que la démo repart toujours du même état. Pour arrêter, il suffit de fermer la fenêtre. Avec `DEMO_SANS_APP=1`, le script s'arrête après la préparation (c'est ce que vérifie `core/tests/test_demo.py`).
 
 Rien ne touche aux vraies données :
 - les comparaisons tournent sur les données de test (`core/tests/fixtures/compare/revenu-net`) ;
@@ -37,13 +37,14 @@ Garder un second terminal ouvert à la racine du dépôt pour l'ouverture (étap
 ```sh
 cd examples/extraction
 atlas() { uv run --quiet --project ../../core atlas "$@"; }
-atlas extract revenu_net_databricks.sql --dialect databricks --out ~/atlas-demo/brouillons
-atlas extract revenu_net_snowflake.sql --dialect snowflake --out ~/atlas-demo/brouillons
-atlas diff ~/atlas-demo/brouillons/revenu-net-databricks.yaml ~/atlas-demo/brouillons/revenu-net-snowflake.yaml --relation free
+DEMO=~/atlas-demo                        # le dossier passé à lancer-demo.sh, s'il diffère
+atlas extract revenu_net_databricks.sql --dialect databricks --out "$DEMO/brouillons"
+atlas extract revenu_net_snowflake.sql --dialect snowflake --out "$DEMO/brouillons"
+atlas diff "$DEMO/brouillons/revenu-net-databricks.yaml" "$DEMO/brouillons/revenu-net-snowflake.yaml" --relation free
 ```
 
 - Ouvrir `revenu_net_databricks.sql` un instant : un `CREATE TABLE` banal, comme il en existe des dizaines.
-- L'extraction en fait un brouillon YAML (`~/atlas-demo/brouillons/`). Ce que le SQL ne dit pas vaut `TODO` : propriétaire, domaine, calendrier, fuseau. C'est exactement la liste des questions à poser.
+- L'extraction en fait un brouillon YAML (`$DEMO/brouillons/`). Ce que le SQL ne dit pas vaut `TODO` : propriétaire, domaine, calendrier, fuseau. C'est exactement la liste des questions à poser.
 - Le diff des deux implémentations trouve un écart **critique** : la France ne garde que les factures `validée`, l'autre filiale garde aussi les factures `émise`. Le diff ignore en revanche les fonctions de date, différentes d'un dialecte à l'autre mais de même sens.
 
 ### 2. Catalogue

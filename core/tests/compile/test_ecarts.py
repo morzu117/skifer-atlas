@@ -300,6 +300,15 @@ def test_an_instant_is_read_without_the_session_zone():
                 datetime.datetime(2025, 10, 26, 2, 30)], zone
 
 
+# Seul `TIMESTAMP` permis : le cast d'un instant vers lui-même, dans la branche instant de
+# la lecture en heure murale (plan 0030, critère 2), quelle que soit la colonne.
+INSTANT_CAST = re.compile(r"UNIX_MICROS\(CAST\(\w+ AS TIMESTAMP\)\)")
+
+
+def without_instant_casts(text: str) -> str:
+    return INSTANT_CAST.sub("", text)
+
+
 def test_no_timestamp_cast_depends_on_the_session():
     """Critère 2 : littéral, conversion vers le même fuseau et NULL typé d'une union portent
     le type sans fuseau en Databricks et en Snowflake."""
@@ -316,9 +325,7 @@ def test_no_timestamp_cast_depends_on_the_session():
     ])
     for dialect, ntz in (("databricks", "AS TIMESTAMP_NTZ)"), ("snowflake", "AS TIMESTAMPNTZ)")):
         text = sql(document, dialect)
-        # Seul `TIMESTAMP` permis : le cast d'un instant vers lui-même (branche instant).
-        assert "AS TIMESTAMP)" not in text.replace(
-            "UNIX_MICROS(CAST(passee_le AS TIMESTAMP))", ""), dialect
+        assert "AS TIMESTAMP)" not in without_instant_casts(text), dialect
         assert f"CAST('2025-01-01 00:00:00' {ntz}" in text
         assert f"CAST(passee_le {ntz} AS passee_le_utc" in text
         assert f"CAST(NULL {ntz} AS passee_le_utc" in text
@@ -340,3 +347,12 @@ def test_the_paris_day_does_not_depend_on_the_session_zone(dialect):
         connection.close()
     assert sorted(found) == [(datetime.date(2025, 9, 1), 1), (datetime.date(2025, 10, 1), 1),
                              (datetime.date(2025, 11, 1), 2)]
+
+
+@pytest.mark.parametrize("name", ["revenu-net", "ventes"])
+@pytest.mark.parametrize("dialect", ["databricks", "snowflake"])
+def test_no_reference_sql_casts_to_a_session_timestamp(name, dialect):
+    """Critère 2 sur les références : aucune autre conversion vers `TIMESTAMP` que celle
+    de la branche instant (par exemple `horodatage` dans ventes.databricks.sql)."""
+    text = (FIXTURES / "golden" / f"{name}.{dialect}.sql").read_text()
+    assert "AS TIMESTAMP)" not in without_instant_casts(text)
