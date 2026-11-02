@@ -81,3 +81,39 @@ def test_other_io_errors_are_not_retried(tmp_path):
     with pytest.raises(duckdb.IOException):
         dbfile.open_db(tmp_path / "absent" / "atlas.duckdb")
     assert time.monotonic() - started < 1
+
+
+def test_the_pinned_duckdb_still_says_the_file_is_locked(tmp_path):
+    """`open_db` reconnaît le verrou d'un autre processus à son libellé : si une version de
+    DuckDB le change, ce test échoue avant qu'une requête ne réponde 500."""
+    db = tmp_path / "atlas.duckdb"
+    with held(db, 30), pytest.raises(duckdb.IOException) as error:
+        duckdb.connect(str(db))
+    assert dbfile.is_locked_by_another_process(error.value)
+
+
+def test_opening_one_space_does_not_wait_for_another(tmp_path, monkeypatch):
+    """Le verrou d'ouverture est propre à chaque fichier."""
+    import threading
+
+    slow, other = tmp_path / "lent.duckdb", tmp_path / "autre.duckdb"
+    entered, release = threading.Event(), threading.Event()
+    connect = duckdb.connect
+
+    def fake(path, *args, **kwargs):
+        if path == str(slow):
+            entered.set()
+            release.wait(5)
+        return connect(path, *args, **kwargs)
+
+    monkeypatch.setattr(dbfile.duckdb, "connect", fake)
+    opening = threading.Thread(target=lambda: dbfile.open_db(slow).close())
+    opening.start()
+    try:
+        assert entered.wait(5)
+        started = time.monotonic()
+        dbfile.open_db(other).close()
+        assert time.monotonic() - started < 1
+    finally:
+        release.set()
+        opening.join()

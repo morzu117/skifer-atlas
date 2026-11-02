@@ -40,4 +40,9 @@ La relecture de #60 (issue #61) craignait un « Catalog write-write conflict » 
 - Scénarios S-0028-01 et S-0028-02 au catalogue (`docs/tests/scenarios.md`) ; S-0028-03 n'a pas d'écran.
 - Vérifications : core 827 réussis ; `npm test` 159 réussis ; `npm run e2e` 189 réussis, 0 échec, 0 instable ; spec `base-occupee` réussie trois fois sur trois.
 
-**Reste à faire** : une requête de compteurs pendant une reconstruction de l'index attend la fin de celle-ci.
+### Suivi de la relecture (#65, 2 novembre 2026)
+
+- Le verrou d'un autre processus se reconnaît à deux libellés (`dbfile.LOCK_MESSAGES`), vérifiés sur la version épinglée de DuckDB par `test_the_pinned_duckdb_still_says_the_file_is_locked`.
+- Le verrou d'ouverture est propre à chaque fichier : `test_opening_one_space_does_not_wait_for_another`.
+- Les compteurs de la liste des espaces n'attendent plus une reconstruction en cours : `test_a_rebuild_in_progress_does_not_delay_the_workspace_list`. Il n'y a plus de reste à faire.
+- Les tests liés au temps gardent leur marge : la durée court à partir du moment où l'autre processus a ouvert la base (ligne « ouverte »), pas de son lancement.

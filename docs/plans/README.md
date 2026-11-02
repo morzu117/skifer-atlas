@@ -87,7 +87,8 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 - Rafraîchissement des jetons GitHub à durée limitée (0025).
 
 **Réglé** depuis la mise à jour précédente :
-- Base d'un espace ouverte en même temps par la CLI et l'app : attente, puis « Base de l'espace occupée » (issue #61) : plan 0028, ADR 0032.
+- Base d'un espace ouverte en même temps par la CLI et l'app : attente, puis « Base de l'espace occupée » (issue #61) : plan 0028, ADR 0032 ; suivi de la relecture (#65) inclus.
+- Ports e2e occupés : la configuration Playwright les vérifie avant de lancer quoi que ce soit, et nomme chaque port pris avec son processus (`app/e2e/ports.ts`, issue #61).
 - Parcours des plans 0010 à 0016 et graphe de 200 nœuds sous WebKit, le moteur de Tauri macOS, avec axe : plan 0026, ADR 0030.
 - Test instable de `test_snowflake_compare.py` : une vraie course dans `get_comparison`, qui pouvait lire « interrupted » une comparaison en train de se terminer. Corrigée, avec un test dédié.
 - Tag posé au `sync` après une fusion faite sur GitHub : plan 0020, ADR 0024.
