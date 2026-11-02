@@ -34,6 +34,7 @@ Statut : plans validés le 30 octobre 2026, développement lancé par le plan 00
 | 0028 | Base partagée entre processus | la CLI et l'app ouvrent la même base : attente, puis « Base de l'espace occupée » | 0005, 0009 | S |
 | 0029 | Sources communes d'une comparaison | sources du canonique gardées telles quelles : annoncées avant lancement, listées dans le résultat | 0009, 0015, 0022 | S |
 | 0030 | Horodatages indépendants de la session | casts sans fuseau ; colonnes Databricks lues en heure murale de leur fuseau déclaré | 0007, 0010, 0021 | S |
+| 0031 | Horodatages avec fuseau des sources Snowflake | colonnes `TIMESTAMP_LTZ` et `TIMESTAMP_TZ` lues en heure murale de leur fuseau déclaré | 0018, 0030 | S |
 
 **Chemin critique** : 0001 → 0002 → 0003 → 0005 → 0006 → 0010 → 0011 → 0012 → 0013 → 0014. La branche « chiffrée » 0007 → 0008 → 0009 → 0018 peut avancer en parallèle dès 0002, et l'extraction 0004 dès 0003.
 
@@ -76,7 +77,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 
 **Développement** :
 - Route de révision d'une proposition, si l'écran en a besoin (0006).
-- Colonnes `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` d'une source Snowflake, lues aujourd'hui telles quelles (0030, ADR 0034).
+- Créer une déclinaison depuis l'app (entité, mode surcharge ou from scratch, justification, puis l'éditeur) : aujourd'hui, l'éditeur modifie une déclinaison existante, mais une nouvelle se crée à la main dans le dépôt. Ni le brief ni un plan ne la décrivent (relevé le 2 novembre 2026).
 - Onglets de la fiche au clavier sous WebKit macOS : Tab seul ne passe pas par les liens (⌥Tab, ou réglage macOS). Deux pistes : des boutons à la place des liens, ou l'option WKWebView qui fait passer Tab par les liens (0026, ADR 0030).
 
 **Hors périmètre, à décider** :
@@ -88,6 +89,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 - Rafraîchissement des jetons GitHub à durée limitée (0025).
 
 **Réglé** depuis la mise à jour précédente :
+- Colonnes `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` d'une source Snowflake : plan 0031, ADR 0036.
 - Test de fumée de l'app trop juste sur le runner macOS Intel de la CI (6 à 15 s pour 10 s) : limite de 20 s sur ce runner seulement, ADR 0023 (#72).
 - Deux `git fetch` concurrents sur un même clone (synchronisation pendant le chargement de l'écran Propositions), vus dans l'e2e S-0006-12 : ADR 0035.
 - Paramètres de session : fuseau de session de Databricks et `TIMESTAMP_TYPE_MAPPING` de Snowflake : plan 0030, ADR 0034.

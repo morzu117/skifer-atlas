@@ -668,7 +668,6 @@ Les trois scénarios partent du même test (`app/e2e/fuseau-de-session.spec.ts`)
 Plan 0030, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-01]`
 - **Quand** j'affiche le SQL Databricks
 - **Alors** la source lit `passee_le` par `WHEN TYPEOF(passee_le) = 'timestamp'`, `THEN CONVERT_TIMEZONE('UTC', 'Europe/Paris', DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), …))` et `ELSE CAST(passee_le AS TIMESTAMP_NTZ)`
-- **Et** en Snowflake, aucun `TYPEOF`
 - Limite : la relecture par SQLGlot et le fuseau `UTC` sont vérifiés par `core/tests/compile/test_ecarts.py::test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
 
 ### S-0030-02 — Aucun cast d'horodatage ne dépend de la session
@@ -682,6 +681,21 @@ Plan 0030, critère 2 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030
 Plan 0030, critère 4 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-04]`
 - **Étant donné** et **Quand** : ceux de S-0030-01
 - **Alors** le panneau SQL de l'éditeur affiche, en Databricks, la lecture de S-0030-01, telle que l'exécuterait une comparaison
+
+**Plan 0031**
+
+Même test et même brouillon que pour le plan 0030 (`app/e2e/fuseau-de-session.spec.ts`) : colonne `passee_le` déclarée `Europe/Paris`, onglet « SQL compilé ».
+
+### S-0031-01 — En Snowflake, une colonne `timestamp` est lue en heure murale de son fuseau
+Plan 0031, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0031-01]`
+- **Quand** j'affiche le SQL Snowflake
+- **Alors** la source lit `passee_le` par `WHEN TYPEOF(CAST(passee_le AS VARIANT)) IN ('TIMESTAMP_LTZ', 'TIMESTAMP_TZ')`, `THEN CAST(CONVERT_TIMEZONE('Europe/Paris', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)` et `ELSE CAST(passee_le AS TIMESTAMPNTZ)`
+- Limite : la relecture par SQLGlot et le fuseau `UTC` sont vérifiés par `core/tests/compile/test_ecarts.py::test_snowflake_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
+
+### S-0031-04 — Le panneau SQL montre la lecture Snowflake en heure murale
+Plan 0031, critère 4 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0031-04]`
+- **Étant donné** et **Quand** : ceux de S-0031-01
+- **Alors** le panneau SQL de l'éditeur affiche, en Snowflake, la lecture de S-0031-01, telle que l'exécuterait une comparaison
 
 **Plan 0024**
 
@@ -1468,6 +1482,8 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0029-03 | Une base créée avant le plan 0029 s'ouvre ; ses anciennes synthèses n'ont aucune source commune | Logique serveur sans écran : l'app ne crée pas de base ancienne | `core/tests/compare/test_compare.py::test_a_base_from_before_plan_0029_is_migrated` |
 | S-0029-04 | `atlas compare … --variants nordis-es` nomme la source commune | Sortie de la CLI, sans écran | `core/tests/compare/test_compare.py::test_cli_compare_lists_common_sources` |
 | S-0030-03 | La lecture d'un instant ne dépend pas du fuseau de session ; les trois dialectes rendent les mêmes jours locaux | Exécution sous plusieurs fuseaux de session : l'écran ne fait que montrer le SQL | `core/tests/compile/test_ecarts.py::test_an_instant_is_read_without_the_session_zone`, `::test_the_paris_day_does_not_depend_on_the_session_zone` |
+| S-0031-02 | La branche instant Snowflake ne dépend pas du fuseau de session, heure doublée et autre décalage compris | Exécution sous plusieurs fuseaux de session : l'écran ne fait que montrer le SQL | `core/tests/compile/test_ecarts.py::test_a_snowflake_instant_is_read_without_the_session_zone` |
+| S-0031-03 | Les trois dialectes rendent les mêmes jours locaux ; aucun SQL Snowflake ne contient `AS TIMESTAMP)` | Exécution DuckDB et SQL de référence, sans écran | `core/tests/compile/test_ecarts.py::test_the_paris_day_does_not_depend_on_the_session_zone`, `::test_no_timestamp_cast_depends_on_the_session`, `::test_no_reference_sql_casts_to_a_session_timestamp` |
 | S-RAF-01 | Installation sur un poste vierge de chaque OS, puis accueil → catalogue → fiche | Fenêtre native Tauri, installateurs signés, postes vierges ; WebKit ne teste que les vues | `.github/workflows/release.yml` ; `core/tests/test_sidecar.py` ; `core/tests/test_release.py` |
 | S-RAF-09 | Keyring et connecteurs figés sous Windows | Poste Windows réel ; l'e2e utilise un coffre en mémoire | `core/tests/test_sidecar.py` ; `core/tests/connections/test_connections.py` ; `core/tests/connections/test_snowflake.py` |
 | S-RAF-10 | Extraction d'un vrai script de production anonymisé | Revue produit : le script est à fournir et valider par son propriétaire | `core/tests/extract/test_extract.py` (corpus synthétique) |

@@ -43,11 +43,24 @@ def aggregate(function: str, source: str) -> exp.Expression:
 def wall_clock(column: exp.Expression, zone: str, dialect: str) -> exp.Expression:
     """Colonne `timestamp` d'une source, lue en heure murale de son fuseau déclaré.
 
-    En Databricks, la colonne peut être un instant (`TIMESTAMP`, type par défaut) ou une
-    heure murale (`TIMESTAMP_NTZ`) : `TYPEOF` le dit à l'exécution, sans métadonnées. Un
-    instant passe par ses microsecondes depuis l'époque, qui ne dépendent pas de la session,
-    puis par l'heure UTC, puis par le fuseau déclaré. Snowflake et DuckDB lisent la colonne
-    telle quelle : leur type de colonne par défaut est déjà une heure murale."""
+    La colonne peut être un instant ou une heure murale : le type de la valeur le dit à
+    l'exécution, sans métadonnées. Un instant est ramené au fuseau déclaré sans passer par
+    le fuseau de session ; une heure murale reste telle quelle.
+    - Databricks (plan 0030) : un instant (`TIMESTAMP`, type par défaut) passe par ses
+      microsecondes depuis l'époque, puis par l'heure UTC, puis par le fuseau déclaré.
+    - Snowflake (plan 0031) : un `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` passe en `TIMESTAMP_TZ`
+      (même instant), puis dans le fuseau déclaré, et perd son décalage.
+    DuckDB lit la colonne telle quelle."""
+    if dialect == "snowflake":
+        # Les deux branches du CASE sont typées avant l'exécution : le cast explicite garde
+        # `CONVERT_TIMEZONE` valide pour une colonne sans fuseau ou texte.
+        local = exp.ConvertTimezone(target_tz=exp.Literal.string(zone),
+                                    timestamp=exp.cast(column.copy(), "timestamptz"))
+        is_instant = exp.In(this=exp.Typeof(this=exp.cast(column.copy(), "variant")),
+                            expressions=[exp.Literal.string("TIMESTAMP_LTZ"),
+                                         exp.Literal.string("TIMESTAMP_TZ")])
+        return exp.Case(ifs=[exp.If(this=is_instant, true=exp.cast(local, WALL_CLOCK))],
+                        default=exp.cast(column.copy(), WALL_CLOCK))
     if dialect != "databricks":
         return column
     epoch = exp.cast(exp.Literal.string("1970-01-01 00:00:00"), WALL_CLOCK)

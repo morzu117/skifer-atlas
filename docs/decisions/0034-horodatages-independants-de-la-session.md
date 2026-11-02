@@ -23,6 +23,6 @@ Le YAML déclare le fuseau d'origine de chaque colonne `timestamp` (ADR 0010). I
 
 - Le reste du graphe ne voit que des heures murales : conversions de fuseau, `to_date`, découpage en périodes et comparaisons à un littéral ne dépendent plus de la session.
 - Une colonne Databricks déclarée `UTC` et stockée comme instant est lue sans `CONVERT_TIMEZONE`.
-- **Limite.** Les colonnes `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` d'une source Snowflake restent lues telles quelles. Le type par défaut d'une colonne Snowflake est `TIMESTAMP_NTZ`. Le cas est au reste à faire.
+- **Limite.** Les colonnes `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` d'une source Snowflake restent lues telles quelles. Le type par défaut d'une colonne Snowflake est `TIMESTAMP_NTZ`. Levée par le plan 0031 (ADR 0036).
 - **Vérification.** Aucun test n'exécute le SQL sur un vrai Databricks. La branche instant est exécutée en DuckDB, après traduction, sous trois fuseaux de session ; le SQL Databricks est relu par SQLGlot.
 - Tests : `core/tests/compile/test_ecarts.py` (section plan 0030) ; référence `core/tests/fixtures/compile/golden/ventes.databricks.sql`.

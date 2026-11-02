@@ -3,8 +3,8 @@ import { CORE, python, test } from "./isolation";
 import { API, ensureNordis } from "./demo";
 import type { Raw } from "./graphe";
 
-// Plan 0030 : le SQL est réellement compilé par le serveur et lu dans le panneau de
-// l'éditeur ; son exécution reste vérifiée par pytest (core/tests/compile/test_ecarts.py).
+// Plans 0030 et 0031 : le SQL est réellement compilé par le serveur et lu dans le panneau
+// de l'éditeur ; son exécution reste vérifiée par pytest (core/tests/compile/test_ecarts.py).
 
 /** Le KPI `fuseau` de test_ecarts.py, colonne `passee_le` déclarée à Paris, avec un filtre
  * sur un littéral d'horodatage avant le jour local. */
@@ -16,7 +16,10 @@ nodes[0]['inputs']=['n05']
 filtre={'id':'n05','type':'filter','inputs':['n01'],'nulls':'drop','condition':'passee_le:greater_than:2025-01-01 00:00:00'}
 print(json.dumps(orders('Europe/Paris',after=[filtre,*nodes]).model_dump(mode='json',exclude_none=True)))`;
 
-test("[S-0030-01] [S-0030-02] [S-0030-04] Horodatage d'une source lu en heure murale de son fuseau dans le panneau SQL", async ({ page, request }) => {
+/** La mise en page coupe les lignes selon leur longueur : on compare le SQL sur une ligne. */
+const flatten = (sql: string) => sql.split(/\s+/).join(" ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+
+test("[S-0030-01] [S-0030-02] [S-0030-04] [S-0031-01] [S-0031-04] Horodatage d'une source lu en heure murale de son fuseau dans le panneau SQL", async ({ page, request }) => {
   await ensureNordis(request);
   const editor = `${API}/api/workspaces/groupe-nordis/editor`;
   const doc = JSON.parse(python(DOCUMENT, CORE)) as Raw;
@@ -33,9 +36,7 @@ test("[S-0030-01] [S-0030-02] [S-0030-04] Horodatage d'une source lu en heure mu
     const databricks = panel.getByLabel("SQL databricks");
     await expect(databricks).toContainText(id);
     const dbx = (await databricks.textContent())!;
-    // La mise en page coupe les lignes selon leur longueur : on compare le SQL sur une ligne.
-    const flat = dbx.split(/\s+/).join(" ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
-    expect(flat).toContain(
+    expect(flatten(dbx)).toContain(
       "CASE WHEN TYPEOF(passee_le) = 'timestamp' THEN CONVERT_TIMEZONE('UTC', 'Europe/Paris', " +
         "DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ))) " +
         "ELSE CAST(passee_le AS TIMESTAMP_NTZ) END AS passee_le",
@@ -44,12 +45,18 @@ test("[S-0030-01] [S-0030-02] [S-0030-04] Horodatage d'une source lu en heure mu
     // Seule exception, quelle que soit la colonne : le cast d'un instant vers lui-même.
     expect(dbx.replace(/UNIX_MICROS\(CAST\(\w+ AS TIMESTAMP\)\)/g, "")).not.toContain("AS TIMESTAMP)");
 
-    // Snowflake : ni TYPEOF ni cast dépendant de TIMESTAMP_TYPE_MAPPING.
+    // Snowflake : un instant (TIMESTAMP_LTZ ou TIMESTAMP_TZ) passe dans le fuseau déclaré puis
+    // perd son décalage ; une heure murale reste telle quelle. Aucun cast ne dépend de
+    // TIMESTAMP_TYPE_MAPPING.
     await panel.getByRole("radio", { name: "Snowflake" }).check();
     const snowflake = panel.getByLabel("SQL snowflake");
     await expect(snowflake).toContainText(id);
     const snow = (await snowflake.textContent())!;
-    expect(snow.toUpperCase()).not.toContain("TYPEOF");
+    expect(flatten(snow)).toContain(
+      "CASE WHEN TYPEOF(CAST(passee_le AS VARIANT)) IN ('TIMESTAMP_LTZ', 'TIMESTAMP_TZ') " +
+        "THEN CAST(CONVERT_TIMEZONE('Europe/Paris', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ) " +
+        "ELSE CAST(passee_le AS TIMESTAMPNTZ) END AS passee_le",
+    );
     expect(snow).toContain("passee_le > CAST('2025-01-01 00:00:00' AS TIMESTAMPNTZ)");
     expect(snow).not.toContain("AS TIMESTAMP)");
   } finally {
