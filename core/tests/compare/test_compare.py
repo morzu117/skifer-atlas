@@ -368,6 +368,42 @@ def test_type_mismatch_is_named_and_integers_widen(space, db, tmp_path):
     assert found["results"][0]["validation_pct"] == 75
 
 
+def test_two_columns_bound_to_one_attribute_are_ambiguous(space, db):
+    """#45 : deux colonnes de la déclinaison rattachées au même attribut, aucune n'est
+    prise au hasard ; un attribut dont le canonique se passe est simplement retiré."""
+    def duplicate(source):
+        source["columns"].append({"name": "pedido_id", "type": "string"})
+        source["binding"]["pedido_id"] = "commande_id"
+    edit_es_source(space, duplicate)
+    with pytest.raises(RepoError) as error:
+        compare(space, db, "nordis-es")
+    assert error.value.code == "canonical_not_rebindable"
+    assert error.value.message.endswith(": commande_id (attribut commande_id porté par "
+                                        "factura_id, pedido_id) ; les rattacher au concept "
+                                        "« commande » par un binding.")
+
+
+def test_common_sources_need_a_single_platform(space):
+    """#45 : une source commune se lit sur la plateforme de la déclinaison ; des sources
+    sur deux plateformes n'en désignent aucune."""
+    from skifer_atlas.compare.rebind import rebind
+    from skifer_atlas.index.build import analyze
+    from skifer_atlas.model.resolve import resolve
+
+    analysis = analyze(space)
+    kpi = analysis.entry("revenu-net").document
+    variant = analysis.entry("revenu-net--nordis-es").document
+    clients = variant.graph.nodes[0].model_copy(update={
+        "id": "n09", "platform": "databricks", "concept": "client-actif"})
+    variant = variant.model_copy(update={"graph": variant.graph.model_copy(update={
+        "nodes": [*variant.graph.nodes, clients]})})
+    with pytest.raises(RepoError) as error:
+        rebind(kpi, resolve(variant, kpi, analysis.library), analysis.library)
+    assert error.value.code == "canonical_not_rebindable"
+    assert ("n06 serait une source commune, mais les sources de la déclinaison sont sur "
+            "plusieurs plateformes (databricks, snowflake)") in error.value.message
+
+
 def test_a_variant_sharing_no_concept_is_refused(space, db):
     def detach(data):
         data["graph"]["nodes"][0]["concept"] = "client-actif"

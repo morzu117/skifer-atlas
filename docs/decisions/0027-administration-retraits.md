@@ -19,3 +19,9 @@ L'ADR 0021 laissait à l'édition de `governance.yaml` trois opérations : retir
 
 - L'écran couvre désormais toute la gouvernance, sauf les plateformes non proposées par la maquette (une autorisation existante est conservée, ADR 0021).
 - Les documents d'un domaine à retirer doivent d'abord changer de domaine : il n'y a pas de déplacement en bloc.
+
+## Complément (2 novembre 2026, issue #42)
+
+- **Le contrôle d'un retrait de domaine ne laisse pas passer faute d'index.** Si l'index de l'espace ne peut pas compter les documents, le retrait d'un domaine est refusé : 503 `index_unavailable`, à réessayer après la synchronisation. Une modification qui ne retire aucun domaine ne lit pas l'index. L'écran reste informatif : `document_counts` vide si l'index manque, et le serveur tranche.
+- **Le rôle lecteur est compris dans les autres.** À côté d'un autre rôle, il est retiré à l'enregistrement, et la justification ne le cite pas. Seul, il reste.
+- Tests : `core/tests/repo/test_admin.py` (`test_a_domain_is_not_removed_when_the_index_cannot_count_its_documents`, `test_a_reader_role_next_to_other_roles_is_dropped`, `test_a_name_ending_with_a_period_ends_the_sentence`).

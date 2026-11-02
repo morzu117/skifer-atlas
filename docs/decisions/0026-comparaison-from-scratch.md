@@ -45,3 +45,10 @@ Points à trancher :
 - Retirer une colonne non lue peut changer l'ordre de départage d'un `deduplicate`, qui trie aussi sur les colonnes non citées. L'effet est limité aux ex æquo.
 - Le rebranchement propage les colonnes une fois par colonne manquante. Le coût est négligeable sur des graphes de quelques dizaines de nœuds.
 - La piste « Nœud divergent » reste vide pour une déclinaison from scratch : ses écarts sont justifiés, et le catalogue la laisse `candidates:n` (ADR 0015).
+
+## Complément (2 novembre 2026, issue #45)
+
+- **Attribut ambigu.** Deux colonnes de la source de la déclinaison rattachées au même attribut, l'une par `binding`, l'autre par son nom, ou les deux par `binding` : aucune n'est prise. Une colonne que le canonique lit ou rattache au concept est alors refusée (`canonical_not_rebindable`, qui nomme l'attribut et les colonnes) ; une autre est retirée, comme une colonne introuvable.
+- **Pas de repli par nom sur un type incompatible.** Une colonne trouvée par attribut, mais d'un autre type, ne cède pas la place à une colonne du même nom : le `binding` dit le sens de la colonne, le nom ne fait que le deviner. Une colonne du même nom non rattachée compte d'ailleurs pour l'attribut de son nom, ce qui rend le cas ambigu.
+- **Une plateforme pour les sources communes.** Une source commune se lit sur la plateforme de la déclinaison. Quand les sources de la déclinaison sont sur plusieurs plateformes, aucune n'est choisie : refus, qui nomme la source et les plateformes. Une déclinaison sur plusieurs plateformes sans source commune n'est pas concernée.
+- Tests : `core/tests/compare/test_compare.py` (`test_two_columns_bound_to_one_attribute_are_ambiguous`, `test_common_sources_need_a_single_platform`).
