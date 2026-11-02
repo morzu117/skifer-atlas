@@ -50,8 +50,9 @@
 | 0026 | 9 | 9 | 0 | 0 | 0 |
 | 0028 | 3 | 2 | 0 | 1 | 0 |
 | 0029 | 4 | 2 | 0 | 2 | 0 |
+| 0030 | 4 | 3 | 0 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **228** | **168** | **5** | **55** | **0** |
+| **Total** | **232** | **171** | **5** | **56** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -658,6 +659,29 @@ Plan 0021, critère 6 · Test : `app/e2e/sql.spec.ts` › `[S-0021-06]`
 - **Quand** j'affiche le SQL Databricks, puis Snowflake
 - **Alors** chacun contient la garde `atlas_guard` et la branche `UNION ALL` qui la lit
 - Limite : la forme DuckDB et l'exécution (une anomalie fait échouer une sortie vide ; sans anomalie, les lignes et elles seules) sont vérifiées par `core/tests/compile/test_ecarts.py::test_guard_is_read_by_a_branch_independent_of_the_output`, `::test_anomaly_on_an_empty_output_fails_on_duckdb` et `::test_no_anomaly_gives_the_rows_and_only_them`.
+
+**Plan 0030**
+
+Les trois scénarios partent du même test (`app/e2e/fuseau-de-session.spec.ts`). Le brouillon est le KPI `fuseau` construit par `orders('Europe/Paris', …)` de `core/tests/compile/test_ecarts.py` : colonne `passee_le` déclarée `Europe/Paris`, plus un filtre n05 sur `passee_le:greater_than:2025-01-01 00:00:00`. Il est déposé sur `groupe-nordis`, puis supprimé en fin de test. J'ouvre l'onglet « SQL compilé ».
+
+### S-0030-01 — En Databricks, une colonne `timestamp` est lue en heure murale de son fuseau
+Plan 0030, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-01]`
+- **Quand** j'affiche le SQL Databricks
+- **Alors** la source lit `passee_le` par `WHEN TYPEOF(passee_le) = 'timestamp'`, `THEN CONVERT_TIMEZONE('UTC', 'Europe/Paris', DATE_ADD(MICROSECOND, UNIX_MICROS(passee_le), …))` et `ELSE CAST(passee_le AS TIMESTAMP_NTZ)`
+- **Et** en Snowflake, aucun `TYPEOF`
+- Limite : la relecture par SQLGlot et le fuseau `UTC` sont vérifiés par `core/tests/compile/test_ecarts.py::test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
+
+### S-0030-02 — Aucun cast d'horodatage ne dépend de la session
+Plan 0030, critère 2 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-02]`
+- **Quand** j'affiche le SQL Databricks, puis Snowflake
+- **Alors** le littéral du filtre s'écrit `CAST('2025-01-01 00:00:00' AS TIMESTAMP_NTZ)` en Databricks, `… AS TIMESTAMPNTZ)` en Snowflake
+- **Et** aucun des deux ne contient `AS TIMESTAMP)`
+- Limite : la conversion vers le même fuseau et le `NULL` typé d'une union sont vérifiés par `core/tests/compile/test_ecarts.py::test_no_timestamp_cast_depends_on_the_session`.
+
+### S-0030-04 — Le panneau SQL montre la lecture en heure murale
+Plan 0030, critère 4 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-04]`
+- **Étant donné** et **Quand** : ceux de S-0030-01
+- **Alors** le panneau SQL de l'éditeur affiche, en Databricks, la lecture de S-0030-01, telle que l'exécuterait une comparaison
 
 **Plan 0024**
 
@@ -1443,6 +1467,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0028-03 | Une autre erreur d'ouverture de la base (dossier absent) remonte sans attente | Logique serveur sans écran : aucune action de l'app ne mène à un dossier de base absent | `core/tests/test_dbfile.py::test_other_io_errors_are_not_retried` |
 | S-0029-03 | Une base créée avant le plan 0029 s'ouvre ; ses anciennes synthèses n'ont aucune source commune | Logique serveur sans écran : l'app ne crée pas de base ancienne | `core/tests/compare/test_compare.py::test_a_base_from_before_plan_0029_is_migrated` |
 | S-0029-04 | `atlas compare … --variants nordis-es` nomme la source commune | Sortie de la CLI, sans écran | `core/tests/compare/test_compare.py::test_cli_compare_lists_common_sources` |
+| S-0030-03 | La lecture d'un instant ne dépend pas du fuseau de session ; les trois dialectes rendent les mêmes jours locaux | Exécution sous plusieurs fuseaux de session : l'écran ne fait que montrer le SQL | `core/tests/compile/test_ecarts.py::test_an_instant_is_read_without_the_session_zone`, `::test_the_paris_day_does_not_depend_on_the_session_zone` |
 | S-RAF-01 | Installation sur un poste vierge de chaque OS, puis accueil → catalogue → fiche | Fenêtre native Tauri, installateurs signés, postes vierges ; WebKit ne teste que les vues | `.github/workflows/release.yml` ; `core/tests/test_sidecar.py` ; `core/tests/test_release.py` |
 | S-RAF-09 | Keyring et connecteurs figés sous Windows | Poste Windows réel ; l'e2e utilise un coffre en mémoire | `core/tests/test_sidecar.py` ; `core/tests/connections/test_connections.py` ; `core/tests/connections/test_snowflake.py` |
 | S-RAF-10 | Extraction d'un vrai script de production anonymisé | Revue produit : le script est à fournir et valider par son propriétaire | `core/tests/extract/test_extract.py` (corpus synthétique) |

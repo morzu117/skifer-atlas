@@ -80,5 +80,5 @@ Décisions : [ADR 0025](../decisions/0025-ecarts-de-compilation.md). L'ADR 0010 
 - **Documentation** : `core/README.md`, paragraphe de `atlas compile`.
 - **Reste à faire** :
   - vérifier les trois règles et l'échec `CAST(message AS INT)` sur de vrais comptes Databricks et Snowflake (plan 0018, critère 1) ;
-  - les autres paramètres de session : fuseau de session de Databricks, `TIMESTAMP_TYPE_MAPPING` en Snowflake pour `CAST(… AS TIMESTAMP)` ;
+  - les autres paramètres de session : fuseau de session de Databricks, `TIMESTAMP_TYPE_MAPPING` en Snowflake pour `CAST(… AS TIMESTAMP)` (fait : plan 0030, ADR 0034) ;
   - DuckDB évaluait déjà la garde sur une sortie vide dans les cas essayés : le critère 6 ne s'y observe que par la branche de garde exécutée seule.
