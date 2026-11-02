@@ -211,6 +211,9 @@ def get_comparison(workspace_id: str, number: int) -> dict:
         raise RepoError("not_found", f"Comparaison {number} introuvable.")
     found["progress"] = None
     if found["status"] == "running":
+        # Ligne créée après la première lecture du registre : `start` y inscrit le job sous
+        # le même verrou que la création, donc la seconde lecture le trouve.
+        running = running or orchestrate.job(db, number)
         if running is None:
             found["status"] = "interrupted"  # le processus s'est arrêté pendant l'exécution
         else:

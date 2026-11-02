@@ -96,8 +96,9 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 - Sources communes d'une comparaison, annoncées avant lancement et listées dans le résultat : plan 0029, ADR 0033.
 - Base d'un espace ouverte en même temps par la CLI et l'app : attente, puis « Base de l'espace occupée » (issue #61) : plan 0028, ADR 0032 ; suivi de la relecture (#65) inclus.
 - Ports e2e occupés : la configuration Playwright les vérifie avant de lancer quoi que ce soit, et nomme chaque port pris avec son processus (`app/e2e/ports.ts`, issue #61).
-- Parcours des plans 0010 à 0016 et graphe de 200 nœuds sous WebKit, le moteur de Tauri macOS, avec axe : plan 0026, ADR 0030.
+- Parcours des plans 0010 à 0016 et graphe de 200 nœuds sous WebKit, le moteur de Tauri macOS, avec les contrôles d'accessibilité axe : plan 0026, ADR 0030.
 - Test instable de `test_snowflake_compare.py` : une vraie course dans `get_comparison`, qui pouvait lire « interrupted » une comparaison en train de se terminer. Corrigée, avec un test dédié.
+- Même course au démarrage : une lecture entre la création de la ligne et l'inscription du job lisait « interrupted ». La ligne et le job sont créés sous le même verrou, et `get_comparison` relit le registre (issue #59).
 - Tag posé au `sync` après une fusion faite sur GitHub : plan 0020, ADR 0024.
 - Écarts de compilation (division, `WEEK_START`, garde sur une sortie vide) : plan 0021, ADR 0025.
 - Nordis ES comparée en from scratch : plan 0022, ADR 0026.

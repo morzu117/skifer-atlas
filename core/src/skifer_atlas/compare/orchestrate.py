@@ -439,11 +439,13 @@ def _guarded(job: Job, runner: Runner) -> None:
 def start(db: Path, account: str | None, prepared: Prepared, runner: Runner,
           wait: bool = False) -> Job:
     """Enregistre la comparaison (`running`) puis l'exécute, en tâche de fond par défaut."""
-    number = store.create(db, account, prepared.kpi.data_product.id,
-                          prepared.kpi.data_product.version, prepared.scope_dict(),
-                          prepared.tolerance)
-    current = Job(number, db, prepared)
+    # La ligne et le job ensemble : `get_comparison`, qui relit le registre sous ce verrou,
+    # ne voit jamais la ligne « running » d'un job pas encore inscrit.
     with _jobs_lock:
+        number = store.create(db, account, prepared.kpi.data_product.id,
+                              prepared.kpi.data_product.version, prepared.scope_dict(),
+                              prepared.tolerance)
+        current = Job(number, db, prepared)
         _jobs[(str(db), number)] = current
     if wait:
         _guarded(current, runner)

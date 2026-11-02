@@ -213,8 +213,9 @@ def test_comparison_finishing_while_it_is_read_is_not_interrupted(client, joined
     number = store.create(db, "julien.h", "revenu-net", 4, {"id": "x"}, 1.0)
     prepared = service.prepare_in(repo_dir("groupe-nordis"), service.CompareRequest(**BODY),
                                   "groupe-nordis", True)
-    job = orchestrate.Job(number, db, prepared)
-    orchestrate._jobs[(str(db), number)] = job
+    # `setitem` retire le job à la fin du test, même si une assertion échoue avant (#59).
+    monkeypatch.setitem(orchestrate._jobs, (str(db), number),
+                        orchestrate.Job(number, db, prepared))
     read = store.get
 
     def read_then_finish(*args):
@@ -225,6 +226,51 @@ def test_comparison_finishing_while_it_is_read_is_not_interrupted(client, joined
     monkeypatch.setattr(store, "get", read_then_finish)
     assert client.get(f"{COMPARISONS}/{number}").json()["status"] == "running"
     assert client.get(f"{COMPARISONS}/{number}").json()["status"] == "interrupted"
+
+
+def test_comparison_registered_while_it_is_read_is_not_interrupted(client, joined, local,
+                                                                   monkeypatch):
+    """La comparaison démarre entre la lecture du registre des jobs (vide) et celle de sa
+    ligne (« running ») : la seconde lecture du registre la trouve (#59)."""
+    db = index_path("groupe-nordis")
+    number = store.create(db, "julien.h", "revenu-net", 4, {"id": "x"}, 1.0)
+    prepared = service.prepare_in(repo_dir("groupe-nordis"), service.CompareRequest(**BODY),
+                                  "groupe-nordis", True)
+    read = store.get
+
+    def start_then_read(*args):
+        monkeypatch.setitem(orchestrate._jobs, (str(db), number),
+                            orchestrate.Job(number, db, prepared))  # `start` vient de finir
+        return read(*args)
+
+    monkeypatch.setattr(store, "get", start_then_read)
+    assert client.get(f"{COMPARISONS}/{number}").json()["status"] == "running"
+
+
+def test_comparison_read_while_it_is_created_is_not_interrupted(client, joined, local,
+                                                                monkeypatch):
+    """Une lecture tombe entre la création de la ligne (« running ») et l'inscription du
+    job : elle attend l'inscription et ne lit pas « interrupted » (#59)."""
+    create, seen, readers, reading = store.create, [], [], threading.Event()
+
+    def read(number):
+        reading.set()
+        seen.append(service.get_comparison("groupe-nordis", number)["status"])
+
+    def create_then_read(*args):
+        number = create(*args)
+        reader = threading.Thread(target=read, args=(number,))
+        readers.append(reader)
+        reader.start()
+        assert reading.wait(5)
+        reader.join(0.5)  # sans le verrou de `start`, la lecture finit ici, avant l'inscription
+        return number
+
+    monkeypatch.setattr(store, "create", create_then_read)
+    number = client.post(COMPARISONS, json=BODY).json()["id"]
+    readers[0].join(10)
+    assert len(seen) == 1 and seen[0] != "interrupted"
+    assert finished(client, number)["status"] == "done"
 
 
 def test_request_validation(client, joined, local):

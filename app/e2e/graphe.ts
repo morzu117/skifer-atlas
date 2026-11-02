@@ -13,4 +13,3 @@ export function longKpi(document: Raw, count: number): Raw {
   const { variation_points: _, ...rest } = document;
   return { ...rest, graph: { nodes, output: id(count) } };
 }
-
