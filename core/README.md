@@ -100,7 +100,7 @@ curl -H "$H" $API/acme/proposals/1/graphs                             # deux gra
 curl -H "$H" $API/acme/governance                                     # gouvernance, diagnostics, rôle, single_referent
 curl -H "$H" -H "$J" -d '{"governance":{…},"justification":"…"}' $API/acme/governance
 curl -H "$H" $API/acme/admin                                          # écran 10.7, référents d'espace seulement (403 sinon) : gouvernance, base_digest, KPI et documents par domaine, plateformes, dépôt
-curl -H "$H" -H "$J" -d '{"governance":{…},"base_digest":"…"}' $API/acme/admin/governance   # proposition, fusionnée aussitôt par un référent seul ; 409 stale_base, 422 no_change, 422 domain_in_use (domaine retiré qui porte encore des documents), 503 index_unavailable (index indisponible pour le vérifier)
+curl -H "$H" -H "$J" -d '{"governance":{…},"base_digest":"…"}' $API/acme/admin/governance   # proposition, fusionnée aussitôt par un référent seul ; 409 stale_base, 422 no_change, 422 domain_in_use (domaine retiré qui porte encore des documents), 503 index_busy ou index_unavailable (index occupé ou indisponible pour le vérifier)
 curl -H "$H" -H "$J" -d '{"remote_url":"/chemin/vers/depot.git"}' $API/acme/remote
 ```
 

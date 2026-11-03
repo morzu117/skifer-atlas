@@ -125,8 +125,8 @@ def _attempt(source: Any, candidate: Any, needs: _Needs) -> _Attempt:
 
 def _from_scratch(canonical: Any, variant: Any, entity: str, library: Library | None) -> Rebound:
     candidates = [n for n in variant.graph.nodes if n.type == "source"]
-    platforms = sorted({c.platform for c in candidates})
-    platform = platforms[0] if platforms else None
+    platforms = sorted({c.platform for c in candidates})  # requise par le modèle
+    platform = platforms[0] if len(platforms) == 1 else None  # sinon, pas de source commune
     needs = _Needs(canonical, library)
     replaced: dict[str, Any] = {}
     renames: dict[str, dict[str, str]] = {}
