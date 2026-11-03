@@ -102,6 +102,31 @@ def test_resolve_writes_the_resolved_kpi(tmp_path):
     assert run("check", out).returncode == 0
 
 
+def test_resolve_reports_an_invalid_variant(tmp_path):
+    broken = tmp_path / "variant.yaml"
+    broken.write_text("kind: variant\ninvalid: [\n", encoding="utf-8")
+    result = run("resolve", broken, CANONICAL)
+    assert result.returncode == 1
+    assert "[invalid_yaml]" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_resolve_reports_a_non_variant():
+    result = run("resolve", CANONICAL, CANONICAL)
+    assert result.returncode == 1
+    assert "doit être une variante" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_resolve_reports_an_invalid_canonical(tmp_path):
+    broken = tmp_path / "canonical.yaml"
+    broken.write_text("kind: kpi\ninvalid: [\n", encoding="utf-8")
+    result = run("resolve", DE, broken)
+    assert result.returncode == 1
+    assert "[invalid_yaml]" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_normalize_prints_the_normalized_form():
     result = run("normalize", CANONICAL)
     assert result.returncode == 0

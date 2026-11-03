@@ -78,6 +78,28 @@ def test_orphan_nodes_are_ignored():
     assert print_of(raw) == reference
 
 
+def test_orphan_filter_after_output_does_not_absorb_output():
+    raw = revenu_net()
+    raw["graph"]["output"] = "n02"
+    reference = print_of(raw)
+    raw["graph"]["nodes"].append({
+        "id": "n91", "type": "filter", "inputs": ["n02"],
+        "condition": "statut:equals:annulée", "nulls": "drop",
+    })
+    assert normalized_form(build(raw))["graph"]["output"] == "n02"
+    assert print_of(raw) == reference
+
+
+def test_orphan_filter_on_a_useful_filter_does_not_split_its_group():
+    raw = with_filters(CONDITIONS)
+    reference = print_of(raw)
+    raw["graph"]["nodes"].append({
+        "id": "n91", "type": "filter", "inputs": ["n11"],
+        "condition": "statut:equals:annulée", "nulls": "drop",
+    })
+    assert print_of(raw) == reference
+
+
 def test_sql_is_normalized():
     raw = revenu_net()
     reference = print_of(raw)

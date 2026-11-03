@@ -9,10 +9,10 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from .normalize import NORMALIZATION, _canonical_json, normalized_form
+from .normalize import NORMALIZATION, canonical_json, normalized_form
 
 
 def fingerprint(document: Any) -> str:
     """Empreinte versionnée de la forme normalisée : `sha256:atlas1:<hex>`."""
-    payload = _canonical_json(normalized_form(document)["graph"]).encode("utf-8")
+    payload = canonical_json(normalized_form(document)["graph"]).encode("utf-8")
     return f"sha256:{NORMALIZATION}:{hashlib.sha256(payload).hexdigest()}"
