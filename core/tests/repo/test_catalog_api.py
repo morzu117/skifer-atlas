@@ -110,6 +110,33 @@ def test_document_versions_and_dependencies(client, joined):
     assert variant["variant"]["kpi_id"] == "revenu-net"
 
 
+def test_document_content_comes_from_the_indexed_commit(client, joined):
+    original = client.get(f"{WS}/documents/revenu-net").json()["content"]
+    path = repo_dir("groupe-nordis") / REVENU_NET
+    path.write_text(original.replace("Revenu net", "Valeur non commitée", 1),
+                    encoding="utf-8")
+    found = client.get(f"{WS}/documents/revenu-net")
+    assert found.status_code == 200
+    assert found.json()["content"] == original
+
+
+def test_invalid_atlas_yaml_after_sync_has_a_business_error(client, joined):
+    (joined / "atlas.yaml").write_text("schema_version: [\n", encoding="utf-8")
+    commit_all(joined, "Atlas YAML invalide")
+    git(joined, "push", "--quiet", "origin", "main")
+    response = client.post(f"{WS}/sync")
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_workspace"
+
+
+def test_invalid_local_atlas_yaml_on_sync_has_a_business_error(client, joined):
+    (repo_dir("groupe-nordis") / "atlas.yaml").write_text(
+        "schema_version: [\n", encoding="utf-8")
+    response = client.post(f"{WS}/sync")
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_workspace"
+
+
 def test_facets_list_index_values_with_labels(client, joined):
     """Plan 0011 : filtres alimentés par l'index, libellés de la gouvernance."""
     facets = client.get(f"{WS}/catalog/facets").json()
