@@ -16,7 +16,7 @@ from ..compile import load_calendars
 from ..connectors.base import QueryResult
 from ..governance.model import DEFAULT_TOLERANCE
 from ..index import ensure_index
-from ..index.build import analyze
+from ..index.build import Analysis, analyze
 from ..model.resolve import resolve
 from ..repo.git import RepoError
 from ..repo.layout import read_governance
@@ -38,12 +38,13 @@ def local_data() -> Path | None:
 
 
 def prepare_in(root: Path, request: CompareRequest, workspace_id: str | None,
-               local: bool) -> Prepared:
+               local: bool, analysis: Analysis | None = None) -> Prepared:
     """Prépare depuis un arbre de documents ; en exécution locale, aucun point d'accès."""
+    analysis = analysis if analysis is not None else analyze(root)
     governance = read_governance(root)
     tolerance = governance.tolerance_percent if governance else DEFAULT_TOLERANCE
     if local:
-        return orchestrate.prepare(analyze(root), load_calendars(root / "calendars"),
+        return orchestrate.prepare(analysis, load_calendars(root / "calendars"),
                                    tolerance, request, lambda *_: None, lambda _: "duckdb")
     points = connections.registry(workspace_id)
 
@@ -71,7 +72,7 @@ def prepare_in(root: Path, request: CompareRequest, workspace_id: str | None,
                             f"« {platform} ».")
         return platform
 
-    return orchestrate.prepare(analyze(root), load_calendars(root / "calendars"), tolerance,
+    return orchestrate.prepare(analysis, load_calendars(root / "calendars"), tolerance,
                                request, choose, dialect)
 
 
@@ -154,12 +155,12 @@ def comparison_setup(workspace_id: str, kpi_id: str) -> dict:
             try:
                 if not resolved.valid:
                     raise RepoError("invalid", "La déclinaison ne se résout pas sur le canonique.")
-                platform = orchestrate._platform(resolved.document, document.entity)
+                platform = orchestrate.platform_of(resolved.document, document.entity)
                 # Préparée seule, comme au lancement : une déclinaison qui ne se compare pas
                 # n'est pas cochée et dit pourquoi, au lieu de bloquer les autres.
                 prepare_in(root, CompareRequest(kpi_id=kpi_id, variants=[document.entity],
                                                 scope_id=first_scope),
-                           workspace_id, local)
+                           workspace_id, local, analysis)
             except RepoError as error:
                 unavailable = error.message
         variants.append({

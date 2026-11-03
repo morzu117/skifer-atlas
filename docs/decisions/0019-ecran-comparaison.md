@@ -63,7 +63,7 @@ Le moteur, le stockage DuckDB et les routes viennent du plan 0009. Plusieurs poi
 
 ## Conséquences
 
-- `setup` prépare chaque déclinaison une fois, sans requête. Son coût croît avec le nombre de déclinaisons du KPI. Il n'a pas été mesuré au-delà de la démonstration.
+- `setup` analyse les documents une seule fois, puis prépare chaque déclinaison sans requête. Le coût de compilation croît encore avec le nombre de déclinaisons du KPI ; il n'a pas été mesuré au-delà de la démonstration.
 - Une déclinaison qui ne se prépare que sur un autre scope que le premier est marquée non comparable. Aucun KPI de la démonstration n'est dans ce cas.
 - L'export des résultats et les comparaisons planifiées restent hors périmètre.
 - La comparaison réelle sur Databricks depuis l'écran n'a pas été faite à la main. Elle passe par le même chemin que la comparaison locale, aux points d'accès près.
