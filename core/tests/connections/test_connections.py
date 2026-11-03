@@ -300,6 +300,46 @@ def test_concurrent_refreshes_use_one_new_token(client, fake, monkeypatch):
     assert [r["grant_type"] for r in fake.state.token_requests].count("refresh_token") == 1
 
 
+def test_refresh_reuses_a_fresh_token_even_when_its_value_is_unchanged(
+        client, fake, monkeypatch):
+    space("nordis", [point(fake)])
+    fake.state.expires_in = 0
+    login(client)
+    vault = Vault()
+    stale = vault.get("nordis", "dbx-fr")
+    current = vault.get("nordis", "dbx-fr")
+    current.expires_at = time.time() + 3600
+    vault.put("nordis", "dbx-fr", current)
+
+    def unexpected_refresh(*args):
+        raise AssertionError("Le jeton du coffre est déjà frais.")
+
+    monkeypatch.setattr(oauth, "refresh", unexpected_refresh)
+    actual = connections._refresh("nordis", connections.access_point("nordis", "dbx-fr"),
+                                  stale, vault)
+    assert actual.access_token == stale.access_token
+    assert not actual.needs_refresh()
+
+
+def test_forced_refresh_does_not_refresh_a_replacement_pat_with_the_same_value(
+        client, fake, monkeypatch):
+    space("nordis", [point(fake)])
+    fake.state.expires_in = 0
+    login(client)
+    vault = Vault()
+    stale = vault.get("nordis", "dbx-fr")
+    location = connections.access_point("nordis", "dbx-fr")
+    vault.put("nordis", "dbx-fr", Credential("pat", stale.access_token,
+                                             host=location.base_url))
+
+    def unexpected_refresh(*args):
+        raise AssertionError("Le coffre contient maintenant un token personnel.")
+
+    monkeypatch.setattr(oauth, "refresh", unexpected_refresh)
+    actual = connections._refresh("nordis", location, stale, vault, force=True)
+    assert actual.kind == "pat" and actual.access_token == stale.access_token
+
+
 def test_refused_refresh_gives_expired(client, fake):
     space("nordis", [point(fake)])
     fake.state.expires_in = 0

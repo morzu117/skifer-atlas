@@ -58,6 +58,7 @@ def test_bearer_is_not_forwarded_by_an_http_redirect():
     "https://adb.example.com:8443/oidc/v1/token",
     "https://user@adb.example.com/oidc/v1/token",
     "https://adb.example.com/oidc/v1/token#fragment",
+    "https://[invalid/oidc/v1/token",
 ])
 def test_oauth_discovery_rejects_foreign_endpoints(monkeypatch, bad):
     point = AccessPoint.model_validate({"id": "dbx", "platform": "databricks",
@@ -89,6 +90,7 @@ def test_oauth_discovery_checks_optional_revocation_endpoint(monkeypatch):
 @pytest.mark.parametrize("raw,kind", [
     ("pas-un-entier", "int"), ("pas-un-décimal", "decimal"),
     ("2026-99-99", "date"), ("pas-une-date", "timestamp"),
+    ("pas-un-booléen", "boolean"),
 ])
 def test_databricks_invalid_cell_is_a_typed_error(raw, kind):
     with pytest.raises(RepoError) as refused:
@@ -113,3 +115,37 @@ def test_databricks_requires_a_statement_id(monkeypatch):
         connector.run_aggregate("SELECT 1")
     assert refused.value.code == "query_failed"
     assert calls == [("POST", "/api/2.0/sql/statements")]
+
+
+def test_databricks_rejects_a_redirected_result_chunk(monkeypatch):
+    point = AccessPoint.model_validate({"id": "dbx", "platform": "databricks",
+                                        "host": "https://adb.example.com",
+                                        "warehouse_id": "abc", "owner": "claire.m"})
+    connector = DatabricksConnector(point, "secret")
+    replies = [http.Response(200, {
+        "statement_id": "s1", "status": {"state": "SUCCEEDED"},
+        "manifest": {"total_row_count": 1, "schema": {"columns": [
+            {"name": "total", "type_name": "INT"}]}},
+        "result": {"next_chunk_internal_link": "/api/2.0/sql/statements/s1/chunks/1"},
+    }), http.Response(302, {})]
+    monkeypatch.setattr("skifer_atlas.connectors.databricks.request",
+                        lambda *args, **kwargs: replies.pop(0))
+    with pytest.raises(RepoError) as refused:
+        connector.run_aggregate("SELECT 1")
+    assert refused.value.code == "query_failed"
+
+
+def test_databricks_rejects_a_row_with_the_wrong_number_of_cells(monkeypatch):
+    point = AccessPoint.model_validate({"id": "dbx", "platform": "databricks",
+                                        "host": "https://adb.example.com",
+                                        "warehouse_id": "abc", "owner": "claire.m"})
+    connector = DatabricksConnector(point, "secret")
+    monkeypatch.setattr(connector, "_call", lambda *args, **kwargs: {
+        "statement_id": "s1", "status": {"state": "SUCCEEDED"},
+        "manifest": {"total_row_count": 1, "schema": {"columns": [
+            {"name": "total", "type_name": "INT"}]}},
+        "result": {"data_array": [["1", "2"]]},
+    })
+    with pytest.raises(RepoError) as refused:
+        connector.run_aggregate("SELECT 1")
+    assert refused.value.code == "query_failed"

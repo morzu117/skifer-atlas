@@ -57,7 +57,11 @@ def discover(point: AccessPoint) -> Endpoints:
         if not isinstance(endpoint, str):
             raise RepoError("oauth_unavailable", "Métadonnées OAuth invalides : adresse "
                             "de point d'entrée incorrecte.")
-        parsed = urlparse(endpoint)
+        try:
+            parsed = urlparse(endpoint)
+        except ValueError:
+            raise RepoError("oauth_unavailable", "Métadonnées OAuth invalides : adresse "
+                            "de point d'entrée incorrecte.") from None
         if (parsed.scheme != origin.scheme or parsed.netloc.lower() != origin.netloc.lower()
                 or parsed.username or parsed.password or not parsed.path or parsed.fragment):
             raise RepoError("oauth_unavailable", "Métadonnées OAuth invalides : les points "

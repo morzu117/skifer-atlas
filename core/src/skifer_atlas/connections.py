@@ -376,7 +376,7 @@ def _store_key_pair(workspace_id: str, point: AccessPoint, user: str, private_ke
 
 
 def _refresh(workspace_id: str, point: AccessPoint, credential: Credential,
-             vault: Vault) -> Credential:
+             vault: Vault, force: bool = False) -> Credential:
     lock = _refresh_locks[hash((workspace_id, point.id)) % len(_refresh_locks)]
     with lock:
         current = vault.get(workspace_id, point.id)
@@ -386,7 +386,9 @@ def _refresh(workspace_id: str, point: AccessPoint, credential: Credential,
             raise _host_mismatch(point)
         if current.rejected:
             raise RepoError("access_expired", "Session expirée : se reconnecter.")
-        if current.access_token != credential.access_token and not current.needs_refresh():
+        if (current.kind != "oauth" or
+                (force and current.access_token != credential.access_token) or
+                (not force and not current.needs_refresh())):
             return current
         try:
             renewed = oauth.refresh(oauth.discover(point), current)
@@ -469,7 +471,7 @@ def _with_connector(workspace_id: str, access_point_id: str | AccessPoint, vault
         return _attempt(workspace_id, point, credential, vault, action)
     except AuthRejected:
         if credential.kind == "oauth" and credential.refresh_token:
-            credential = _refresh(workspace_id, point, credential, vault)
+            credential = _refresh(workspace_id, point, credential, vault, force=True)
             try:
                 return _attempt(workspace_id, point, credential, vault, action)
             except AuthRejected:
