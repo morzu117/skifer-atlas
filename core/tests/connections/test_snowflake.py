@@ -1,7 +1,9 @@
 """Connecteur Snowflake (plan 0018) : SSO et paire de clés contre un faux Snowflake local,
 avec le vrai `snowflake-connector-python`. Le test réel est marqué `snowflake`."""
 
+import inspect
 import os
+import stat
 import time
 from pathlib import Path
 
@@ -157,6 +159,27 @@ def test_private_key_is_read_and_decrypted_in_memory(tmp_path):
     garbage = tmp_path / "texte.p8"
     garbage.write_text("pas une clé")
     assert code(garbage, None) == "invalid_key_file"
+    assert code(tmp_path, None) == "key_file_unreadable"  # dossier, pas une clé
+    oversized = tmp_path / "trop-grande.p8"
+    oversized.write_bytes(b"x" * (connector.MAX_PRIVATE_KEY_BYTES + 1))
+    assert code(oversized, None) == "key_file_unreadable"
+    encrypted_der = tmp_path / "encrypted.der"
+    encrypted_der.write_bytes(rsa.generate_private_key(public_exponent=65537, key_size=2048)
+                              .private_bytes(serialization.Encoding.DER,
+                                             serialization.PrivateFormat.PKCS8,
+                                             serialization.BestAvailableEncryption(
+                                                 PASSPHRASE.encode())))
+    assert code(encrypted_der, "mauvaise") == "wrong_passphrase"
+    assert connector.load_private_key(str(encrypted_der), PASSPHRASE)
+
+
+def test_snowflake_connector_still_exposes_session_tokens_api():
+    """#37 : la montée de version doit échouer si l'API privée utilisée disparaît."""
+    from snowflake.connector.connection import SnowflakeConnection
+
+    method = getattr(SnowflakeConnection, "_get_connection_info", None)
+    assert callable(method)
+    assert "include_master_token" in inspect.signature(method).parameters
 
 
 def test_errors_are_translated():
@@ -200,6 +223,8 @@ def test_key_pair_with_passphrase_only_in_the_vault(client, snow, env, tmp_path,
     stored = keyring_vault._memory.get_password(SERVICE, "nordis/snow-de")
     assert PASSPHRASE in stored and "PRIVATE KEY" not in stored
     assert logins.get("nordis", "snow-de") == logins.Login("svc_atlas", str(path))
+    if os.name != "nt":
+        assert stat.S_IMODE((env / "logins.json").stat().st_mode) == 0o600
     assert files_containing(env, PASSPHRASE) == []  # ni registre local, ni clone, ni index
     assert files_containing(env, "PRIVATE KEY") == []  # la clé n'est pas copiée
     assert not any(PASSPHRASE in body for body in client.bodies)
@@ -303,6 +328,24 @@ def test_sso_refused_by_the_identity_provider(client, snow):
     assert flow.status == "failed" and "fournisseur d'identité" in flow.error
     status = client.get(f"{CONNECTIONS}/snow-de/status").json()
     assert (status["my_access"], status["flow"]["status"]) == ("never", "failed")
+
+
+def test_sso_storage_failure_ends_the_flow(client, snow, monkeypatch):
+    """#37 : une erreur du coffre ne laisse pas l'écran en attente jusqu'à expiration."""
+    space("nordis", [snow_point(snow)])
+    monkeypatch.setattr(connector, "session_tokens", lambda connection: None)
+
+    def failed_put(self, workspace_id, access_point_id, credential):
+        raise OSError("coffre indisponible")
+
+    monkeypatch.setattr(Vault, "put", failed_put)
+    response = client.post(f"{CONNECTIONS}/snow-de/authorize",
+                           json={"user": "anna@nordis.example"})
+    assert response.status_code == 200, response.text
+    flow = wait_flow()
+    assert (flow.status, flow.error) == (
+        "failed", "La connexion a réussi, mais son enregistrement local a échoué. Réessayer.")
+    assert ("nordis", "snow-de") not in connector.LIVE
 
 
 def test_sso_session_only_in_memory_when_tokens_are_not_exported(client, snow, monkeypatch):

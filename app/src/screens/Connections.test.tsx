@@ -318,7 +318,8 @@ describe("mes connexions", () => {
       entity: "nordis-de",
       owner: "julien.h",
     };
-    const draftCalls = api.calls.filter((c) => c.path.includes("/access-point-draft/"));
+    const draftCalls = api.calls.filter((c) => c.path.includes("/access-point-draft/")
+      && c.method !== "GET");
     expect(draftCalls.map((c) => c.body)).toEqual(draftCalls.map(() => ({ access_point: expected })));
     expect(api.calls.find((c) => c.method === "POST" && c.path === `${API}/connections`)?.body).toEqual({
       access_point: expected,

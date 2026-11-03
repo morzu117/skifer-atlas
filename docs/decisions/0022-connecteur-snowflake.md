@@ -40,9 +40,11 @@ Points à trancher :
   - L'écran n'affiche pas d'échéance pour une session SSO : elle se renouvelle tant qu'on s'en sert.
 - **Paire de clés : chemin au registre local, passphrase au coffre.** `PUT …/key-pair` prend `{user, private_key_file, passphrase?}`.
   - Atlas lit la clé (PEM ou DER, RSA) avant de ranger quoi que ce soit, et répond 422 par cause : `key_file_unreadable`, `invalid_key_file`, `passphrase_required`, `passphrase_unexpected`, `wrong_passphrase`.
+  - Le fichier doit être régulier et mesurer au plus 1 Mio ; la lecture est elle aussi bornée. Une passphrase fournie pour un DER chiffré est vérifiée comme pour le PEM, avec un message couvrant également un fichier invalide.
   - La passphrase va au coffre (`Credential("keypair", passphrase)`).
   - L'identifiant et le chemin absolu vont dans `<données>/logins.json`, registre local de l'utilisateur, hors de tout dépôt.
   - La clé n'est jamais copiée : elle est relue à chaque connexion.
+  - Le registre local `logins.json` est remplacé avec des droits `0600` sur les systèmes POSIX.
   - Sous Tauri, « Choisir… » ouvre le sélecteur natif (`tauri-plugin-dialog`, permission `dialog:allow-open`). Ailleurs, on saisit le chemin.
 - **`access_points.yaml`** gagne quatre champs Snowflake :
   - `account` : requis si l'hôte n'est pas en `*.snowflakecomputing.com` ; sinon, déduit de l'hôte, `.privatelink` compris ;

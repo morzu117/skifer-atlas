@@ -45,6 +45,7 @@ def _write(entries: dict[str, dict]) -> None:
     path = data_dir() / FILE
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(entries, indent=2, sort_keys=True), encoding="utf-8")
+    os.chmod(temporary, 0o600)
     os.replace(temporary, path)
 
 

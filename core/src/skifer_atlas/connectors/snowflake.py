@@ -21,6 +21,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import stat
 import threading
 import time
 from collections.abc import Callable
@@ -42,6 +43,7 @@ APPLICATION = "SkiferAtlas"
 # texte en nombre (compile/cardinality.py). On rend le message d'Atlas tel quel.
 _GUARD = re.compile(r"Numeric value '(atlas: .*)' is not recognized", re.DOTALL)
 _LOGIN_TIMEOUT = 14  # code du connecteur : délai de connexion dépassé
+MAX_PRIVATE_KEY_BYTES = 1024 * 1024
 
 
 def prepare_environment() -> None:
@@ -107,8 +109,15 @@ def load_private_key(path: str, passphrase: str | None) -> bytes:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
 
+    file = Path(path).expanduser()
     try:
-        data = Path(path).expanduser().read_bytes()
+        details = file.stat()
+        if not stat.S_ISREG(details.st_mode) or not 0 < details.st_size <= MAX_PRIVATE_KEY_BYTES:
+            raise OSError("fichier irrégulier ou trop volumineux")
+        with file.open("rb") as source:
+            data = source.read(MAX_PRIVATE_KEY_BYTES + 1)
+        if len(data) > MAX_PRIVATE_KEY_BYTES:  # le fichier a grandi après stat()
+            raise OSError("fichier trop volumineux")
     except OSError:
         raise RepoError("key_file_unreadable", f"Fichier de clé introuvable ou illisible : "
                         f"{path}.") from None
@@ -126,8 +135,11 @@ def load_private_key(path: str, passphrase: str | None) -> bytes:
             raise RepoError("passphrase_unexpected", "Cette clé privée n'est pas chiffrée : "
                             "laisser la passphrase vide.") from None
         except ValueError:
-            if password is not None and b"ENCRYPTED" in data:
-                raise RepoError("wrong_passphrase", "Passphrase incorrecte.") from None
+            continue
+    if key is None and password is not None:
+        # Le DER chiffré ne porte pas de marqueur ENCRYPTED comme le PEM.
+        raise RepoError("wrong_passphrase", "Passphrase incorrecte ou fichier de clé "
+                        "invalide.")
     if not isinstance(key, rsa.RSAPrivateKey):
         raise RepoError("invalid_key_file", "Ce fichier n'est pas une clé privée RSA "
                         "(PEM ou DER) : Snowflake n'accepte que des clés RSA.")
@@ -329,6 +341,11 @@ class SsoFlows:
             except RepoError as error:
                 close_quietly(connection)
                 flow.finish("failed", error.message)
+                return
+            except Exception:  # noqa: BLE001 — erreur du coffre ou du registre local
+                close_quietly(connection)
+                flow.finish("failed", "La connexion a réussi, mais son enregistrement "
+                            "local a échoué. Réessayer.")
                 return
             flow.finish("connected")
 
