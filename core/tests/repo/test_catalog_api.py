@@ -74,6 +74,18 @@ def test_join_indexes_and_lists(client, joined):
     }
 
 
+def test_two_files_cannot_share_a_document_id(client, joined):
+    repo = repo_dir("groupe-nordis")
+    original = (repo / REVENU_NET).read_text(encoding="utf-8")
+    (repo / "kpis/revenu-net--nordis-fr.yaml").write_text(
+        original.replace("id: revenu-net", "id: revenu-net--nordis-fr", 1),
+        encoding="utf-8")
+    commit_all(repo, "Identifiant ambigu")
+    response = client.get(f"{WS}/catalog")
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "ambiguous_document_id"
+
+
 def test_search_and_filters(client, joined):
     """Critères 3 et 4."""
     def ids(**params):

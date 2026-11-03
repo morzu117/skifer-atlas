@@ -129,6 +129,12 @@ def test_data_product_id_format(revenu_net):
     assert codes(validate_data(revenu_net)) == [("/data_product/id", None, "invalid_value")]
 
 
+def test_canonical_id_cannot_use_the_variant_separator(revenu_net):
+    revenu_net["data_product"]["id"] = "revenu--net"
+    assert codes(validate_data(revenu_net)) == [
+        ("/data_product/id", None, "ambiguous_document_id")]
+
+
 def test_document_must_be_a_mapping():
     assert codes(validate_data(["a"])) == [("", None, "invalid_value")]
 

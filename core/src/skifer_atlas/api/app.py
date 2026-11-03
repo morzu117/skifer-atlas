@@ -57,6 +57,7 @@ ERROR_STATUS = {
     "credentials_in_url": 422,
     "invalid_workspace": 422,
     "invalid_document": 422,
+    "ambiguous_document_id": 422,
     "not_a_variant": 422,
     "invalid_governance": 422,
     "no_change": 422,
