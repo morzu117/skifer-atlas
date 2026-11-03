@@ -70,7 +70,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
       # Actions tierces épinglées par SHA : les secrets de signature passent dans ce job.
       # Épinglée par SHA, rust-toolchain ne déduit plus la chaîne du nom de la référence.
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 3 novembre 2026
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # tête de stable au 3 novembre 2026
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3

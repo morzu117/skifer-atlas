@@ -9,6 +9,7 @@ import threading
 import time
 import types
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -88,26 +89,42 @@ def test_lifeline_sees_a_process_disappear():
     stop.set()
 
 
+@pytest.fixture
+def uncached_windows_api():
+    lifeline._windows_api.cache_clear()
+    yield
+    lifeline._windows_api.cache_clear()
+
+
 @pytest.mark.parametrize(("handle", "error", "wait", "expected"), [
     (0, 5, None, True),  # ERROR_ACCESS_DENIED : il existe, sous un autre compte
     (0, 87, None, False),  # ERROR_INVALID_PARAMETER : il n'existe plus
     (7, 0, 0x102, True),  # WAIT_TIMEOUT : il tourne
     (7, 0, 0, False),  # signalé : il s'est terminé
 ])
-def test_lifeline_on_windows(monkeypatch, handle, error, wait, expected):
+def test_lifeline_on_windows(monkeypatch, uncached_windows_api, handle, error, wait, expected):
     """#51 : sous Windows, un `OpenProcess` refusé n'arrête pas le serveur. Faux `ctypes`,
     pour exécuter la branche Windows sur tout poste."""
     closed = []
+    wintypes = types.SimpleNamespace(DWORD=object(), BOOL=object(), HANDLE=object())
     kernel32 = types.SimpleNamespace(
-        OpenProcess=lambda access, inherit, pid: handle,
-        WaitForSingleObject=lambda h, timeout: wait,
-        CloseHandle=closed.append)
-    fake = types.SimpleNamespace(WinDLL=lambda name, use_last_error: kernel32,
-                                 get_last_error=lambda: error)
+        OpenProcess=Mock(return_value=handle),
+        WaitForSingleObject=Mock(return_value=wait),
+        CloseHandle=Mock(side_effect=closed.append))
+    load = Mock(return_value=kernel32)
+    fake = types.SimpleNamespace(WinDLL=load, wintypes=wintypes, get_last_error=lambda: error)
     monkeypatch.setitem(sys.modules, "ctypes", fake)
     monkeypatch.setattr(sys, "platform", "win32")
     assert lifeline.alive(4242) is expected
-    assert closed == ([handle] if handle else [])
+    assert lifeline.alive(4242) is expected
+    load.assert_called_once_with("kernel32", use_last_error=True)
+    assert kernel32.OpenProcess.argtypes == (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    assert kernel32.OpenProcess.restype is wintypes.HANDLE
+    assert kernel32.WaitForSingleObject.argtypes == (wintypes.HANDLE, wintypes.DWORD)
+    assert kernel32.WaitForSingleObject.restype is wintypes.DWORD
+    assert kernel32.CloseHandle.argtypes == (wintypes.HANDLE,)
+    assert kernel32.CloseHandle.restype is wintypes.BOOL
+    assert closed == ([handle, handle] if handle else [])
 
 
 def test_parent_pid_comes_from_the_environment(monkeypatch):
