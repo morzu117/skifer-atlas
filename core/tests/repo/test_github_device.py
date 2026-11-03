@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -12,6 +13,7 @@ from workspace_helpers import atlas_env, remote
 from skifer_atlas.api.app import create_app
 from skifer_atlas.githost import device, host_for, remote_token
 from skifer_atlas.githost.github import github_token
+from skifer_atlas.repo.git import RepoError
 from skifer_atlas.repo.sync import join_workspace
 from skifer_atlas.vault import GITHUB_ENTRY, Credential, Vault
 from skifer_atlas.vault.keyring_vault import _memory
@@ -198,6 +200,46 @@ def test_a_failed_join_restores_an_existing_token(github, remote, monkeypatch):
     assert device.pending(flow).access_token == TOKEN
 
 
+@pytest.mark.parametrize("existing", [False, True])
+def test_a_failed_restore_does_not_hide_the_join_error(github, remote, monkeypatch,
+                                                       caplog, existing):
+    """#101 : un coffre indisponible pendant la restauration ne masque pas l'échec initial."""
+    bare, _ = remote
+    if existing:
+        Vault().put("groupe-nordis", GITHUB_ENTRY,
+                    Credential(kind="github", access_token="gho_ancien-jeton"))
+    flow, _ = connect(TestClient(create_app(token="secret"), headers=AUTH))
+
+    def full_disk(workspace):
+        raise OSError("disque plein")
+
+    with monkeypatch.context() as patched:
+        patched.setattr("skifer_atlas.repo.sync.add_workspace", full_disk)
+        if existing:
+            original_store = device.store
+            calls = 0
+
+            def failing_restore(workspace_id, credential):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise RepoError("vault_unavailable", f"coffre indisponible {TOKEN}")
+                original_store(workspace_id, credential)
+
+            patched.setattr(device, "store", failing_restore)
+        else:
+            def failing_forget(workspace_id):
+                raise RepoError("vault_unavailable", f"coffre indisponible {TOKEN}")
+
+            patched.setattr(device, "forget", failing_forget)
+        with pytest.raises(OSError, match="disque plein"):
+            join_workspace(str(bare), flow)
+    assert not repo_dir("groupe-nordis").exists()
+    assert device.pending(flow).access_token == TOKEN
+    assert "Restauration du coffre GitHub impossible" in caplog.text
+    assert TOKEN not in caplog.text
+
+
 def test_an_expired_vault_token_does_not_fall_back_to_the_environment(github, remote,
                                                                       monkeypatch):
     """#50 : le jeton de l'espace a expiré ; `ATLAS_GITHUB_TOKEN` appartient peut-être à
@@ -287,6 +329,42 @@ def test_poll_does_not_report_connected_before_the_token_is_stored(github, monke
     assert not first.is_alive()
     assert statuses == {"first": "connected"}
     assert Vault().get("groupe-nordis", GITHUB_ENTRY).access_token == TOKEN
+
+
+def test_poll_reports_expiration_while_another_poll_holds_the_lock(github, monkeypatch):
+    """#101 : le chemin rapide ne rend pas pending après la fin du code."""
+    flow_id = device.start()["flow"]
+    flow = device._flow(flow_id)
+    original_flow = device._flow
+
+    def expiring_flow(found_id):
+        found = original_flow(found_id)
+        found.expires_at = time.time() - 1
+        return found
+
+    monkeypatch.setattr(device, "_flow", expiring_flow)
+    flow.polling.acquire()
+    try:
+        assert device.poll(flow_id)["status"] == "expired"
+        assert flow.status == "pending"  # pas de mutation sans le verrou
+    finally:
+        flow.polling.release()
+
+
+def test_failed_vault_write_ends_the_device_flow(github, monkeypatch):
+    """#101 : GitHub a consommé le code ; demander une nouvelle connexion clairement."""
+    flow_id = device.start("groupe-nordis")["flow"]
+    github["answers"][:] = [{"access_token": TOKEN, "token_type": "bearer", "scope": "repo"}]
+
+    def failing_put(self, workspace_id, entry, credential):
+        raise RepoError("vault_unavailable", "coffre indisponible")
+
+    monkeypatch.setattr(Vault, "put", failing_put)
+    result = device.poll(flow_id)
+    assert result["status"] == "store_failed"
+    assert TOKEN not in json.dumps(result)
+    assert device.poll(flow_id)["status"] == "store_failed"
+    assert Vault().get("groupe-nordis", GITHUB_ENTRY) is None
 
 
 def test_refused_expired_and_unconfigured(github, monkeypatch):

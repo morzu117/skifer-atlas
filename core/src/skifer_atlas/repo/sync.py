@@ -7,6 +7,7 @@ l'utilisateur se lit dans `governance.yaml`, pour son compte sur l'hébergeur.
 
 from __future__ import annotations
 
+import logging
 import shutil
 import tempfile
 from datetime import UTC, datetime
@@ -29,6 +30,8 @@ from ..workspaces import Workspace, add_workspace, get_workspace, repo_dir, upda
 from .git import RepoError, check_remote_url, clone_lock, head, run_git
 from .layout import GOVERNANCE_FILE, META_FILE, WorkspaceMeta, read_governance, read_meta
 from .versions import missing_tags
+
+logger = logging.getLogger(__name__)
 
 
 def _dump(data: dict) -> str:
@@ -141,10 +144,16 @@ def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace
     except BaseException:
         shutil.rmtree(target, ignore_errors=True)
         if stored:
-            if previous is None:
-                device.forget(meta.id)
-            else:
-                device.store(meta.id, previous)
+            try:
+                if previous is None:
+                    device.forget(meta.id)
+                else:
+                    device.store(meta.id, previous)
+            except BaseException as restore_error:  # noqa: BLE001 — préserver l'échec initial
+                # La restauration ne doit jamais masquer l'échec de l'adhésion.
+                # Ne pas journaliser l'exception : elle pourrait contenir un secret.
+                logger.warning("Restauration du coffre GitHub impossible (%s).",
+                               type(restore_error).__name__)
         raise
     if github_flow is not None:
         device.release(github_flow)

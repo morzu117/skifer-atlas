@@ -344,7 +344,7 @@ export type GitHubStatus = {
 
 /** Device flow : le code à saisir sur GitHub, puis les relectures. */
 export type GitHubDevice = { flow: string; user_code: string; verification_uri: string; expires_in: number; interval: number };
-export type GitHubPoll = { status: "pending" | "connected" | "denied" | "expired"; interval: number; account?: string | null };
+export type GitHubPoll = { status: "pending" | "connected" | "denied" | "expired" | "store_failed"; interval: number; account?: string | null };
 
 /** Point d'accès tel que déclaré dans access_points.yaml, sans aucun secret. */
 export type AccessPointDraft = {
