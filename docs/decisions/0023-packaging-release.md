@@ -124,3 +124,13 @@ Points à trancher :
 - Git doit être installé sur le poste. L'app le signale par `_selftest` et par les erreurs des opérations de dépôt.
 - Le test de fumée de l'app ne tourne que sous macOS. Sous Windows, l'arrêt avec l'app est couvert par le test du binaire (chargeur puis parent tués).
 - Linux, la mise à jour automatique et le canal de distribution restent hors périmètre.
+
+## Complément (3 novembre 2026, issue #51)
+
+- **Actions tierces épinglées par SHA** dans `release.yml` (`astral-sh/setup-uv`, `dtolnay/rust-toolchain`, `Swatinem/rust-cache`), avec la version en commentaire : les secrets de signature passent dans ce job. Les actions `actions/*` de GitHub restent épinglées par tag. `rust-toolchain`, épinglée par SHA, reçoit `toolchain: stable` : elle ne déduit plus la chaîne du nom de la référence. Une mise à jour se fait en changeant le SHA et son commentaire.
+- **Lifeline sous Windows** : un `OpenProcess` refusé (`ERROR_ACCESS_DENIED`) signifie que le processus existe, sous un autre compte, comme `PermissionError` sous Unix ; seul un processus absent arrête le serveur.
+- **Limite acceptée : réutilisation du PID.** Si l'app meurt et que son identifiant est réattribué avant le sondage suivant (1 s), le serveur continue. macOS et Windows ne réattribuent pas un identifiant aussi vite en pratique. Surveiller la fermeture de l'entrée standard couvrirait ce cas, mais arrêterait un serveur lancé sans tube (terminal, `/dev/null`) : non retenu.
+- **Risque accepté : entitlements du runtime renforcé.** `disable-library-validation` et `allow-unsigned-executable-memory` sont nécessaires à l'interpréteur PyInstaller `--onefile`, qui se décompresse et charge des extensions natives non signées par Apple. Ils valent pour toute l'app et affaiblissent le runtime renforcé : une bibliothèque non signée peut être chargée dans le processus. Un sidecar en `--onedir`, signé fichier par fichier, permettrait de les retirer ; à reprendre avec la distribution (hors périmètre, plan 0019).
+- **Horodatage Windows** en `http://timestamp.digicert.com` : usage courant, la réponse RFC 3161 est elle-même signée, le transport en clair ne l'affaiblit pas.
+- **`SNOWFLAKE_HOME`** : posé pour tout le processus du serveur, sur un dossier d'Atlas, dès le chargement du connecteur (et donc au `_selftest`). Sans effet sur Atlas ; à revoir si un autre outil du même processus lisait cette variable.
+- **Construction sous macOS x86_64** : sans `OPENSSL_DIR` ni `openssl@3` de Homebrew, `build-sidecar.sh` échoue avec un message, au lieu de lier cryptography à un `libssl` dynamique sans prévenir.

@@ -15,6 +15,7 @@ import threading
 from collections.abc import Callable
 
 POLL_SECONDS = 1.0
+ERROR_ACCESS_DENIED = 5
 
 
 def alive(pid: int) -> bool:
@@ -25,10 +26,12 @@ def alive(pid: int) -> bool:
     if sys.platform == "win32":
         import ctypes
 
-        kernel32 = ctypes.windll.kernel32
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
         if not handle:
-            return False
+            # Accès refusé : il existe, sous un autre compte (comme `PermissionError` sous
+            # Unix) ; paramètre invalide : il n'existe plus.
+            return ctypes.get_last_error() == ERROR_ACCESS_DENIED
         try:
             return kernel32.WaitForSingleObject(handle, 0) == 0x102  # WAIT_TIMEOUT
         finally:

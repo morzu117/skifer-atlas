@@ -125,7 +125,9 @@ def launch(env: dict[str, str], sandbox: str | None = None) -> subprocess.Popen:
             break
     process.kill()
     process.wait()
-    pytest.fail(server_log(process))
+    log = server_log(process)
+    process.log.close()
+    pytest.fail(log)
 
 
 def server_log(process: subprocess.Popen) -> str:
@@ -141,6 +143,7 @@ def stop(process: subprocess.Popen) -> None:
         process.kill()
         process.wait()
     print(f"--- journal du serveur ---\n{server_log(process)}")
+    process.log.close()
 
 
 @pytest.fixture
