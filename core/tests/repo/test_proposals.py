@@ -163,6 +163,41 @@ def test_merge_reports_success_when_follow_up_sync_fails(client, joined, as_, mo
     assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip() == result["commit"]
 
 
+def test_sync_retries_tag_after_its_creation_failed_following_fast_forward(
+        client, joined, as_, monkeypatch):
+    from skifer_atlas.repo import sync as repo_sync
+    from skifer_atlas.repo.git import RepoError
+
+    bare, _ = joined
+    as_("claire.m")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    for account in ("marc.d", "julien.h"):
+        as_(account)
+        assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"}).status_code == 200
+
+    original_run_git = repo_sync.run_git
+    failed = False
+
+    def fail_once(args, *rest, **options):
+        nonlocal failed
+        if args[:2] == ["tag", "doc/revenu-net/v5"] and not failed:
+            failed = True
+            raise RepoError("tag_failed", "Échec simulé après l'avance rapide")
+        return original_run_git(args, *rest, **options)
+
+    monkeypatch.setattr(repo_sync, "run_git", fail_once)
+    response = client.post(f"{PROPOSALS}/1/merge")
+    assert response.status_code == 200, response.text
+    merged = response.json()
+    assert [warning["code"] for warning in merged["warnings"]] == ["post_merge_sync_failed"]
+    assert git(bare, "rev-parse", "main").strip() == merged["commit"]
+    assert git(bare, "tag", "--list", "doc/revenu-net/v5").strip() == ""
+
+    synced = client.post(f"{WS}/sync")
+    assert synced.status_code == 200, synced.text
+    assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip() == merged["commit"]
+
+
 def test_undeclared_override_requires_canonical_validation(client, joined, as_):
     """Critère 1 : la variante allemande surcharge n02, hors des points déclarés."""
     as_("anna.k")
