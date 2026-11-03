@@ -71,7 +71,7 @@ class Flow:
     interval: int
     expires_at: float
     next_poll: float = 0
-    status: str = "pending"  # pending, connected, denied, expired
+    status: str = "pending"  # pending, connected, denied, expired, store_failed
     credential: Credential | None = field(default=None, repr=False)
     polling: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -171,7 +171,13 @@ def _poll(flow: Flow) -> dict:
             expires_at=now + int(expires_in) if expires_in else None,
             client_id=client_id(), account=_account(token))
         if flow.workspace_id is not None:
-            Vault().put(flow.workspace_id, GITHUB_ENTRY, credential)
+            try:
+                Vault().put(flow.workspace_id, GITHUB_ENTRY, credential)
+            except RepoError:
+                # GitHub a consommé le code : une nouvelle connexion est nécessaire.
+                # La réponse ne doit contenir aucun jeton ni détail du coffre.
+                flow.status = "store_failed"
+                return _state(flow)
         # Un second poll peut rendre l'état courant sans prendre le verrou. Ne publier
         # « connected » qu'une fois le jeton réellement disponible dans le coffre.
         flow.credential = credential
@@ -183,7 +189,9 @@ def _poll(flow: Flow) -> dict:
 
 
 def _state(flow: Flow) -> dict:
-    found: dict = {"status": flow.status, "interval": flow.interval}
+    status = ("expired" if flow.status == "pending" and time.time() > flow.expires_at
+              else flow.status)
+    found: dict = {"status": status, "interval": flow.interval}
     if flow.credential is not None:
         found["account"] = flow.credential.account
     if flow.workspace_id is not None:

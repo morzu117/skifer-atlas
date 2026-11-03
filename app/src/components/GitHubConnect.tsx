@@ -16,6 +16,7 @@ type State =
 const FAILURES: Record<string, string> = {
   denied: "La connexion a été refusée sur GitHub.",
   expired: "Le code a expiré avant d'être saisi : recommencer.",
+  store_failed: "Le jeton GitHub n'a pas pu être enregistré dans le coffre. Vérifiez le trousseau du système, puis recommencez la connexion.",
 };
 
 export function GitHubConnect({

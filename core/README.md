@@ -111,10 +111,12 @@ L'hébergeur se déduit de l'adresse du dépôt : GitHub (`https://github.com/�
 ```bash
 curl -H "$H" $API/acme/github                                         # configured, applies, state, source, account : jamais de jeton
 curl -H "$H" -H "$J" -d '{"workspace":"acme"}' http://127.0.0.1:8765/api/github/device   # user_code et verification_uri à afficher ; sans espace : pour rejoindre un dépôt privé
-curl -H "$H" -X POST http://127.0.0.1:8765/api/github/device/<flow>   # pending, connected (jeton au coffre), denied, expired
+curl -H "$H" -X POST http://127.0.0.1:8765/api/github/device/<flow>   # pending, connected (jeton au coffre), denied, expired, store_failed (coffre indisponible)
 curl -H "$H" -X DELETE $API/acme/github                               # retire le jeton du coffre de ce poste
 curl -H "$H" -H "$J" -d '{"remote_url":"https://github.com/…","github_flow":"<flow>"}' http://127.0.0.1:8765/api/workspaces/join
 ```
+
+Pour rejoindre un dépôt privé, le jeton reste dans le flux jusqu'à l'adhésion. Si celle-ci échoue après le clonage, Atlas restaure l'ancien jeton du coffre, s'il existait, et conserve le nouveau dans le flux pour réessayer. Si l'adhésion réussit, le nouveau jeton remplace l'ancien.
 
 Variables d'environnement :
 

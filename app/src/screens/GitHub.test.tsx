@@ -72,6 +72,16 @@ describe("Mes connexions : dépôt GitHub de l'espace (plan 0025)", () => {
     expect(within(github).getByRole("button", { name: "Se connecter à GitHub" })).toBeEnabled();
   });
 
+  it("explique un échec d'écriture au coffre et permet de recommencer", async () => {
+    server(() => status(), ["store_failed"]);
+    screenOf();
+    const github = await section();
+    await userEvent.click(within(github).getByRole("button", { name: "Se connecter à GitHub" }));
+    expect(await within(github).findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent(
+      "Le jeton GitHub n'a pas pu être enregistré dans le coffre.");
+    expect(within(github).getByRole("button", { name: "Se connecter à GitHub" })).toBeEnabled();
+  });
+
   it("« Déconnecter » retire le jeton du coffre (critère 6)", async () => {
     let state = status({ state: "connected", source: "vault", account: "anna-k" });
     const fake = server(() => state);
