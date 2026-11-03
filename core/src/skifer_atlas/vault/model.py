@@ -33,6 +33,7 @@ class Credential:
     refresh_token: str | None = field(default=None, repr=False)
     expires_at: float | None = None  # epoch ; None si la plateforme ne le dit pas
     client_id: str | None = None  # client OAuth qui a émis le jeton
+    host: str | None = None  # origine du point d'accès ; None pour une ancienne entrée
     rejected: bool = False  # la plateforme a refusé ce jeton, ou son rafraîchissement
     account: str | None = None  # compte de la plateforme (login GitHub), à afficher
 

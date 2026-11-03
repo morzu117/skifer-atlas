@@ -47,6 +47,7 @@ ERROR_STATUS = {
     "branch_protected": 409,
     "not_connected": 409,
     "access_expired": 409,
+    "access_host_mismatch": 409,
     "oauth_port_busy": 409,
     "query_canceled": 409,
     "needs_auth": 409,

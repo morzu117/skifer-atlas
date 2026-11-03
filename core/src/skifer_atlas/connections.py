@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from .connectors import logins, oauth
+from .connectors import drafts, logins, oauth
 from .connectors import snowflake as snowflake_connector
 from .connectors.access_points import FILE, AccessPoint, AccessPoints, parse_access_points
 from .connectors.base import MAX_ROWS, QUERY_TIMEOUT, AuthRejected, Connector, QueryResult
@@ -68,6 +68,16 @@ def _memory_only(workspace_id: str, point: AccessPoint, credential: Credential) 
     return credential.kind == "sso" and not credential.access_token
 
 
+def _bound_to(point: AccessPoint, credential: Credential) -> bool:
+    """Une ancienne entrée sans hôte ne peut pas être envoyée à un hôte inconnu."""
+    return credential.host == point.base_url
+
+
+def _host_mismatch(point: AccessPoint) -> RepoError:
+    return RepoError("access_host_mismatch", f"L'accès à « {point.id} » a été obtenu pour "
+                     "un autre hôte : se reconnecter avant de l'utiliser.")
+
+
 def _summary(workspace_id: str, point: AccessPoint, credential: Credential | None,
              allowed: set[str], names: dict[str, str] | None = None) -> dict:
     login = logins.get(workspace_id, point.id) if point.platform == "snowflake" else None
@@ -83,6 +93,8 @@ def _summary(workspace_id: str, point: AccessPoint, credential: Credential | Non
         state = credential.describe()
         found.update(auth=state["kind"], my_access=state["my_access"],
                      expires_in_days=state["expires_in_days"])
+        if not _bound_to(point, credential):
+            found["my_access"] = "expired"
         if (_memory_only(workspace_id, point, credential)
                 and (workspace_id, point.id) not in LIVE):
             found["my_access"] = "expired"  # Atlas a redémarré : la session est perdue
@@ -146,7 +158,10 @@ def _status(workspace_id: str, point: AccessPoint, vault: Vault | None) -> dict:
     vault = vault or Vault()
     credential = vault.get(workspace_id, point.id)
     error = None
-    if credential is not None and credential.needs_refresh() and not credential.rejected:
+    if credential is not None and not _bound_to(point, credential):
+        mismatch = _host_mismatch(point)
+        error = {"code": mismatch.code, "message": mismatch.message}
+    elif credential is not None and credential.needs_refresh() and not credential.rejected:
         try:
             credential = _refresh(workspace_id, point, credential, vault)
         except RepoError as failure:
@@ -172,7 +187,29 @@ def authorize_draft(workspace_id: str, raw: dict, vault: Vault | None = None,
     """OAuth sur un point d'accès pas encore déclaré : le jeton va au coffre sous son
     identifiant, et sert dès que la proposition est fusionnée."""
     return _authorize(workspace_id, draft_point(workspace_id, raw), vault, listen_seconds,
-                      user)
+                      user, draft=True)
+
+
+def list_draft_credentials(workspace_id: str, vault: Vault | None = None) -> list[dict]:
+    """Brouillons jamais fusionnés, sans secret ; l'utilisateur peut les oublier."""
+    declared = {point.id for point in registry(workspace_id).access_points}
+    vault = vault or Vault()
+    return [{"id": access_point_id, "host": host}
+            for access_point_id, host in sorted(drafts.list_for(workspace_id).items())
+            if access_point_id not in declared and vault.get(workspace_id, access_point_id)]
+
+
+def forget_draft_credential(workspace_id: str, access_point_id: str,
+                            vault: Vault | None = None) -> dict:
+    if registry(workspace_id).get(access_point_id) is not None:
+        raise RepoError("access_point_exists", "Ce point d'accès est déclaré.")
+    if drafts.get(workspace_id, access_point_id) is None:
+        raise RepoError("not_found", "Brouillon inconnu.")
+    vault = vault or Vault()
+    removed = vault.delete(workspace_id, access_point_id)
+    logins.delete(workspace_id, access_point_id)
+    drafts.delete(workspace_id, access_point_id)
+    return {"removed": removed}
 
 
 def _user(workspace_id: str, point: AccessPoint, user: str | None) -> str:
@@ -195,7 +232,7 @@ def _wrong_mode(point: AccessPoint) -> RepoError:
 
 
 def _authorize_sso(workspace_id: str, point: AccessPoint, vault: Vault | None,
-                   user: str | None) -> dict:
+                   user: str | None, draft: bool = False) -> dict:
     if point.auth_mode != "sso":
         raise _wrong_mode(point)
     user = _user(workspace_id, point, user)
@@ -204,16 +241,19 @@ def _authorize_sso(workspace_id: str, point: AccessPoint, vault: Vault | None,
 
     def store(connection) -> None:
         tokens = snowflake_connector.session_tokens(connection)
+        if draft:
+            drafts.put(workspace_id, point.id, point.base_url)
         previous = LIVE.pop(key, None)
         if previous is not None:
             snowflake_connector.close_quietly(previous)
         if tokens is not None:
             vault.put(workspace_id, point.id, Credential("sso", tokens[0], tokens[1],
-                                                         expires_at=tokens[2]))
+                                                         expires_at=tokens[2],
+                                                         host=point.base_url))
             snowflake_connector.close_quietly(connection)  # la session survit (keep-alive)
         else:
             LIVE[key] = connection
-            vault.put(workspace_id, point.id, Credential("sso", ""))
+            vault.put(workspace_id, point.id, Credential("sso", "", host=point.base_url))
         logins.put(workspace_id, point.id, Login(user))
 
     SSO_FLOWS.start(key, point, user, store)
@@ -221,15 +261,18 @@ def _authorize_sso(workspace_id: str, point: AccessPoint, vault: Vault | None,
 
 
 def _authorize(workspace_id: str, point: AccessPoint, vault: Vault | None,
-               listen_seconds: float, user: str | None = None) -> dict:
+               listen_seconds: float, user: str | None = None, draft: bool = False) -> dict:
     if point.platform == "snowflake":
-        return _authorize_sso(workspace_id, point, vault, user)
+        return _authorize_sso(workspace_id, point, vault, user, draft)
     if point.platform != "databricks":
         raise RepoError("platform_not_supported", f"OAuth n'est pas encore pris en charge "
                         f"pour « {point.platform} ».")
     vault = vault or Vault()
 
     def store(credential: Credential) -> None:
+        credential.host = point.base_url
+        if draft:
+            drafts.put(workspace_id, point.id, point.base_url)
         vault.put(workspace_id, point.id, credential)
 
     url = oauth.FLOWS.start((workspace_id, point.id), point, store, listen_seconds)
@@ -244,7 +287,8 @@ def store_personal_token(workspace_id: str, access_point_id: str, token: str,
     if not token or any(c.isspace() for c in token):
         raise RepoError("invalid_token", "Token personnel vide ou mal formé.")
     vault = vault or Vault()
-    vault.put(workspace_id, point.id, Credential("pat", token, expires_at=expires_at))
+    vault.put(workspace_id, point.id, Credential("pat", token, expires_at=expires_at,
+                                                 host=point.base_url))
     return _summary(workspace_id, point, vault.get(workspace_id, point.id),
                     _allowed(workspace_id), _names(workspace_id))
 
@@ -260,11 +304,11 @@ def store_key_pair(workspace_id: str, access_point_id: str, user: str, private_k
 def store_key_pair_draft(workspace_id: str, raw: dict, user: str, private_key_file: str,
                          passphrase: str | None = None, vault: Vault | None = None) -> dict:
     return _store_key_pair(workspace_id, draft_point(workspace_id, raw), user,
-                           private_key_file, passphrase, vault)
+                           private_key_file, passphrase, vault, draft=True)
 
 
 def _store_key_pair(workspace_id: str, point: AccessPoint, user: str, private_key_file: str,
-                    passphrase: str | None, vault: Vault | None) -> dict:
+                    passphrase: str | None, vault: Vault | None, draft: bool = False) -> dict:
     if point.platform != "snowflake" or point.auth_mode != "keypair":
         raise _wrong_mode(point) if point.platform == "snowflake" else RepoError(
             "platform_not_supported", f"Pas de paire de clés pour « {point.platform} ».")
@@ -274,7 +318,10 @@ def _store_key_pair(workspace_id: str, point: AccessPoint, user: str, private_ke
         raise RepoError("key_file_unreadable", "Chemin complet du fichier de clé attendu.")
     snowflake_connector.load_private_key(str(path), passphrase or None)
     vault = vault or Vault()
-    vault.put(workspace_id, point.id, Credential("keypair", passphrase or ""))
+    if draft:
+        drafts.put(workspace_id, point.id, point.base_url)
+    vault.put(workspace_id, point.id, Credential("keypair", passphrase or "",
+                                                 host=point.base_url))
     logins.put(workspace_id, point.id, Login(user, str(path)))
     return _summary(workspace_id, point, vault.get(workspace_id, point.id),
                     _allowed(workspace_id), _names(workspace_id))
@@ -282,12 +329,15 @@ def _store_key_pair(workspace_id: str, point: AccessPoint, user: str, private_ke
 
 def _refresh(workspace_id: str, point: AccessPoint, credential: Credential,
              vault: Vault) -> Credential:
+    if not _bound_to(point, credential):
+        raise _host_mismatch(point)
     try:
         renewed = oauth.refresh(oauth.discover(point), credential)
     except oauth.RefreshRefused:
         credential.rejected = True
         vault.put(workspace_id, point.id, credential)
         raise RepoError("access_expired", "Session expirée : se reconnecter.") from None
+    renewed.host = point.base_url
     vault.put(workspace_id, point.id, renewed)
     return renewed
 
@@ -296,6 +346,8 @@ def _usable(workspace_id: str, point: AccessPoint, vault: Vault) -> Credential:
     credential = vault.get(workspace_id, point.id)
     if credential is None:
         raise RepoError("not_connected", f"Pas encore connecté à « {point.id} ».")
+    if not _bound_to(point, credential):
+        raise _host_mismatch(point)
     if credential.rejected or (credential.kind in ("pat", "sso") and credential.expired()):
         raise RepoError("access_expired", "Accès expiré : se reconnecter.")
     if (_memory_only(workspace_id, point, credential)
@@ -344,7 +396,8 @@ def _attempt(workspace_id: str, point: AccessPoint, credential: Credential, vaul
         renewed = getattr(connector, "renewed", None)
         if renewed is not None:
             vault.put(workspace_id, point.id, Credential("sso", renewed[0], renewed[1],
-                                                         expires_at=renewed[2]))
+                                                         expires_at=renewed[2],
+                                                         host=point.base_url))
 
 
 def _with_connector(workspace_id: str, access_point_id: str | AccessPoint, vault: Vault | None,
@@ -404,7 +457,7 @@ def revoke(workspace_id: str, access_point_id: str, vault: Vault | None = None) 
     vault = vault or Vault()
     credential = vault.get(workspace_id, point.id)
     remote = False
-    if credential is not None and credential.kind == "oauth":
+    if credential is not None and credential.kind == "oauth" and _bound_to(point, credential):
         try:
             remote = oauth.revoke(oauth.discover(point), credential)
         except RepoError:
@@ -412,7 +465,7 @@ def revoke(workspace_id: str, access_point_id: str, vault: Vault | None = None) 
     if point.platform == "snowflake":
         login = logins.get(workspace_id, point.id)
         if credential is not None and credential.kind == "sso" and credential.access_token \
-                and login is not None and not credential.rejected:
+                and login is not None and not credential.rejected and _bound_to(point, credential):
             remote = snowflake_connector.logout(point, login.user, (
                 credential.access_token, credential.refresh_token or ""))
         live = LIVE.pop((workspace_id, point.id), None)

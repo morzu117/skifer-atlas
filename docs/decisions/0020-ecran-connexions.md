@@ -25,7 +25,9 @@ Le plan 0008 a fourni le coffre, l'OAuth Databricks et les routes `…/connectio
   - `access_point_exists` (409) si l'identifiant est déjà au registre ;
   - `platform_not_supported` pour une plateforme que l'app ne sait pas joindre.
 
-  Rien n'est écrit dans le dépôt. Le token obtenu est rangé dans le coffre sous `<espace>/<identifiant>` : il sert dès que la proposition est fusionnée, sans se reconnecter. Si la proposition n'aboutit jamais, il reste dans le coffre jusqu'à ce qu'on le révoque.
+  Rien n'est écrit dans le dépôt. Le token obtenu est rangé dans le coffre sous `<espace>/<identifiant>` : il sert dès que la proposition est fusionnée, sans se reconnecter. Un index local sans secret permet à l'écran de montrer les identifiants de brouillon non déclarés et de les oublier (entrée du coffre et login Snowflake local). Les brouillons créés avant cet index ne peuvent pas être énumérés par le trousseau du système ; leur suppression reste manuelle.
+
+  Complément du suivi #33 : un jeton ou une clé nouvellement rangé garde l'origine de son point d'accès. Si le même identifiant est retesté ou déclaré sur un autre hôte, Atlas refuse son usage et demande une reconnexion, avant toute requête avec cet identifiant. Une entrée créée avant ce complément ne porte pas d'origine fiable et doit aussi être reconnectée. Les corps des routes de brouillon limitent le point d'accès à 16 Kio.
 - **Déclaration** : toujours une proposition sur `access_points.yaml` (ADR 0011), avec la justification saisie dans le panneau. Un référent d'espace seul la fusionne seul (ADR 0008). Le panneau affiche « Proposition n° X ouverte » et un lien vers elle.
 - **`GET …/connections/platforms`** rend les plateformes autorisées par la gouvernance, et elles seules : `{id, label, supported}`. Le panneau ne propose rien d'autre (critère 6). Une plateforme autorisée mais pas encore prise en charge est grisée, avec « (bientôt) ».
 - **Liste enrichie.** Chaque point d'accès de `GET …/connections` porte en plus :
@@ -57,6 +59,6 @@ Le plan 0008 a fourni le coffre, l'OAuth Databricks et les routes `…/connectio
 
 ## Conséquences
 
-- Un token obtenu pour un brouillon jamais fusionné reste dans le coffre. Il est inoffensif (aucun point d'accès ne le désigne), mais l'écran ne le montre pas. Il disparaît si l'on révoque le point d'accès une fois déclaré, ou si l'on vide le trousseau.
+- Un token obtenu pour un brouillon jamais fusionné reste dans le coffre jusqu'à ce que l'utilisateur sélectionne « Oublier ». Une fois le point déclaré, son identifiant disparaît de cette liste et le token reste utilisable.
 - Le tableau défile horizontalement sous 1440 px de large, comme le prévoit le guide : rien n'est tronqué.
 - L'OAuth réel sur Databricks et l'ouverture du navigateur sous Tauri n'ont pas été vérifiés à la main. Les tests passent par le faux Databricks et une fenêtre du navigateur.

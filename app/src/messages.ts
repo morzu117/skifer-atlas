@@ -52,6 +52,10 @@ const KNOWN: Record<string, Explained> = {
     title: "GitHub demande une connexion",
     text: "Connectez-vous à GitHub dans Mes connexions, puis réessayez.",
   },
+  access_host_mismatch: {
+    title: "Connexion liée à un autre hôte",
+    text: "Ce point d'accès a changé d'hôte, ou sa connexion est ancienne. Reconnectez-vous avant de l'utiliser.",
+  },
   workspace_exists: {
     title: "Identifiant déjà pris",
     text: "Un espace porte déjà cet identifiant sur ce poste. Choisissez-en un autre.",

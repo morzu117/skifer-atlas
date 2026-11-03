@@ -77,7 +77,7 @@ def test_preview_lists_missing_access(client):
                "entity": e, "owner": "claire.m"} for e in ("nordis-de", "nordis-fr")]
     (repo_dir("groupe-nordis") / "access_points.yaml").write_text(
         yaml.safe_dump({"schema_version": 1, "access_points": points}), encoding="utf-8")
-    Vault().put("groupe-nordis", "dbx-de", Credential("pat", "dapi-de"))
+    Vault().put("groupe-nordis", "dbx-de", Credential("pat", "dapi-de", host="https://adb-1.2.azuredatabricks.net"))
     preview = client.post(f"{COMPARISONS}/preview", json=BODY).json()
     assert [p["access_point"] for p in preview["plans"]] == ["dbx-de", "dbx-fr"]
     assert [(m["access_point"], m["code"]) for m in preview["missing_access"]] == [

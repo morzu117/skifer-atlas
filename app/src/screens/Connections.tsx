@@ -741,6 +741,7 @@ function NewAccessPoint({
   const [justification, setJustification] = useState("");
   const [declared, setDeclared] = useState<{ id: number; title: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [draftRevision, setDraftRevision] = useState(0);
   const platform = draft.platform || first;
   const entity = entityTouched ? draft.entity : (free ?? ws.entities[0] ?? "");
   const id = idTouched ? draft.id : suggestedId(platform, entity);
@@ -751,6 +752,8 @@ function NewAccessPoint({
     () => api.draftStatus(ws.id, point),
     () => setTest(null),
   );
+  const storedDrafts = useLoad(() => api.draftCredentials(ws.id),
+    [ws.id, draftRevision, keyStored, declared?.id, oauth.flow.kind]);
   const snowflake = platform === "snowflake";
 
   const set = (key: keyof Draft) => (event: { target: { value: string } }) => {
@@ -784,6 +787,23 @@ function NewAccessPoint({
       setDeclared(await api.declareAccessPoint(ws.id, point, justification.trim()));
       setJustification("");
       onDeclared();
+    } catch (reason) {
+      setFailure(explain(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function forgetDraft(accessPoint: string) {
+    setBusy(true);
+    setFailure(null);
+    try {
+      await api.forgetDraftCredential(ws.id, accessPoint);
+      setDraftRevision((previous) => previous + 1);
+      if (accessPoint === id) {
+        setKeyStored(false);
+        oauth.reset();
+      }
     } catch (reason) {
       setFailure(explain(reason));
     } finally {
@@ -940,6 +960,21 @@ function NewAccessPoint({
           </p>
         )}
       </form>
+      {storedDrafts.kind === "ready" && storedDrafts.value.length > 0 && (
+        <section aria-label="Identifiants de brouillon non déclarés">
+          <h3 className="section-label">Connexions de brouillon à nettoyer</h3>
+          <p className="field-hint">Ces identifiants sont encore dans votre coffre et ne correspondent à aucun point d'accès déclaré.</p>
+          <ul>
+            {storedDrafts.value.map((entry) => (
+              <li key={entry.id}>
+                <span className="mono">{entry.id}</span> · {entry.host}{" "}
+                <button type="button" className="btn btn-secondary" disabled={busy}
+                  onClick={() => void forgetDraft(entry.id)}>Oublier</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </aside>
   );
 }
