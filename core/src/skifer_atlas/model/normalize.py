@@ -96,7 +96,8 @@ def logical_graph(document: Any) -> LogicalGraph:
         if node.type != "filter":
             continue
         source = node.inputs[0]
-        if view.by_id[source].type == "filter" and view.consumers[source] == [node_id]:
+        consumers = [consumer for consumer in view.consumers[source] if consumer in useful]
+        if view.by_id[source].type == "filter" and consumers == [node_id]:
             group = group_of.pop(source)
             group.append(node_id)
         else:
