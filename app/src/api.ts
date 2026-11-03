@@ -406,6 +406,7 @@ export type SyncResult = {
   commit: string;
   warnings: { code: string; message: string }[];
   reindexed: boolean;
+  index_fresh: boolean;
   synced_at: string | null;
 };
 

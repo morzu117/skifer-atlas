@@ -3,6 +3,7 @@ en proposition « Gouvernance », fusionnée aussitôt par un référent seul (A
 
 import copy
 
+import duckdb
 import yaml
 from test_proposals import AUTH, WS, as_, client, code, joined
 from workspace_helpers import atlas_env, commit_all, git, remote
@@ -39,6 +40,24 @@ def test_admin_is_for_space_referents_only(client, joined, as_):
         assert code(client.get(ADMIN)) == (403, "forbidden"), account
         assert code(save(client, state, lambda g: g.update(allowed_platforms=[]))) == (
             403, "forbidden")
+
+
+def test_admin_link_and_route_use_the_same_host_account_with_offline_fallback(
+        client, joined, as_, monkeypatch):
+    """#35 : le lien et la route prennent la même décision, même si l'hôte est absent."""
+    as_("julien.h")
+    monkeypatch.setattr(admin, "host_account", lambda *args: "anna.k")
+    listed = {w["id"]: w for w in client.get("/api/workspaces").json()}
+    assert listed["groupe-nordis"]["space_referent"] is False
+    assert code(client.get(ADMIN)) == (403, "forbidden")
+
+    def unreachable(*args):
+        raise RepoError("host_unreachable", "Hébergeur injoignable.")
+
+    monkeypatch.setattr(admin, "host_account", unreachable)
+    listed = {w["id"]: w for w in client.get("/api/workspaces").json()}
+    assert listed["groupe-nordis"]["space_referent"] is True
+    assert client.get(ADMIN).status_code == 200
 
 
 def test_state_lists_what_the_screen_shows_and_no_secret(client, joined, as_):
@@ -177,6 +196,32 @@ def test_a_domain_is_not_removed_when_the_index_cannot_count_its_documents(
     assert kept.status_code == 201, kept.text
 
 
+def test_admin_handles_an_index_query_failure(client, joined, as_, monkeypatch):
+    """#35 : un schéma absent après l'ouverture ne donne pas une 500 sur l'écran."""
+    as_("julien.h")
+    state = client.get(ADMIN).json()
+    closed = []
+
+    class BrokenConnection:
+        def execute(self, *args):
+            raise duckdb.CatalogException("schema index absent")
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(admin, "ensure_index", lambda *args: BrokenConnection())
+    response = client.get(ADMIN)
+    assert response.status_code == 200, response.text
+    assert (response.json()["kpi_counts"], response.json()["document_counts"]) == ({}, {})
+
+    def remove_marketing(governance):
+        governance["domains"] = [d for d in governance["domains"]
+                                 if d["id"] != "marketing"]
+
+    assert code(save(client, state, remove_marketing)) == (503, "index_unavailable")
+    assert len(closed) == 3
+
+
 def test_a_reader_role_next_to_other_roles_is_dropped(client, joined, as_):
     """Le rôle lecteur est compris dans les autres : à côté d'eux, il n'est pas enregistré.
     Un rôle identique en double ne l'est qu'une fois (#88)."""
@@ -268,6 +313,26 @@ def test_sync_updates_the_date_and_reindexes(client, joined, as_):
     labels = [k["label"] for k in client.get(f"{WS}/catalog?q=consolidé").json()]
     assert labels == ["Revenu net consolidé"]
     assert client.post(f"{WS}/sync").json()["reindexed"] is False
+
+
+def test_sync_reports_an_index_failure_after_a_successful_fetch(client, joined, as_,
+                                                               monkeypatch):
+    """#35 : le dépôt est déjà à jour ; un index indisponible reste un avertissement."""
+    from skifer_atlas.api.routes import workspaces as workspace_routes
+
+    as_("julien.h")
+
+    def broken(*args):
+        raise OSError("base illisible")
+
+    monkeypatch.setattr(workspace_routes, "ensure_index", broken)
+    response = client.post(f"{WS}/sync")
+    assert response.status_code == 200, response.text
+    synced = response.json()
+    assert (synced["status"], synced["reindexed"], synced["index_fresh"]) == (
+        "up_to_date", False, False)
+    assert synced["synced_at"]
+    assert [warning["code"] for warning in synced["warnings"]] == ["index_unavailable"]
 
 
 def test_api_requires_the_session_token(client, joined):

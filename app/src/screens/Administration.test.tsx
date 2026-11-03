@@ -312,7 +312,7 @@ describe("administration", () => {
 
   it("[S-0017-07] Synchroniser met à jour la date et réindexe (critère 7)", async () => {
     const api = server(state(), ({ path }) => {
-      if (path === `${API}/sync`) return { json: { status: "fast_forward", commit: "c2", warnings: [], reindexed: true, synced_at: new Date().toISOString() } };
+      if (path === `${API}/sync`) return { json: { status: "fast_forward", commit: "c2", warnings: [], reindexed: true, index_fresh: true, synced_at: new Date().toISOString() } };
       return undefined;
     });
     render(screenFor());
@@ -321,6 +321,22 @@ describe("administration", () => {
     expect(await repository.findByText("Synchronisé · index reconstruit.")).toBeInTheDocument();
     expect(repository.getByText("à l'instant · index à jour")).toHaveClass("tone-ok");
     expect(api.calls.some((c) => c.method === "POST" && c.path === `${API}/sync`)).toBe(true);
+  });
+
+  it("signale un index indisponible après une synchronisation réussie", async () => {
+    server(state(), ({ path }) => {
+      if (path === `${API}/sync`) return { json: {
+        status: "fast_forward", commit: "c2", reindexed: false, index_fresh: false,
+        synced_at: new Date().toISOString(),
+        warnings: [{ code: "index_unavailable", message: "Le dépôt est synchronisé, mais l'index n'a pas pu être reconstruit. Réessayer la synchronisation." }],
+      } };
+      return undefined;
+    });
+    render(screenFor());
+    const repository = within(await screen.findByRole("region", { name: "Dépôt Git de l'espace" }));
+    await userEvent.click(repository.getByRole("button", { name: "Synchroniser" }));
+    expect(await repository.findByText(/Le dépôt est synchronisé, mais l'index/)).toHaveClass("tone-warn");
+    expect(repository.getByText("à l'instant · index à reconstruire")).toHaveClass("tone-warn");
   });
 
   it("[S-0005-11] Synchroniser en divergence affiche la cause en alerte, pas seulement la conduite à tenir", async () => {
@@ -342,7 +358,7 @@ describe("administration", () => {
       { code: "tags_not_pushed", message: "Les tags n'ont pas pu être poussés sur le dépôt distant : ils restent sur ce poste." },
     ];
     server(state(), ({ path }) => {
-      if (path === `${API}/sync`) return { json: { status: "fast_forward", commit: "c2", warnings, reindexed: true, synced_at: new Date().toISOString() } };
+      if (path === `${API}/sync`) return { json: { status: "fast_forward", commit: "c2", warnings, reindexed: true, index_fresh: true, synced_at: new Date().toISOString() } };
       return undefined;
     });
     render(screenFor());
