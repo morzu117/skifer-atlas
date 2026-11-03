@@ -249,9 +249,7 @@ def _sync(workspace_id: str) -> dict:
     else:
         run_git(["merge", "--quiet", "--ff-only", remote], repo, error_code="sync_conflict")
         result = {"status": "fast_forward", "commit": remote}
-    warnings = []
-    if result["status"] == "fast_forward":
-        warnings = _catch_up_tags(repo, local, remote, workspace.git_remote, workspace_id)
+    warnings = _catch_up_tags(repo, local, remote, workspace.git_remote, workspace_id)
     meta = read_meta(repo)
     account = workspace.account or _host_account(workspace.git_remote, branch, workspace_id)
     update_workspace(workspace.model_copy(update={
@@ -263,20 +261,26 @@ def _sync(workspace_id: str) -> dict:
 
 def _catch_up_tags(repo: Path, before: str, after: str, remote_url: str,
                    workspace_id: str | None = None) -> list[dict]:
-    """Tags des versions fusionnées hors d'Atlas (directement sur l'hébergeur), posés au
-    clone puis poussés. Chaque membre calcule les mêmes : sans droit d'écriture, le tag
-    reste local et le prochain membre qui en a le pousse."""
-    found = missing_tags(repo, before, after)
-    if not found:
-        return []
+    """Rattrape les nouvelles versions et republie les tags locaux absents du distant."""
+    found = missing_tags(repo, before, after) if before != after else []
     for name, commit in found:
         run_git(["tag", name, commit], repo)
-    names = ", ".join(name.removeprefix("doc/").replace("/v", " v") for name, _ in found)
-    warnings = [{"code": "versions_tagged", "message": f"Version fusionnée hors d'Atlas, "
-                 f"taguée au sync : {names}."}]
+    warnings = []
+    if found:
+        names = ", ".join(name.removeprefix("doc/").replace("/v", " v") for name, _ in found)
+        warnings.append({"code": "versions_tagged", "message": "Version fusionnée hors "
+                         f"d'Atlas, taguée au sync : {names}."})
+    local = set(run_git(["tag", "--list", "doc/*"], repo).split())
+    if not local:
+        return warnings
     try:
-        run_git(["push", "--quiet", "origin", *(f"refs/tags/{name}" for name, _ in found)],
-                repo, error_code="push_failed", token=_token(remote_url, workspace_id))
+        remote = {line.split()[1].removeprefix("refs/tags/") for line in run_git(
+            ["ls-remote", "--tags", "--refs", "origin", "refs/tags/doc/*"], repo,
+            token=_token(remote_url, workspace_id)).splitlines()}
+        pending = sorted(local - remote)
+        if pending:
+            run_git(["push", "--quiet", "origin", *(f"refs/tags/{name}" for name in pending)],
+                    repo, error_code="push_failed", token=_token(remote_url, workspace_id))
     except RepoError:
         warnings.append({"code": "tags_not_pushed", "message": "Les tags n'ont pas pu être "
                          "poussés sur le dépôt distant : ils restent sur ce poste."})
