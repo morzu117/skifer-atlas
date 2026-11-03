@@ -22,7 +22,7 @@ NO_REVIEW_MENTION = "Fusionnée sans revue : aucun autre compte habilité"
 @dataclass(frozen=True)
 class Review:
     account: str
-    state: Literal["approved", "changes_requested", "commented"]
+    state: Literal["approved", "changes_requested", "commented", "dismissed"]
     commit: str  # commit de la branche au moment de la revue
     submitted_at: str = ""
     body: str = ""

@@ -136,6 +136,33 @@ def test_declared_point_needs_one_validation(client, joined, as_):
     assert merged["tag"] == "doc/revenu-net--nordis-fr/v3"
 
 
+def test_merge_reports_success_when_follow_up_sync_fails(client, joined, as_, monkeypatch):
+    from skifer_atlas.proposals import merge as proposals_merge
+    from skifer_atlas.repo.git import RepoError
+
+    bare, _ = joined
+    as_("claire.m")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    for account in ("marc.d", "julien.h"):
+        as_(account)
+        assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"}).status_code == 200
+
+    original_sync = proposals_merge.sync_workspace
+    def fail_after_merge(workspace_id):
+        raise RepoError("fetch_failed", "Échec simulé")
+    monkeypatch.setattr(proposals_merge, "sync_workspace", fail_after_merge)
+    response = client.post(f"{PROPOSALS}/1/merge")
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["tag"] == "doc/revenu-net/v5"
+    assert [warning["code"] for warning in result["warnings"]] == ["post_merge_sync_failed"]
+    assert git(bare, "rev-parse", "main").strip() == result["commit"]
+    monkeypatch.setattr(proposals_merge, "sync_workspace", original_sync)
+    synced = client.post(f"{WS}/sync")
+    assert synced.status_code == 200, synced.text
+    assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip() == result["commit"]
+
+
 def test_undeclared_override_requires_canonical_validation(client, joined, as_):
     """Critère 1 : la variante allemande surcharge n02, hors des points déclarés."""
     as_("anna.k")

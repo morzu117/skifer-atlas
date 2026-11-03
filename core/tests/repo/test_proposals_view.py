@@ -144,9 +144,9 @@ def test_full_cycle_until_merge(client, monkeypatch):
     assert client.get(f"{API}/proposals/5/graphs").json()["base"]["label"] == "Canonique v4"
 
 
-def test_the_tag_fetch_of_a_merge_waits_for_a_concurrent_sync(client, monkeypatch):
-    """ADR 0035 : une synchronisation lancée pendant le fetch qui précède le tag d'une
-    fusion attend son tour. Taux de service v3 (#2) est prête à fusionner (Supply, 1 / 1)."""
+def test_the_post_merge_sync_waits_for_a_concurrent_sync(client, monkeypatch):
+    """ADR 0035 : la synchronisation qui pose le tag après fusion sérialise son fetch
+    avec une autre synchronisation. Taux de service v3 (#2) est prête à fusionner."""
     running, overlaps, errors = [0], [], []
     counting = threading.Lock()
     sync_waits = threading.Event()  # la synchronisation attend le verrou, ou fetche déjà
@@ -181,16 +181,24 @@ def test_the_tag_fetch_of_a_merge_waits_for_a_concurrent_sync(client, monkeypatc
     sync = threading.Thread(target=call, args=(lambda: repo_sync.sync_workspace(
         "groupe-nordis"),))
 
+    post_merge = [False]
+
     def tag_fetch(args, *rest, **options):
-        if args[0] == "fetch" and not sync.is_alive():
-            sync.start()  # la synchronisation démarre pendant le fetch du tag
+        if args[0] == "fetch" and post_merge[0] and not sync.is_alive():
+            sync.start()  # une autre synchronisation démarre pendant celle du tag
             assert sync_waits.wait(10)
         return slow_git(args, *rest, **options)
 
-    monkeypatch.setattr(repo_sync, "run_git", slow_git)
+    real_post_merge_sync = proposals_merge.sync_workspace
+
+    def sync_after_merge(workspace_id):
+        post_merge[0] = True
+        return real_post_merge_sync(workspace_id)
+
+    monkeypatch.setattr(repo_sync, "run_git", tag_fetch)
     monkeypatch.setattr(repo_sync, "clone_lock", sync_lock)
     monkeypatch.setattr(proposals_common, "run_git", slow_git)
-    monkeypatch.setattr(proposals_merge, "run_git", tag_fetch)
+    monkeypatch.setattr(proposals_merge, "sync_workspace", sync_after_merge)
     as_account(monkeypatch, "sami.b")
     merge = threading.Thread(target=call, args=(lambda: proposals_merge.merge_proposal(
         "groupe-nordis", 2),))

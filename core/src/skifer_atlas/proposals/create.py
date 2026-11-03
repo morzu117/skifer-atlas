@@ -83,7 +83,7 @@ def _slug(value: str) -> bool:
     return re.match(SLUG, value) is not None
 
 
-def _current_version(context: Context, path: str) -> int | None:
+def current_version(context: Context, path: str) -> int | None:
     text = context.show(path)
     if text is None:
         return None
@@ -181,7 +181,7 @@ def create_proposal(workspace_id: str, document_yaml: str, justification: str,
         raise RepoError("invalid_document", "Le document n'est pas un YAML lisible.",
                         _issues(issues))
     target = _target(raw)
-    current = _current_version(context, target["path"])
+    current = current_version(context, target["path"])
     _check_base(current, base_version, target["id"])
     version = (current or 0) + 1
     raw.setdefault("data_product", {})["version"] = version

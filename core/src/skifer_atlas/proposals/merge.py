@@ -10,11 +10,11 @@ from __future__ import annotations
 import hashlib
 
 from ..governance.rules import decide
-from ..repo.git import RepoError, clone_lock, run_git
+from ..repo.git import RepoError
 from ..repo.sync import sync_workspace
 from ..repo.versions import tag_name
-from .common import open_context, parse_body, push
-from .create import SHARED_FILES, _current_version
+from .common import open_context, parse_body
+from .create import SHARED_FILES, current_version
 
 
 def merge_proposal(workspace_id: str, number: int) -> dict:
@@ -39,7 +39,7 @@ def merge_proposal(workspace_id: str, number: int) -> dict:
         if hashlib.sha256(current.encode("utf-8")).hexdigest() != base:
             raise RepoError("stale_base", f"{target['path']} a changé depuis la proposition : "
                             "la reproposer.")
-    elif _current_version(context, target["path"]) != block.get("base_version"):
+    elif current_version(context, target["path"]) != block.get("base_version"):
         raise RepoError("stale_base", f"« {target['id']} » a changé depuis la proposition : "
                         "la reproposer à partir de la version courante.")
     review = ("none (no other eligible approver)" if decision.merge_mode == "no_other_eligible"
@@ -51,12 +51,14 @@ def merge_proposal(workspace_id: str, number: int) -> dict:
     tag = None
     if target["kind"] not in SHARED_FILES:
         tag = tag_name(target["id"], block["version"])
-        with clone_lock(context.repo):
-            run_git(["fetch", "--quiet", "origin"], context.repo, error_code="fetch_failed",
-                    token=context.token)
-        run_git(["tag", tag, merged], context.repo)
-        push(context, f"refs/tags/{tag}")
-    synced = sync_workspace(workspace_id)
+    # La synchronisation retrouve les versions fusionnées et publie leurs tags.
+    # Une panne après la fusion ne doit pas faire croire à l'appelant que la PR est ouverte.
+    try:
+        warnings = sync_workspace(workspace_id)["warnings"]
+    except RepoError as error:
+        warnings = [{"code": "post_merge_sync_failed", "message":
+                     f"La proposition est fusionnée ; la synchronisation a échoué "
+                     f"({error.code}). Relancer la synchronisation pour publier le tag."}]
     return {"id": number, "commit": merged, "tag": tag, "version": block.get("version"),
             "merge_mode": decision.merge_mode, "mention": decision.mention,
-            "warnings": synced["warnings"]}
+            "warnings": warnings}
