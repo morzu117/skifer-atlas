@@ -17,6 +17,8 @@ from functools import cache
 
 POLL_SECONDS = 1.0
 ERROR_ACCESS_DENIED = 5
+MAX_UNIX_PID = 0x7FFFFFFF  # pid_t est signé sur les plateformes Unix prises en charge
+MAX_WINDOWS_PID = 0xFFFFFFFF  # DWORD passé à OpenProcess
 
 
 @cache
@@ -38,15 +40,11 @@ def _windows_api():
 def alive(pid: int) -> bool:
     """Le processus existe-t-il encore ? Sans dépendance : `kill(pid, 0)` sous Unix,
     `OpenProcess` et `WaitForSingleObject` sous Windows."""
-    if pid <= 0:
+    if pid <= 0 or pid > (MAX_WINDOWS_PID if sys.platform == "win32" else MAX_UNIX_PID):
         return False
     if sys.platform == "win32":
         import ctypes
 
-        # Tauri fournit un PID u32. Un entier plus grand ne peut pas être transmis à
-        # OpenProcess(DWORD) : le traiter comme disparu pour arrêter le serveur orphelin.
-        if pid > 0xFFFFFFFF:
-            return False
         kernel32 = _windows_api()
         handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
         if not handle:
@@ -69,7 +67,15 @@ def alive(pid: int) -> bool:
 
 def parent_pid() -> int | None:
     raw = os.environ.get("ATLAS_PARENT_PID", "").strip()
-    return int(raw) if raw.isdigit() else None
+    if not raw.isdigit():
+        return None
+    try:
+        pid = int(raw)
+    except ValueError:  # entier décimal au-delà de la limite de conversion Python
+        return 0
+    # 0 signifie « parent disparu » : le fil de surveillance arrête le serveur.
+    # None désactiverait la surveillance et laisserait tourner un serveur orphelin.
+    return pid if 0 < pid <= (MAX_WINDOWS_PID if sys.platform == "win32" else MAX_UNIX_PID) else 0
 
 
 def watch(pid: int, on_gone: Callable[[], None], poll: float | None = None) -> threading.Event:

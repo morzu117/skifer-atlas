@@ -133,8 +133,23 @@ def test_lifeline_rejects_a_windows_pid_outside_dword(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setenv("ATLAS_PARENT_PID", str(0x100000000))
     pid = lifeline.parent_pid()
-    assert pid == 0x100000000
+    assert pid == 0
     assert not lifeline.alive(pid)
+    gone = threading.Event()
+    stop = lifeline.watch(pid, gone.set, poll=0.01)
+    try:
+        assert gone.wait(1)
+    finally:
+        stop.set()
+
+
+def test_lifeline_rejects_a_unix_pid_outside_signed_int(monkeypatch):
+    """#102 : un PID hors plage arrête le serveur sans tuer le fil de surveillance."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setenv("ATLAS_PARENT_PID", str(0x80000000))
+    pid = lifeline.parent_pid()
+    assert pid == 0
+    assert not lifeline.alive(0x80000000)
     gone = threading.Event()
     stop = lifeline.watch(pid, gone.set, poll=0.01)
     try:
@@ -150,6 +165,8 @@ def test_parent_pid_comes_from_the_environment(monkeypatch):
     assert lifeline.parent_pid() == 4242
     monkeypatch.setenv("ATLAS_PARENT_PID", "pas-un-pid")
     assert lifeline.parent_pid() is None
+    monkeypatch.setenv("ATLAS_PARENT_PID", "9" * 5000)
+    assert lifeline.parent_pid() == 0
 
 
 @pytest.mark.parametrize("reader", ["présent", "parti"])
