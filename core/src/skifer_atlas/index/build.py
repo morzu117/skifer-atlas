@@ -274,11 +274,13 @@ def ensure_index(repo: Path, db: Path) -> duckdb.DuckDBPyConnection:
     Le verrou ne sert qu'à la reconstruction (une seule à la fois par base) ; l'ouverture,
     qui peut attendre une base tenue par un autre processus (ADR 0032), se fait hors du
     verrou : sinon chaque requête en attente ajouterait la sienne à celle des précédentes.
-    La reconstruction est une transaction : un lecteur voit l'ancien index ou le nouveau."""
+    La reconstruction et chaque lecture sont des transactions : un lecteur garde le
+    même schéma et le même commit indexé, même si une reconstruction se termine entre
+    deux de ses requêtes. Fermer la connexion termine la transaction de lecture."""
     with _locks_guard:
         lock = _locks.setdefault(db.resolve(), threading.Lock())
     commit = head(repo)
-    connection = connect(db)
+    connection = _reader(db)
     if index_state(connection) == (commit, SCHEMA_VERSION):
         return connection
     connection.close()
@@ -288,14 +290,24 @@ def ensure_index(repo: Path, db: Path) -> duckdb.DuckDBPyConnection:
         raise RepoError("index_busy", "L'index de l'espace est en cours de reconstruction. "
                         "Réessayer dans un instant.")
     try:
-        connection = connect(db)
+        connection = _reader(db)
         if index_state(connection) == (commit, SCHEMA_VERSION):
             return connection  # reconstruit pendant qu'on attendait le verrou
         connection.close()
         build_index(repo, db)
-        return connect(db)
+        return _reader(db)
     finally:
         lock.release()
+
+
+def _reader(db: Path) -> duckdb.DuckDBPyConnection:
+    connection = connect(db)
+    try:
+        connection.execute("BEGIN TRANSACTION")
+        return connection
+    except BaseException:
+        connection.close()
+        raise
 
 
 def index_fresh(repo: Path, db: Path) -> bool:
