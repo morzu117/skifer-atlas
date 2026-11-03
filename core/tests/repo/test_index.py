@@ -102,6 +102,31 @@ def test_index_follows_the_commit(repo, tmp_path):
     connection.close()
 
 
+def test_reader_keeps_one_index_snapshot_during_rebuild(repo, tmp_path):
+    db = tmp_path / "atlas.duckdb"
+    old_reader = ensure_index(repo, db)
+    try:
+        old_commit = old_reader.execute('SELECT "commit" FROM "index".index_meta').fetchone()
+        assert document(old_reader, "taux-de-service")["label"] == "Taux de service"
+        kpi = load("kpis/taux-de-service.yaml")
+        kpi["label"] = "Taux de service client"
+        write(repo, "kpis/taux-de-service.yaml", kpi)
+        new_commit = commit_all(repo, "Libellé modifié")
+
+        new_reader = ensure_index(repo, db)
+        try:
+            assert document(new_reader, "taux-de-service")["label"] == "Taux de service client"
+            assert new_reader.execute('SELECT "commit" FROM "index".index_meta').fetchone() \
+                == (new_commit,)
+            assert document(old_reader, "taux-de-service")["label"] == "Taux de service"
+            assert old_reader.execute('SELECT "commit" FROM "index".index_meta').fetchone() \
+                == old_commit
+        finally:
+            new_reader.close()
+    finally:
+        old_reader.close()
+
+
 def snapshot_meta(db):
     connection = connect(db)
     try:
