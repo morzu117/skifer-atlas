@@ -166,7 +166,7 @@ curl -H "$H" -H "$J" -d '{"kpi_id":"revenu-net","variants":["nordis-de"],"scope_
 curl -H "$H" $API/acme/documents/revenu-net--nordis-de/canonical-diff  # deux graphes disposés et diff au canonique ; 422 not_a_variant sinon
 ```
 
-Tolérance : celle de la requête, sinon celle du KPI, sinon `tolerance.percent` de `governance.yaml`, sinon 1 %. Statuts : `running`, `done`, `partial`, `failed`, `cancelled`, et `interrupted` pour une comparaison restée en cours après l'arrêt du serveur. La colonne Convergence du catalogue en découle : `never_compared`, `converged`, `divergences:n` (écart sur une surcharge) ou `candidates:n` (écart sur une déclinaison from scratch seulement, ADR 0015).
+Tolérance : celle de la requête, sinon celle du KPI, sinon `tolerance.percent` de `governance.yaml`, sinon 1 %. Statuts : `running`, `done`, `partial`, `failed`, `cancelled`, et `interrupted` pour une comparaison restée en cours après l'arrêt du serveur. Si le verrou de création reste pris plus d'une seconde, `GET …/comparisons/{id}` rend `running` sans progression ; l'écran relit ensuite l'état. La colonne Convergence du catalogue en découle : `never_compared`, `converged`, `divergences:n` (écart sur une surcharge) ou `candidates:n` (écart sur une déclinaison from scratch seulement, ADR 0015).
 
 ## Binaire figé (plan 0019, ADR 0023)
 

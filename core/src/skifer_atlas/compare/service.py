@@ -213,7 +213,11 @@ def get_comparison(workspace_id: str, number: int) -> dict:
     if found["status"] == "running":
         # Ligne créée après la première lecture du registre : `start` y inscrit le job sous
         # le verrou de création de la base, que la seconde lecture attend.
-        running = running or orchestrate.registered(db, number)
+        if running is None:
+            registration = orchestrate.registered(db, number)
+            if registration.pending:
+                return found  # la lecture suivante trouvera le job après sa création
+            running = registration.job
         if running is None:
             found["status"] = "interrupted"  # le processus s'est arrêté pendant l'exécution
         else:

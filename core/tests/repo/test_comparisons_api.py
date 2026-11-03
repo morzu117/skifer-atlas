@@ -279,20 +279,37 @@ def test_comparison_read_while_it_is_created_is_not_interrupted(client, joined, 
 def test_a_comparison_being_created_does_not_block_another_workspace(tmp_path, monkeypatch):
     """#86 : la création d'une comparaison, qui peut attendre une base occupée, ne bloque
     pas la lecture du registre d'une autre base."""
+    # Ce test tient directement le verrou privé pour isoler la coordination par base :
+    # démarrer un vrai job ferait aussi intervenir DuckDB et les connecteurs.
     from skifer_atlas.compare.orchestrate import _creation_lock, registered
     busy, other = tmp_path / "a.duckdb", tmp_path / "b.duckdb"
     done = []
     with _creation_lock(busy):
-        reader = threading.Thread(target=lambda: done.append(registered(other, 1)))
+        reader = threading.Thread(target=lambda: done.append(registered(other, 1).job))
         reader.start()
         reader.join(5)
         assert done == [None]
-        waiting = threading.Thread(target=lambda: done.append(registered(busy, 1)))
+        waiting = threading.Thread(target=lambda: done.append(registered(busy, 1).job))
         waiting.start()
         waiting.join(0.2)
         assert waiting.is_alive()  # même base : elle attend la fin de la création
     waiting.join(5)
     assert done == [None, None]
+
+
+def test_a_comparison_still_starting_answers_retry_instead_of_waiting(
+        client, joined, monkeypatch):
+    """#90 : la lecture HTTP ne reste pas bloquée si la création tient longtemps le verrou."""
+    db = index_path("groupe-nordis")
+    monkeypatch.setattr(orchestrate, "CREATION_WAIT_SECONDS", 0.01)
+    monkeypatch.setattr(store, "get", lambda *args: {"id": 42, "status": "running"})
+    # Même invariant que le test ci-dessus : le verrou privé simule le temps passé dans
+    # store.create, sans rendre la lecture de DuckDB elle-même lente.
+    with orchestrate._creation_lock(db):
+        response = client.get(f"{COMPARISONS}/42")
+    assert response.status_code == 200
+    assert response.json()["status"] == "running"
+    assert response.json()["progress"] is None
 
 
 def test_request_validation(client, joined, local):

@@ -72,13 +72,16 @@ def is_space_referent(workspace: Workspace) -> bool:
 def _document_counts(workspace_id: str, kinds: tuple[str, ...],
                      strict: bool = False) -> dict[str, int]:
     """Documents par domaine. Index indisponible : `{}` pour l'affichage. En `strict`, un
-    contrôle ne laisse pas passer faute de pouvoir compter : l'erreur de l'index remonte
-    telle quelle (`index_busy` : réessayer), une autre devient `index_unavailable`."""
+    contrôle ne laisse pas passer faute de pouvoir compter : `index_busy` remonte pour
+    demander un nouvel essai, toute autre erreur devient `index_unavailable`."""
     try:
         connection = ensure_index(repo_dir(workspace_id), index_path(workspace_id))
-    except RepoError:
+    except RepoError as error:
         if strict:
-            raise
+            if error.code == "index_busy":
+                raise
+            raise RepoError("index_unavailable", "L'index de l'espace est indisponible : "
+                            "impossible de vérifier les documents du domaine retiré.") from error
         return {}
     except (OSError, duckdb.Error) as error:
         if strict:

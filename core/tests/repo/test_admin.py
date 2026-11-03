@@ -161,11 +161,16 @@ def test_a_domain_is_not_removed_when_the_index_cannot_count_its_documents(
     def broken(*args):
         raise OSError("disque illisible")
 
+    def invalid(*args):
+        raise RepoError("invalid_document", "index invalide")
+
     def remove_marketing(governance):
         governance["domains"] = [d for d in governance["domains"] if d["id"] != "marketing"]
 
     monkeypatch.setattr(admin, "ensure_index", unavailable)
     assert code(save(client, state, remove_marketing)) == (503, "index_busy")  # réessayer
+    monkeypatch.setattr(admin, "ensure_index", invalid)
+    assert code(save(client, state, remove_marketing)) == (503, "index_unavailable")
     monkeypatch.setattr(admin, "ensure_index", broken)
     assert code(save(client, state, remove_marketing)) == (503, "index_unavailable")
     kept = save(client, state, lambda g: g.update(allowed_platforms=["databricks"]))
