@@ -201,7 +201,8 @@ def test_frozen_binary_works_offline(folders, tmp_path):
     home, data = folders
     port = free_port()
     sandbox = OFFLINE if sys.platform == "darwin" and shutil.which("sandbox-exec") else None
-    process = launch(isolated_env(home, data, port, ATLAS_ACCOUNT="anna.k"), sandbox)
+    process = launch(isolated_env(home, data, port, ATLAS_ACCOUNT="anna.k",
+                                  ATLAS_ALLOW_LOCAL_GIT="1"), sandbox)
     try:
         remote = (tmp_path / "demo" / "distant.git").as_posix()
         status, joined = call(port, "POST", "/api/workspaces/join", {"remote_url": remote})
