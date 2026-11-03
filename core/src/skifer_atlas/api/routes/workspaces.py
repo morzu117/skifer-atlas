@@ -85,11 +85,20 @@ def post_join(body: JoinRequest) -> dict:
 
 @router.post("/{ws}/sync")
 def post_sync(ws: str) -> dict:
-    """Synchronise, puis réindexe si la branche principale a bougé (plan 0017)."""
+    """Synchronise, puis réindexe si nécessaire. Un échec d'index reste un avertissement :
+    le résultat Git a déjà été enregistré et ne doit pas être présenté comme un échec."""
     workspace = workspace_or_404(ws)
     result = sync_workspace(workspace.id)
     repo, db = repo_dir(workspace.id), index_path(workspace.id)
-    reindexed = not index_fresh(repo, db)
-    ensure_index(repo, db).close()
+    reindexed, fresh = False, False
+    try:
+        was_fresh = index_fresh(repo, db)
+        ensure_index(repo, db).close()
+        reindexed, fresh = not was_fresh, True
+    except (RepoError, OSError, duckdb.Error):
+        result["warnings"].append({"code": "index_unavailable", "message":
+                                   "Le dépôt est synchronisé, mais l'index n'a pas pu être "
+                                   "reconstruit. Réessayer la synchronisation."})
     synced = get_workspace(workspace.id)
-    return {**result, "reindexed": reindexed, "synced_at": synced.synced_at if synced else None}
+    return {**result, "reindexed": reindexed, "index_fresh": fresh,
+            "synced_at": synced.synced_at if synced else None}

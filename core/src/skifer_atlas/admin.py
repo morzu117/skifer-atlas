@@ -42,6 +42,18 @@ def _digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _account(workspace: Workspace) -> str:
+    """Même identité pour le lien et l'autorisation ; secours local hors réseau."""
+    if not workspace.git_remote:
+        return workspace.account
+    try:
+        account = host_account(workspace.git_remote,
+                               read_meta(repo_dir(workspace.id)).main_branch, workspace.id)
+    except (RepoError, OSError, KeyError, TypeError, ValueError):
+        account = ""
+    return account or workspace.account
+
+
 def _current(workspace_id: str) -> tuple[Workspace, Governance, str]:
     """L'espace, sa gouvernance et le texte de `governance.yaml` ; `forbidden` si
     l'utilisateur n'est pas référent de l'espace (un référent de domaine ne l'est pas)."""
@@ -53,8 +65,7 @@ def _current(workspace_id: str) -> tuple[Workspace, Governance, str]:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     governance = parse_governance(text)[0]
     # Le compte de l'hébergeur, comme pour les propositions qui en découlent.
-    account = (host_account(workspace.git_remote, read_meta(repo).main_branch, workspace.id)
-               if workspace.git_remote else "") or workspace.account
+    account = _account(workspace)
     if governance is None or account not in space_referents(governance):
         raise RepoError("forbidden", "L'administration est réservée aux référents de "
                         "l'espace.")
@@ -66,7 +77,7 @@ def is_space_referent(workspace: Workspace) -> bool:
     if not path.exists():
         return False
     governance = parse_governance(path.read_text(encoding="utf-8"))[0]
-    return governance is not None and workspace.account in space_referents(governance)
+    return governance is not None and _account(workspace) in space_referents(governance)
 
 
 def _document_counts(workspace_id: str, kinds: tuple[str, ...],
@@ -93,6 +104,11 @@ def _document_counts(workspace_id: str, kinds: tuple[str, ...],
         rows = connection.execute('SELECT domain, count(*) FROM "index".documents '
                                   "WHERE list_contains(?, kind) GROUP BY domain",
                                   [list(kinds)]).fetchall()
+    except (RepoError, OSError, duckdb.Error) as error:
+        if strict:
+            raise RepoError("index_unavailable", "L'index de l'espace est indisponible : "
+                            "impossible de vérifier les documents du domaine retiré.") from error
+        return {}
     finally:
         connection.close()
     return {domain: count for domain, count in rows if domain}

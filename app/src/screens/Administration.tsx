@@ -809,7 +809,7 @@ function Repository({
           ? { text: warning, tone: "warn" }
           : { text: result.reindexed ? "Synchronisé · index reconstruit." : "Déjà à jour avec le dépôt distant.", tone: "ok" },
       );
-      onSynced({ ...repository, synced_at: result.synced_at, index_fresh: true });
+      onSynced({ ...repository, synced_at: result.synced_at, index_fresh: result.index_fresh });
     } catch (reason) {
       // Le titre porte la cause (« Le dépôt local a divergé du dépôt distant ») ; le texte
       // seul ne dit que la conduite à tenir.

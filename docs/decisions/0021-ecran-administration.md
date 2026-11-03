@@ -23,6 +23,7 @@ Chaque enregistrement devient une proposition sur `governance.yaml` (plan 0006).
 - **Référent d'espace seulement.** L'écran et ses routes sont réservés aux référents d'espace : le rôle `referent` sans restriction de domaine. Ce sont les seuls à pouvoir proposer une modification de la gouvernance (plan 0006). Un référent de domaine, comme Claire M. sur Finance, a bien le rôle `referent`, mais il ne voit pas Administration. La liste des espaces porte donc `space_referent`, qui pilote la navigation et la redirection.
   - `GET …/admin` et `POST …/admin/governance` répondent 403 `forbidden` aux autres comptes (critère 1).
   - Le compte retenu est celui de l'hébergeur, comme pour les propositions.
+  - La liste des espaces et la route Administration résolvent ce compte de la même façon. Si l'hébergeur est injoignable, elles se replient sur le compte enregistré lors de la dernière synchronisation.
   - `GET …/governance` reste lisible par tous : `governance.yaml` est dans le dépôt que chaque membre clone.
 - **`GET …/admin`** rend en un appel ce que l'écran affiche :
   - la gouvernance ;
@@ -60,6 +61,7 @@ Chaque enregistrement devient une proposition sur `governance.yaml` (plan 0006).
 - **Dépôt Git.** L'URL s'affiche en lecture seule, en mono. Changer de dépôt distant n'est pas une modification de gouvernance. Rattacher un espace local à son dépôt passe par `POST …/remote` (plan 0010).
   - `Workspace.synced_at` est posé au clonage et à chaque synchronisation, y compris celles d'une proposition ou d'une fusion.
   - « Synchroniser » (`POST …/sync`) réindexe désormais si la branche a bougé, et rend `reindexed` et `synced_at` (critère 7).
+  - Si le dépôt est synchronisé mais que l'index échoue, la route rend le succès Git avec `index_fresh: false` et un avertissement `index_unavailable` ; l'écran invite à réessayer.
 - **Plateformes.** L'écran propose cinq plateformes, chacune avec son mode d'authentification, d'après la maquette : Databricks, Snowflake, BigQuery, Microsoft Fabric, Redshift. DuckDB, l'exécution locale, n'y figure pas : une autorisation existante est conservée. Aucun token, aucun champ de secret (critère 6).
 - **Mise en page.** Les sections tiennent en deux colonnes si chacune garde au moins `--atlas-admin-col-min` (420 px), sinon en une seule.
 - **Coque.** Tous les écrans de la navigation existent : l'écran d'attente « Cet écran arrive avec le plan … » disparaît.
