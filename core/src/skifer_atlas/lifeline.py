@@ -43,6 +43,10 @@ def alive(pid: int) -> bool:
     if sys.platform == "win32":
         import ctypes
 
+        # Tauri fournit un PID u32. Un entier plus grand ne peut pas être transmis à
+        # OpenProcess(DWORD) : le traiter comme disparu pour arrêter le serveur orphelin.
+        if pid > 0xFFFFFFFF:
+            return False
         kernel32 = _windows_api()
         handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
         if not handle:
@@ -50,6 +54,7 @@ def alive(pid: int) -> bool:
             # Unix) ; paramètre invalide : il n'existe plus.
             return ctypes.get_last_error() == ERROR_ACCESS_DENIED
         try:
+            # WAIT_FAILED est aussi traité comme absent (comportement historique).
             return kernel32.WaitForSingleObject(handle, 0) == 0x102  # WAIT_TIMEOUT
         finally:
             kernel32.CloseHandle(handle)

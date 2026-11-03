@@ -101,6 +101,7 @@ def uncached_windows_api():
     (0, 87, None, False),  # ERROR_INVALID_PARAMETER : il n'existe plus
     (7, 0, 0x102, True),  # WAIT_TIMEOUT : il tourne
     (7, 0, 0, False),  # signalé : il s'est terminé
+    (7, 0, 0xFFFFFFFF, False),  # WAIT_FAILED : considéré absent, comme avant
 ])
 def test_lifeline_on_windows(monkeypatch, uncached_windows_api, handle, error, wait, expected):
     """#51 : sous Windows, un `OpenProcess` refusé n'arrête pas le serveur. Faux `ctypes`,
@@ -125,6 +126,21 @@ def test_lifeline_on_windows(monkeypatch, uncached_windows_api, handle, error, w
     assert kernel32.CloseHandle.argtypes == (wintypes.HANDLE,)
     assert kernel32.CloseHandle.restype is wintypes.BOOL
     assert closed == ([handle, handle] if handle else [])
+
+
+def test_lifeline_rejects_a_windows_pid_outside_dword(monkeypatch):
+    """#98 : un PID invalide ne tue pas en silence le fil qui arrête le serveur."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("ATLAS_PARENT_PID", str(0x100000000))
+    pid = lifeline.parent_pid()
+    assert pid == 0x100000000
+    assert not lifeline.alive(pid)
+    gone = threading.Event()
+    stop = lifeline.watch(pid, gone.set, poll=0.01)
+    try:
+        assert gone.wait(1)
+    finally:
+        stop.set()
 
 
 def test_parent_pid_comes_from_the_environment(monkeypatch):
