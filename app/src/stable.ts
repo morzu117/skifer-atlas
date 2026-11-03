@@ -1,10 +1,12 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 // Objets de React Flow gardés d'un rendu à l'autre tant que leur contenu ne change pas
 // (plan 0024, ADR 0028). React Flow ne recalcule un nœud ou une arête que si l'objet
 // change, et un nœud mémoïsé ne se redessine que si ses `data` changent : sans cela,
 // déplacer un nœud redessinait les autres à chaque pas. Le contenu se compare en JSON :
 // les documents sont recopiés à chaque modification (`apply`), l'identité ne suffit pas.
+// Le cache n'est écrit qu'une fois le rendu validé (effet de mise en page) : un rendu
+// abandonné, en rendu concurrent ou sous StrictMode, ne le laisse pas incohérent.
 
 type Kept<T> = { key: string; item: T };
 
@@ -22,6 +24,9 @@ export function useStable<T extends { id: string }>(items: T[]): T[] {
     return kept.item;
   });
   const same = list.length === previous.list.length && list.every((item, index) => item === previous.list[index]);
-  cache.current = { byId, list: same ? previous.list : list };
-  return cache.current.list;
+  const kept = same ? previous.list : list;
+  useLayoutEffect(() => {
+    cache.current = { byId, list: kept };
+  });
+  return kept;
 }
