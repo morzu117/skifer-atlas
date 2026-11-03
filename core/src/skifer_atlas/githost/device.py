@@ -35,6 +35,7 @@ GITHUB_URL = "https://github.com"
 SCOPE = "repo"  # dépôts privés, branches et pull requests
 GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 KEEP_AFTER_CONNECT = 15 * 60  # secondes : délai laissé pour rejoindre l'espace
+POLL_LOCK_TIMEOUT = 0.1  # une relecture ne doit pas attendre la réponse réseau (30 s)
 
 
 def client_id() -> str | None:
@@ -129,10 +130,14 @@ def _flow(flow_id: str) -> Flow:
 
 def poll(flow_id: str) -> dict:
     """Où en est le flux. Au plus une requête à GitHub par intervalle, même pour deux
-    relectures simultanées : la seconde attend la première, puis voit `next_poll`."""
+    relectures simultanées. Si GitHub tarde, la seconde rend l'état courant."""
     flow = _flow(flow_id)
-    with flow.polling:
+    if not flow.polling.acquire(timeout=POLL_LOCK_TIMEOUT):
+        return _state(flow)
+    try:
         return _poll(flow)
+    finally:
+        flow.polling.release()
 
 
 def _poll(flow: Flow) -> dict:

@@ -119,7 +119,7 @@ curl -H "$H" -H "$J" -d '{"remote_url":"https://github.com/…","github_flow":"<
 Variables d'environnement :
 
 - `ATLAS_GITHUB_CLIENT_ID` : le client OAuth GitHub d'Atlas, avec le device flow activé. C'est un identifiant public : la build de release le fixe à la compilation de l'app Tauri, qui le passe au serveur. Sans lui, `github_not_configured` ;
-- `ATLAS_GITHUB_TOKEN` : repli sans coffre, pour les tests et l'intégration continue. Le jeton de l'espace au coffre passe avant ;
+- `ATLAS_GITHUB_TOKEN` : repli sans coffre, pour les tests et l'intégration continue. Un jeton de l'espace expiré ou refusé ne déclenche pas ce repli : utiliser « Reconnecter GitHub » dans l'app, ou retirer le jeton de l'espace avec `DELETE …/github` avant de réessayer ;
 - `ATLAS_GITHUB_URL` et `ATLAS_GITHUB_API_URL` : GitHub Enterprise, ou un faux serveur ;
 - `ATLAS_ACCOUNT` : l'identité de l'utilisateur avec un dépôt local. À défaut, c'est le nom Git de l'utilisateur.
 

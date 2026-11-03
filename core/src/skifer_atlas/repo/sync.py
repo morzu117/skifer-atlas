@@ -123,11 +123,13 @@ def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     # Le jeton va au coffre avant de lire le compte, qui s'en sert. Si une étape échoue
-    # ensuite, rien ne reste : ni clone sans espace, ni jeton sans espace ; le flux garde
-    # son jeton, et l'adhésion se retente sans refaire la connexion.
+    # ensuite, le clone est retiré et l'ancien jeton éventuel est restauré ; le flux
+    # garde son nouveau jeton, et l'adhésion se retente sans refaire la connexion.
     stored = False
+    previous = None
     try:
         if credential is not None:
+            previous = device.stored(meta.id)
             device.store(meta.id, credential)
             stored = True
         account = _host_account(remote_url, meta.main_branch, meta.id)
@@ -139,7 +141,10 @@ def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace
     except BaseException:
         shutil.rmtree(target, ignore_errors=True)
         if stored:
-            device.forget(meta.id)
+            if previous is None:
+                device.forget(meta.id)
+            else:
+                device.store(meta.id, previous)
         raise
     if github_flow is not None:
         device.release(github_flow)
