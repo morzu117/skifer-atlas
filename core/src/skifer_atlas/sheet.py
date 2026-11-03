@@ -9,6 +9,7 @@ fichiers `implementations/<kpi>/<entité>/<plateforme>.sql`.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -25,11 +26,27 @@ from .model.io import dump_data, read_yaml, validate_text
 from .model.layout import layout
 from .model.resolve import ResolvedGraph, resolve
 from .repo import versions as repo_versions
-from .repo.git import RepoError
+from .repo.git import RepoError, head, run_git
 from .repo.layout import read_governance
 
 IMPLEMENTATIONS = "implementations"
 SEMANTICS = ("calendar", "timezone", "currency")
+
+
+@lru_cache(maxsize=8)
+def _cached_analysis(repo: Path, commit: str, tags: str) -> Analysis:
+    """Le commit et les tags fixent les documents et leurs versions résolues."""
+    return analyze(repo)
+
+
+def _analysis(repo: Path) -> Analysis:
+    repo = repo.resolve()
+    # Les modifications non commitées doivent rester visibles dans la fiche.
+    if run_git(["status", "--porcelain"], repo):
+        return analyze(repo)
+    tags = run_git(["for-each-ref", "refs/tags/doc", "--format=%(refname):%(objectname)"],
+                   repo)
+    return _cached_analysis(repo, head(repo), tags)
 
 
 def _mapping(value: Any) -> dict:
@@ -171,7 +188,7 @@ def labelled_layout(resolved: ResolvedGraph, label: str) -> dict:
 def canonical_diff(repo: Path, variant_id: str) -> dict:
     """Une déclinaison face à son canonique (0015, « Nœud divergent ») : les deux graphes
     disposés et le rapport de diff (plan 0003), dans la relation de la déclinaison."""
-    analysis = analyze(repo)
+    analysis = _analysis(repo)
     entry = analysis.entry(variant_id)
     if entry is None:
         raise RepoError("not_found", f"Document « {variant_id} » introuvable.")
@@ -197,7 +214,7 @@ def canonical_diff(repo: Path, variant_id: str) -> dict:
 def graph_layout(repo: Path, document_id: str, version: int | None = None) -> dict:
     """Disposition du graphe courant, ou de celui d'une version taguée ; pour une
     variante, du graphe résolu."""
-    resolved = _at(repo, analyze(repo), document_id, version)
+    resolved = _at(repo, _analysis(repo), document_id, version)
     document = resolved.document
     if resolved.variant is not None:  # les points de variation sont ceux du canonique
         return {**layout(document), "overrides": [o.node for o in resolved.overrides]}
@@ -206,7 +223,7 @@ def graph_layout(repo: Path, document_id: str, version: int | None = None) -> di
 
 def version_diff(repo: Path, document_id: str, base: int, other: int) -> dict:
     """Rapport de diff (plan 0003) entre deux versions taguées d'un même document."""
-    analysis = analyze(repo)
+    analysis = _analysis(repo)
     before = _at(repo, analysis, document_id, base)
     after = _at(repo, analysis, document_id, other)
     report = diff(before, after, DiffContext("version", analysis.library))
@@ -220,7 +237,7 @@ def extract_implementation(repo: Path, kpi_id: str, entity: str, platform: str) 
     if platform not in extract.DIALECTS or not path.is_file():
         raise RepoError("not_found", f"Implémentation {entity}/{platform} de « {kpi_id} » "
                                      "introuvable.")
-    analysis = analyze(repo)
+    analysis = _analysis(repo)
     canonical = _at(repo, analysis, kpi_id, None)
     result = extract.extract_file(path, platform, path.relative_to(repo).as_posix())
     statements = []

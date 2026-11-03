@@ -29,6 +29,10 @@ from .common import document_id_or_404, not_found, workspace_or_404
 router = APIRouter(prefix="/api/workspaces/{ws}")
 
 
+def _repo(ws: str):
+    return repo_dir(workspace_or_404(ws).id)
+
+
 @contextmanager
 def _index(ws: str) -> Iterator[duckdb.DuckDBPyConnection]:
     workspace = workspace_or_404(ws)
@@ -60,7 +64,7 @@ def get_facets(ws: str) -> dict:
     libellé de gouvernance quand il existe."""
     with _index(ws) as connection:
         found = search_facets(connection)
-    governance = read_governance(repo_dir(ws))
+    governance = read_governance(_repo(ws))
     domains = {d.id: d.label for d in governance.domains} if governance else {}
     members = {m.account: m.name for m in governance.members} if governance else {}
     return {
@@ -81,7 +85,7 @@ def get_index(ws: str) -> dict:
 @router.get("/documents/{document_id}/summary")
 def get_summary(ws: str, document_id: str) -> dict:
     with _index(ws) as connection:
-        found = search_summary(connection, repo_dir(ws), document_id_or_404(document_id))
+        found = search_summary(connection, _repo(ws), document_id_or_404(document_id))
     if found is None:
         raise not_found(f"Document « {document_id} » introuvable.")
     return found
@@ -92,7 +96,7 @@ def get_document(ws: str, document_id: str) -> dict:
     with _index(ws) as connection:
         found = _document(connection, document_id)
         state = index_state(connection)
-    found["content"] = show(repo_dir(ws), state[0], found["path"])
+    found["content"] = show(_repo(ws), state[0], found["path"])
     return found
 
 
@@ -100,14 +104,14 @@ def get_document(ws: str, document_id: str) -> dict:
 def get_versions(ws: str, document_id: str) -> list[dict]:
     with _index(ws) as connection:
         _document(connection, document_id)
-    return [v.to_dict() for v in repo_versions.versions(repo_dir(ws), document_id)]
+    return [v.to_dict() for v in repo_versions.versions(_repo(ws), document_id)]
 
 
 @router.get("/documents/{document_id}/versions/{version}")
 def get_version(ws: str, document_id: str, version: int) -> dict:
     with _index(ws) as connection:
         found = _document(connection, document_id)
-    repo = repo_dir(ws)
+    repo = _repo(ws)
     tagged = {v.version: v for v in repo_versions.versions(repo, document_id)}
     if version not in tagged:
         raise not_found(f"Version {version} de « {document_id} » introuvable.")
