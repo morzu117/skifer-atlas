@@ -121,6 +121,15 @@ class Side:
             self.ancestors[node_id] = set(node.inputs).union(
                 *(self.ancestors[i] for i in node.inputs)
             )
+        self._touched = {
+            node_id: {self.concept(column) for member in node.members
+                      for column in node_columns(member)}
+            for node_id, node in self.graph.nodes.items()
+        }
+        self._outputs = {
+            node_id: {self.concept(name) for name in self.schemas.get(node_id) or {}}
+            for node_id in self.graph.nodes
+        }
 
     def node(self, node_id: str) -> LogicalNode:
         return self.graph.nodes[node_id]
@@ -129,15 +138,10 @@ class Side:
         return self.binding.get(column, column)
 
     def touched(self, node_id: str) -> set[str]:
-        return {
-            self.concept(column)
-            for member in self.node(node_id).members
-            for column in node_columns(member)
-        }
+        return self._touched[node_id]
 
     def outputs(self, node_id: str) -> set[str]:
-        schema = self.schemas.get(node_id) or {}
-        return {self.concept(name) for name in schema}
+        return self._outputs[node_id]
 
     def source_concept(self, node_id: str) -> str | None:
         member = self.node(node_id).members[0]

@@ -194,7 +194,7 @@
         }
       ],
       "classification": "from_scratch",
-      "severity": "warn",
+      "severity": "critical",
       "message": "Nœud temporel « Mois fiscal » : column, label modifié(s). Variante from scratch : justifiée, à suivre."
     },
     {
@@ -251,8 +251,8 @@
     },
     "by_severity": {
       "info": 0,
-      "warn": 3,
-      "critical": 3
+      "warn": 2,
+      "critical": 4
     }
   }
 }

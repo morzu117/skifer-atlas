@@ -26,7 +26,7 @@ def canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _condition(condition: Any, nulls: str | None = None) -> str:
+def condition_text(condition: Any, nulls: str | None = None) -> str:
     text = condition if isinstance(condition, str) else f"expr:{normalized_sql(condition.expr)}"
     return f"{text}|{nulls}" if nulls else text
 
@@ -42,7 +42,7 @@ def _content(node: Any, inputs: list[str], calendar: dict | None) -> dict:
         for metric in content["metrics"]:
             metric["expr"] = normalized_sql(metric["expr"])
     elif node.type == "aggregate" and node.having:
-        content["having"] = [_condition(c) for c in node.having]
+        content["having"] = [condition_text(c) for c in node.having]
     elif node.type == "union":
         for column in content["columns"]:
             column["from"] = {str(inputs.index(k)): v for k, v in column["from"].items()}
@@ -113,7 +113,7 @@ def logical_graph(document: Any) -> LogicalGraph:
             if node_id not in group_of:
                 continue  # filtre intérieur d'une suite
             members = tuple(view.by_id[m] for m in group_of[node_id])
-            conditions = sorted(_condition(m.condition, m.nulls) for m in members)
+            conditions = sorted(condition_text(m.condition, m.nulls) for m in members)
             nodes[node_id] = LogicalNode(
                 node_id, "filter_set", {"conditions": conditions}, list(members[0].inputs),
                 members,

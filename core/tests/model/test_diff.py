@@ -6,6 +6,7 @@ from graphs import CONDITIONS, build, nodes, revenu_net, with_filters, with_join
 
 from skifer_atlas.diff import DiffContext, diff, report_text
 from skifer_atlas.diff.align import Side, align
+from skifer_atlas.diff.compare import rename_references
 from skifer_atlas.model.resolve import ResolvedGraph, resolve
 
 
@@ -126,7 +127,7 @@ def test_es_from_scratch_is_paired_by_score():
         ("modified", "n01", "n01", "warn"),
         ("modified", "n02", "n02", "critical"),
         ("removed", "n03", None, "warn"),
-        ("modified", "n04", "n04", "warn"),
+        ("modified", "n04", "n04", "critical"),
         ("modified", "n05", "n05", "critical"),
         ("added", None, "n03", "critical"),
     ]
@@ -223,6 +224,46 @@ def test_consistent_column_rename_is_one_cosmetic_change():
     assert report.differences[0].changes[0].field == "column"
 
 
+def test_temporal_source_column_change_is_critical():
+    base = revenu_net()
+    other = copy.deepcopy(base)
+    new_date = {"name": "date_paiement", "type": "date", "timezone": "Europe/Paris",
+                "format": "yyyy-MM-dd"}
+    nodes(base)["n01"]["columns"].append(new_date)
+    nodes(other)["n01"]["columns"].append(copy.deepcopy(new_date))
+    nodes(other)["n04"]["column"] = "date_paiement"
+    report = versions(base, other)
+    temporal = next(d for d in report.differences if d.node_ref.base == "n04")
+    assert (temporal.classification, temporal.severity) == ("critical", "critical")
+    assert temporal.changes[0].field == "column"
+
+
+def test_filter_set_rename_preserves_sql_pipes_and_nulls_suffix():
+    content = {"conditions": ["expr:a || b|drop", "expr:a || b"]}
+    renamed = rename_references("filter_set", content, {"a": "nouveau"})
+    assert renamed["conditions"] == ["expr:nouveau || b", "expr:nouveau || b|drop"]
+
+
+def test_alignment_reuses_touched_columns(monkeypatch):
+    from skifer_atlas.diff import align as alignment
+
+    original = alignment.node_columns
+    calls = []
+
+    def counted(node):
+        calls.append(node.id)
+        return original(node)
+
+    monkeypatch.setattr(alignment, "node_columns", counted)
+    side = Side(build(revenu_net()))
+    initial = len(calls)
+    for _ in range(10):
+        for node_id in side.order:
+            side.touched(node_id)
+            side.outputs(node_id)
+    assert len(calls) == initial
+
+
 def test_inconsistent_column_use_is_not_cosmetic():
     other = revenu_net()
     nodes(other)["n05"]["measures"][0][0] = "montant_ttc"
@@ -306,13 +347,13 @@ def test_renamed_graph_is_paired_by_score():
     assert all(p.score >= 5 for p in pairs)
 
 
-def test_low_score_pair_is_to_verify():
+def test_critical_temporal_change_wins_over_low_score():
     base, other = variant("revenu-net--nordis-es.yaml")
     report = diff(base, other, DiffContext("free"))
     period = next(d for d in report.differences if d.node_ref.base == "n04")
     assert next(p.score for p in report.pairs if p.base == "n04") < 5
-    assert (period.classification, period.severity) == ("to_verify", "warn")
-    assert "Appariement incertain" in period.message
+    assert (period.classification, period.severity) == ("critical", "critical")
+    assert "Le résultat change" in period.message
 
 
 def test_text_report_reads_without_json():
