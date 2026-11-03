@@ -158,16 +158,23 @@ def test_a_domain_is_not_removed_when_the_index_cannot_count_its_documents(
     def unavailable(*args):
         raise RepoError("index_busy", "L'index de l'espace est en cours de reconstruction.")
 
+    def broken(*args):
+        raise OSError("disque illisible")
+
+    def remove_marketing(governance):
+        governance["domains"] = [d for d in governance["domains"] if d["id"] != "marketing"]
+
     monkeypatch.setattr(admin, "ensure_index", unavailable)
-    removed = save(client, state, lambda g: g.update(
-        domains=[d for d in g["domains"] if d["id"] != "marketing"]))
-    assert code(removed) == (503, "index_unavailable")
+    assert code(save(client, state, remove_marketing)) == (503, "index_busy")  # réessayer
+    monkeypatch.setattr(admin, "ensure_index", broken)
+    assert code(save(client, state, remove_marketing)) == (503, "index_unavailable")
     kept = save(client, state, lambda g: g.update(allowed_platforms=["databricks"]))
     assert kept.status_code == 201, kept.text
 
 
 def test_a_reader_role_next_to_other_roles_is_dropped(client, joined, as_):
-    """Le rôle lecteur est compris dans les autres : à côté d'eux, il n'est pas enregistré."""
+    """Le rôle lecteur est compris dans les autres : à côté d'eux, il n'est pas enregistré.
+    Un rôle identique en double ne l'est qu'une fois (#88)."""
     bare, _ = joined
     as_("julien.h")
     state = client.get(ADMIN).json()
@@ -175,14 +182,18 @@ def test_a_reader_role_next_to_other_roles_is_dropped(client, joined, as_):
     def change(governance):
         anna = next(m for m in governance["members"] if m["account"] == "anna.k")
         anna["roles"] = [{"role": "lecteur", "domains": []},
+                         {"role": "referent", "domains": ["ventes"]},
                          {"role": "referent", "domains": ["ventes"]}]
+        sami = next(m for m in governance["members"] if m["account"] == "sami.b")
+        sami["roles"] = [{"role": "lecteur", "domains": []}] * 2
 
     response = save(client, state, change)
     assert response.status_code == 201, response.text
     assert "Anna K. (anna.k) : referent (ventes), entité nordis-de." in response.json()[
         "changes"]
-    anna = next(m for m in main_governance(bare)["members"] if m["account"] == "anna.k")
-    assert anna["roles"] == [{"role": "referent", "domains": ["ventes"]}]
+    members = {m["account"]: m for m in main_governance(bare)["members"]}
+    assert members["anna.k"]["roles"] == [{"role": "referent", "domains": ["ventes"]}]
+    assert members["sami.b"]["roles"] == [{"role": "lecteur", "domains": []}]
 
 
 def test_a_name_ending_with_a_period_ends_the_sentence(client, joined, as_):

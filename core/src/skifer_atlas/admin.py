@@ -71,11 +71,16 @@ def is_space_referent(workspace: Workspace) -> bool:
 
 def _document_counts(workspace_id: str, kinds: tuple[str, ...],
                      strict: bool = False) -> dict[str, int]:
-    """Documents par domaine. Index indisponible : `{}` pour l'affichage, ou, en `strict`,
-    `index_unavailable` (un contrôle ne doit pas laisser passer faute de pouvoir compter)."""
+    """Documents par domaine. Index indisponible : `{}` pour l'affichage. En `strict`, un
+    contrôle ne laisse pas passer faute de pouvoir compter : l'erreur de l'index remonte
+    telle quelle (`index_busy` : réessayer), une autre devient `index_unavailable`."""
     try:
         connection = ensure_index(repo_dir(workspace_id), index_path(workspace_id))
-    except (RepoError, OSError, duckdb.Error) as error:
+    except RepoError:
+        if strict:
+            raise
+        return {}
+    except (OSError, duckdb.Error) as error:
         if strict:
             raise RepoError("index_unavailable", "L'index de l'espace est indisponible : "
                             "impossible de vérifier qu'un domaine retiré ne porte plus de "
@@ -192,16 +197,18 @@ def describe_changes(old: Governance, new: Governance) -> list[str]:
     return [change[:-1] if change.endswith("..") else change for change in changes]
 
 
-def _without_redundant_reader(data: dict) -> dict:
-    """Le rôle lecteur est compris dans tout autre rôle : à côté d'eux, il est retiré."""
+def _without_redundant_roles(data: dict) -> dict:
+    """Un rôle identique en double n'est gardé qu'une fois ; le rôle lecteur, compris dans
+    tout autre rôle, est retiré à côté d'eux."""
     members = []
     for member in data.get("members") or []:
         roles = member.get("roles") if isinstance(member, dict) else None
-        if isinstance(roles, list) and any(isinstance(r, dict) and r.get("role") != "lecteur"
-                                           for r in roles):
-            member = {**member, "roles": [r for r in roles
-                                          if not (isinstance(r, dict)
-                                                  and r.get("role") == "lecteur")]}
+        if isinstance(roles, list):
+            unique = [r for i, r in enumerate(roles) if r not in roles[:i]]
+            if any(isinstance(r, dict) and r.get("role") != "lecteur" for r in unique):
+                unique = [r for r in unique
+                          if not (isinstance(r, dict) and r.get("role") == "lecteur")]
+            member = {**member, "roles": unique}
         members.append(member)
     return {**data, "members": members} if "members" in data else data
 
@@ -210,7 +217,7 @@ def save_governance(workspace_id: str, data: dict, base_digest: str) -> dict:
     """Crée la proposition « Gouvernance » ; la fusionne aussitôt si aucun autre compte
     n'est habilité à l'approuver (référent seul, ADR 0008)."""
     workspace, governance, _ = _current(workspace_id)
-    data = _without_redundant_reader(data)
+    data = _without_redundant_roles(data)
     try:
         proposed = Governance.model_validate(data)
     except ValueError:

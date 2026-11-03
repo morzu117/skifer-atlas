@@ -320,11 +320,24 @@ class Job:
 
 _jobs: dict[tuple[str, int], Job] = {}
 _jobs_lock = threading.Lock()
+_creating: dict[str, threading.Lock] = {}  # par base : la création d'une ligne et son job
+
+
+def _creation_lock(db: Path) -> threading.Lock:
+    with _jobs_lock:
+        return _creating.setdefault(str(db), threading.Lock())
 
 
 def job(db: Path, number: int) -> Job | None:
     with _jobs_lock:
         return _jobs.get((str(db), number))
+
+
+def registered(db: Path, number: int) -> Job | None:
+    """Le job, après toute création en cours sur cette base : une ligne « running » lue
+    pendant `start` trouve ainsi son job. Les autres bases n'attendent pas."""
+    with _creation_lock(db):
+        return job(db, number)
 
 
 def _position(columns: list[str], name: str) -> int:
@@ -439,14 +452,17 @@ def _guarded(job: Job, runner: Runner) -> None:
 def start(db: Path, account: str | None, prepared: Prepared, runner: Runner,
           wait: bool = False) -> Job:
     """Enregistre la comparaison (`running`) puis l'exécute, en tâche de fond par défaut."""
-    # La ligne et le job ensemble : `get_comparison`, qui relit le registre sous ce verrou,
-    # ne voit jamais la ligne « running » d'un job pas encore inscrit.
-    with _jobs_lock:
+    # La ligne et le job ensemble, sous le verrou de création de la base : `get_comparison`
+    # relit le registre par `registered` et ne voit jamais la ligne « running » d'un job pas
+    # encore inscrit. `store.create` peut attendre une base occupée (ADR 0032) : le verrou
+    # du registre n'est pas tenu pendant ce temps.
+    with _creation_lock(db):
         number = store.create(db, account, prepared.kpi.data_product.id,
                               prepared.kpi.data_product.version, prepared.scope_dict(),
                               prepared.tolerance)
         current = Job(number, db, prepared)
-        _jobs[(str(db), number)] = current
+        with _jobs_lock:
+            _jobs[(str(db), number)] = current
     if wait:
         _guarded(current, runner)
     else:

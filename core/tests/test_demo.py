@@ -1,6 +1,7 @@
 """Démo de dix minutes (`examples/demo/lancer-demo.sh`) : la préparation seule, sans l'app,
 pour qu'une évolution des scripts d'`examples/` ne la casse pas sans bruit. Lente (dépôt,
-propositions, serveur éphémère) : hors du pytest par défaut, `uv run pytest -m slow`."""
+propositions, serveur éphémère) : hors du pytest par défaut, `uv run pytest -m slow`.
+Même nommé, ce fichier ne tourne qu'avec `-m slow` : sans, ses tests sont désélectionnés."""
 
 import os
 import subprocess

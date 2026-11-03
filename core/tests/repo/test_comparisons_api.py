@@ -251,7 +251,8 @@ def test_comparison_read_while_it_is_created_is_not_interrupted(client, joined, 
                                                                 monkeypatch):
     """Une lecture tombe entre la création de la ligne (« running ») et l'inscription du
     job : elle attend l'inscription et ne lit pas « interrupted » (#59)."""
-    create, seen, readers, reading = store.create, [], [], threading.Event()
+    create, seen, readers, blocked = store.create, [], [], []
+    reading = threading.Event()
 
     def read(number):
         reading.set()
@@ -264,13 +265,34 @@ def test_comparison_read_while_it_is_created_is_not_interrupted(client, joined, 
         reader.start()
         assert reading.wait(5)
         reader.join(0.5)  # sans le verrou de `start`, la lecture finit ici, avant l'inscription
+        blocked.append(reader.is_alive())
         return number
 
     monkeypatch.setattr(store, "create", create_then_read)
     number = client.post(COMPARISONS, json=BODY).json()["id"]
     readers[0].join(10)
+    assert blocked == [True]  # la lecture attendait l'inscription du job
     assert len(seen) == 1 and seen[0] != "interrupted"
     assert finished(client, number)["status"] == "done"
+
+
+def test_a_comparison_being_created_does_not_block_another_workspace(tmp_path, monkeypatch):
+    """#86 : la création d'une comparaison, qui peut attendre une base occupée, ne bloque
+    pas la lecture du registre d'une autre base."""
+    from skifer_atlas.compare.orchestrate import _creation_lock, registered
+    busy, other = tmp_path / "a.duckdb", tmp_path / "b.duckdb"
+    done = []
+    with _creation_lock(busy):
+        reader = threading.Thread(target=lambda: done.append(registered(other, 1)))
+        reader.start()
+        reader.join(5)
+        assert done == [None]
+        waiting = threading.Thread(target=lambda: done.append(registered(busy, 1)))
+        waiting.start()
+        waiting.join(0.2)
+        assert waiting.is_alive()  # même base : elle attend la fin de la création
+    waiting.join(5)
+    assert done == [None, None]
 
 
 def test_request_validation(client, joined, local):

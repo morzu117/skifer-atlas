@@ -168,7 +168,8 @@ def test_the_tag_fetch_of_a_merge_waits_for_a_concurrent_sync(client, monkeypatc
                 running[0] -= 1
 
     def sync_lock(repo):
-        sync_waits.set()
+        if threading.current_thread() is sync:  # la fusion ne doit pas lever l'attente
+            sync_waits.set()
         return real_lock(repo)
 
     def call(action):
