@@ -13,9 +13,26 @@ import os
 import sys
 import threading
 from collections.abc import Callable
+from functools import cache
 
 POLL_SECONDS = 1.0
 ERROR_ACCESS_DENIED = 5
+
+
+@cache
+def _windows_api():
+    """Charge kernel32 une fois et déclare les signatures qui transportent un HANDLE."""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    return kernel32
 
 
 def alive(pid: int) -> bool:
@@ -26,7 +43,7 @@ def alive(pid: int) -> bool:
     if sys.platform == "win32":
         import ctypes
 
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32 = _windows_api()
         handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
         if not handle:
             # Accès refusé : il existe, sous un autre compte (comme `PermissionError` sous
