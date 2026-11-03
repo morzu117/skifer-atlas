@@ -28,6 +28,12 @@ def test_from_scratch_variant(es):
     assert document.concepts == ["facture"]
 
 
+def test_variant_canonical_id_cannot_use_the_variant_separator(de):
+    de["variant_of"]["id"] = "revenu--net"
+    assert codes(validate_data(de)) == [
+        ("/variant_of/id", None, "ambiguous_document_id")]
+
+
 def test_override_without_overrides_is_refused(de):
     del de["overrides"]
     assert codes(validate_data(de)) == [("/overrides", None, "missing_field")]

@@ -196,6 +196,17 @@ def validate_data(raw: Any) -> ValidationResult:
 def document_checks(raw: dict) -> list[Issue]:
     """Contrôles qui demandent de voir tout le document. Robuste aux formes invalides."""
     issues: list[Issue] = []
+    product = raw.get("data_product")
+    document_id = product.get("id") if isinstance(product, dict) else None
+    if raw.get("kind") in ("concept", "kpi") and isinstance(document_id, str) and "--" in document_id:
+        issues.append(Issue("/data_product/id", None, "ambiguous_document_id",
+                            "Un identifiant de concept ou KPI ne peut pas contenir « -- » : "
+                            "ce séparateur est réservé aux variantes."))
+    variant_of = raw.get("variant_of")
+    canonical_id = variant_of.get("id") if isinstance(variant_of, dict) else None
+    if raw.get("kind") == "variant" and isinstance(canonical_id, str) and "--" in canonical_id:
+        issues.append(Issue("/variant_of/id", None, "ambiguous_document_id",
+                            "L'identifiant du KPI canonique ne peut pas contenir « -- »."))
     graph = raw.get("graph")
     nodes = graph.get("nodes") if isinstance(graph, dict) else None
     ids: dict[str, int] = {}

@@ -229,6 +229,14 @@ def analyze(root: Path, repo: Path | None = None) -> Analysis:
     """Lit et contrôle tous les documents d'un arbre. `repo` fournit les tags des
     versions antérieures quand `root` n'est qu'une extraction (proposition)."""
     entries = [_read(root, file) for file in document_files(root)]
+    paths: dict[str, str] = {}
+    for entry in entries:
+        document_id = entry.file.expected_id
+        if previous := paths.get(document_id):
+            raise RepoError("ambiguous_document_id", f"Les fichiers « {previous} » et "
+                            f"« {entry.file.path} » ont le même identifiant « {document_id} ». "
+                            "Renommer le concept ou le KPI qui contient « -- ».")
+        paths[document_id] = entry.file.path
     library = _check(repo or root, entries)
     return Analysis(entries, library)
 
