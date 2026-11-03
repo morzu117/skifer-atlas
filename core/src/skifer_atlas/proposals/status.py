@@ -9,8 +9,29 @@ from __future__ import annotations
 from ..githost.base import PullRequest
 from ..governance.model import member_domains
 from ..governance.rules import decide, requirement
+from ..model.io import read_yaml
 from ..repo.git import RepoError
+from ..repo.layout import document_path
 from .common import Context, open_context, parse_body
+
+
+def _label(context: Context, target: dict, revision: str) -> str:
+    """Libellé du document Git, indépendant d'un titre de PR modifié sur GitHub."""
+    if target["kind"] == "variant":
+        path = document_path("kpi", target["kpi_id"])
+        revision = context.base
+        fallback = target["kpi_id"]
+    elif target["kind"] in ("kpi", "concept"):
+        path = target["path"]
+        fallback = target["id"]
+    elif target["kind"] == "governance":
+        return "Gouvernance de l'espace"
+    else:
+        return f"Point d'accès {target['id']}"
+    text = context.show(path, revision)
+    raw, _ = read_yaml(text) if text else (None, [])
+    label = raw.get("label") if isinstance(raw, dict) else None
+    return label if isinstance(label, str) and label.strip() else fallback
 
 
 def describe(context: Context, pull: PullRequest, detail: bool = False) -> dict:
@@ -22,6 +43,7 @@ def describe(context: Context, pull: PullRequest, detail: bool = False) -> dict:
         return found
     target = block["target"]
     found.update(document_id=target["id"], document_kind=target["kind"],
+                 document_label=_label(context, target, pull.merged_commit or pull.head),
                  kpi_id=target.get("kpi_id"), entity=target.get("entity"),
                  nature=block["nature"], domain=block.get("domain"),
                  base_version=block.get("base_version"), version=block.get("version"))

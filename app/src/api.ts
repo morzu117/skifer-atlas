@@ -492,6 +492,7 @@ export type ProposalItem = {
   state: "open" | "merged" | "closed";
   created_at: string;
   document_id: string;
+  document_label: string;
   document_kind: string;
   kpi_id: string | null;
   entity: string | null;

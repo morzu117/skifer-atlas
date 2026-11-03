@@ -64,6 +64,19 @@ def test_queue_reflects_the_demo_with_finance_first(client):
         1: ("from_scratch", 1, 2, "Validation canonique exigée", False),
         2: ("new_version", 1, 1, None, True),
     }
+    assert by_entity(items)["revenu-net--nordis-de"]["document_label"] == "Revenu net"
+
+
+def test_document_label_does_not_depend_on_pull_request_title(client):
+    from dataclasses import replace
+
+    from skifer_atlas.proposals.common import open_context
+    from skifer_atlas.proposals.status import describe
+
+    context = open_context("groupe-nordis", fetch=False)
+    pull = context.host.get_pull_request(5)
+    renamed = describe(context, replace(pull, title="Titre édité — libre v999"))
+    assert renamed["document_label"] == "Revenu net"
 
 
 def test_viewer_explains_why_approval_is_disabled(client, monkeypatch):

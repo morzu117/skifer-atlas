@@ -20,6 +20,7 @@ function item(id: number, overrides: Partial<ProposalItem> = {}): ProposalItem {
     state: "open",
     created_at: "2026-10-30T08:00:00+01:00",
     document_id: "revenu-net--nordis-de",
+    document_label: "Revenu net",
     document_kind: "variant",
     kpi_id: "revenu-net",
     entity: "nordis-de",
@@ -42,6 +43,7 @@ const SERVICE = item(2, {
   title: "Taux de service v3",
   author: "julien.h",
   document_id: "taux-de-service",
+  document_label: "Taux de service",
   document_kind: "kpi",
   kpi_id: null,
   entity: null,
@@ -242,6 +244,21 @@ describe("propositions", () => {
     ]);
   });
 
+  it("retombe sur tous les domaines si le compte ne valide plus aucun domaine", async () => {
+    window.location.hash = "#/w/groupe-nordis/propositions?domain=mes-domaines";
+    proposalServer({ queue: { ...QUEUE, review_domains: [] } });
+    render(<Harness />);
+    expect(within(await queueList()).getAllByRole("link")).toHaveLength(3);
+    expect(screen.getByRole("combobox", { name: "Domaine" })).toHaveValue("tous");
+  });
+
+  it("affiche le libellé serveur même si le titre de la PR est édité", async () => {
+    const edited = item(5, { title: "Titre libre — sans convention" });
+    proposalServer({ queue: { ...QUEUE, items: [edited] } });
+    render(<Harness />);
+    expect(within(await queueList()).getByText("Revenu net · nordis-de")).toBeInTheDocument();
+  });
+
   it("détail de la surcharge DE : bandeau, verdicts des nœuds, liste des écarts (critères 3 et 7)", async () => {
     proposalServer();
     render(<Harness />);
@@ -312,6 +329,7 @@ describe("propositions", () => {
       body: { event: "approve", body: "" },
     });
     expect(changed).toHaveBeenCalled();
+    await waitFor(() => expect(server.calls.filter((c) => c.path === `${API}/5/graphs`)).toHaveLength(2));
     expect(screen.getByText("a approuvé", { exact: false })).toBeInTheDocument();
     window.removeEventListener(PROPOSALS_CHANGED, changed);
   });
