@@ -300,6 +300,11 @@ def draft_checks(raw: dict) -> list[Issue]:
             "/extraction", None, "invalid_value",
             "Le bloc « extraction » n'est admis que dans un brouillon (status: draft).",
         ))
+    if status == "draft" and not isinstance(extraction, dict):
+        issues.append(Issue(
+            "/extraction", None, "invalid_value",
+            "Un document marqué « draft » doit porter son bloc « extraction ».",
+        ))
     if status == "needs_curation":
         issues.append(Issue(
             "/status", None, "needs_curation",
@@ -324,6 +329,6 @@ def draft_checks(raw: dict) -> list[Issue]:
             node_id = node.get("id") if isinstance(node, dict) else None
         issues.append(Issue(
             pointer(path), node_id, "todo", "Valeur à compléter.",
-            "warning" if status is not None else "error",
+            "warning" if status == "draft" else "error",
         ))
     return issues

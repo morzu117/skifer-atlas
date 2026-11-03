@@ -190,6 +190,18 @@ def test_drafts_on_stdout_report_on_stderr(tmp_path):
     assert "[nulls_inferred]" in result.stderr
 
 
+def test_extract_refuses_duplicate_ids_before_writing_files(tmp_path):
+    first, second = tmp_path / "one" / "same.sql", tmp_path / "two" / "same.sql"
+    for path in (first, second):
+        path.parent.mkdir()
+        path.write_text("SELECT id FROM s.t;\n", encoding="utf-8")
+    out = tmp_path / "drafts"
+    result = run("extract", first, second, "--dialect", "databricks", "--out", out)
+    assert result.returncode == 1
+    assert "Brouillons de même identifiant : same" in result.stderr
+    assert not out.exists()
+
+
 # --- démonstration (critère 8) ------------------------------------------------------------
 
 def test_demo_shows_the_announced_differences(tmp_path):
