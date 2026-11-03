@@ -112,6 +112,7 @@ def test_document_versions_and_dependencies(client, joined):
 
 def test_document_content_comes_from_the_indexed_commit(client, joined):
     original = client.get(f"{WS}/documents/revenu-net").json()["content"]
+    assert "déduction des taxes" in original
     path = repo_dir("groupe-nordis") / REVENU_NET
     path.write_text(original.replace("Revenu net", "Valeur non commitée", 1),
                     encoding="utf-8")

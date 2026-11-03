@@ -62,7 +62,8 @@ _CREDENTIAL_HELPER = ('!f() { test "$1" = get || exit 0; echo username=x-access-
 
 def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
             error_code: str = "git_failed", *, input: str | None = None,
-            env: dict[str, str] | None = None, token: str | None = None) -> str:
+            env: dict[str, str] | None = None, token: str | None = None,
+            encoding: str | None = None) -> str:
     """Sortie standard d'une commande git ; lève `RepoError` si elle échoue."""
     git_version()
     command = ["git"]
@@ -72,7 +73,8 @@ def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
         environment["ATLAS_GIT_TOKEN"] = token
     try:
         result = subprocess.run([*command, *args], cwd=cwd, capture_output=True, text=True,
-                                check=False, timeout=timeout, env=environment, input=input)
+                                check=False, timeout=timeout, env=environment, input=input,
+                                encoding=encoding)
     except subprocess.TimeoutExpired as error:
         raise RepoError("git_timeout", f"git {args[0]} n'a pas répondu en {timeout} s.") from error
     if result.returncode != 0:
@@ -115,4 +117,5 @@ def head(repo: Path) -> str:
 
 
 def show(repo: Path, revision: str, path: str) -> str:
-    return run_git(["show", f"{revision}:{path}"], repo, error_code="not_found")
+    return run_git(["show", f"{revision}:{path}"], repo, error_code="not_found",
+                   encoding="utf-8")
