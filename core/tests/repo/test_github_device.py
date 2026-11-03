@@ -261,6 +261,34 @@ def test_two_simultaneous_polls_make_one_request(github, monkeypatch):
     assert [path for path, _ in github["calls"]].count("/login/oauth/access_token") == 1
 
 
+def test_poll_does_not_report_connected_before_the_token_is_stored(github, monkeypatch):
+    """#92 : une écriture lente au coffre ne rend pas « connected » trop tôt."""
+    flow = device.start("groupe-nordis")["flow"]
+    github["answers"][:] = [{"access_token": TOKEN, "token_type": "bearer", "scope": "repo"}]
+    writing, allow_write = threading.Event(), threading.Event()
+    put = Vault.put
+
+    def slow_put(self, workspace_id, entry, credential):
+        writing.set()
+        assert allow_write.wait(5)
+        return put(self, workspace_id, entry, credential)
+
+    monkeypatch.setattr(Vault, "put", slow_put)
+    statuses = {}
+    first = threading.Thread(target=lambda: statuses.update(first=device.poll(flow)["status"]))
+    first.start()
+    try:
+        assert writing.wait(5)
+        assert Vault().get("groupe-nordis", GITHUB_ENTRY) is None
+        assert device.poll(flow)["status"] == "pending"
+    finally:
+        allow_write.set()
+        first.join(5)
+    assert not first.is_alive()
+    assert statuses == {"first": "connected"}
+    assert Vault().get("groupe-nordis", GITHUB_ENTRY).access_token == TOKEN
+
+
 def test_refused_expired_and_unconfigured(github, monkeypatch):
     """Critère 5 : refus et expiration sont des états ; sans client OAuth, une erreur claire."""
     client = TestClient(create_app(token="secret"), headers=AUTH)

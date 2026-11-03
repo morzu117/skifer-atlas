@@ -166,13 +166,17 @@ def _poll(flow: Flow) -> dict:
     elif not error and answer.get("access_token"):
         token = answer["access_token"]
         expires_in = answer.get("expires_in")
-        flow.credential = Credential(
+        credential = Credential(
             kind="github", access_token=token, refresh_token=answer.get("refresh_token"),
             expires_at=now + int(expires_in) if expires_in else None,
             client_id=client_id(), account=_account(token))
+        if flow.workspace_id is not None:
+            Vault().put(flow.workspace_id, GITHUB_ENTRY, credential)
+        # Un second poll peut rendre l'état courant sans prendre le verrou. Ne publier
+        # « connected » qu'une fois le jeton réellement disponible dans le coffre.
+        flow.credential = credential
         flow.status = "connected"
         if flow.workspace_id is not None:
-            Vault().put(flow.workspace_id, GITHUB_ENTRY, flow.credential)
             with _lock:
                 _flows.pop(flow.id, None)
     return _state(flow)
