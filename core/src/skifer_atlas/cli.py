@@ -145,7 +145,6 @@ def _checked_graph(path: str, library: Library) -> object | None:
 
 
 def _resolve(args: argparse.Namespace) -> int:
-    library = _library([args.canonical])
     try:
         document = load_document(Path(args.variant))
     except DocumentError as error:
@@ -154,6 +153,12 @@ def _resolve(args: argparse.Namespace) -> int:
     if document.kind != "variant":
         print("Le document à résoudre doit être une variante.", file=sys.stderr)
         return 1
+    try:
+        canonical_document = load_document(Path(args.canonical))
+    except DocumentError as error:
+        _report_failure(args.canonical, error.issues)
+        return 1
+    library = Library([canonical_document])
     canonical = library.kpi(document.variant_of.id, document.variant_of.version)
     if canonical is None:
         print("La variante ne porte pas sur ce canonique.", file=sys.stderr)
