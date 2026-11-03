@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from weakref import WeakValueDictionary
 
 import duckdb
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -318,9 +319,18 @@ class Job:
                 for p in self.progress.values()]
 
 
+@dataclass(frozen=True)
+class Registration:
+    job: Job | None
+    pending: bool = False  # une création tient encore le verrou de cette base
+
+
 _jobs: dict[tuple[str, int], Job] = {}
 _jobs_lock = threading.Lock()
-_creating: dict[str, threading.Lock] = {}  # par base : la création d'une ligne et son job
+CREATION_WAIT_SECONDS = 1.0
+_creating: WeakValueDictionary[str, threading.Lock] = WeakValueDictionary()
+# Un verrou par base pendant les créations et lectures concurrentes ; les bases qui ne
+# sont plus utilisées ne gardent pas leur verrou pour toute la vie du serveur.
 
 
 def _creation_lock(db: Path) -> threading.Lock:
@@ -333,11 +343,17 @@ def job(db: Path, number: int) -> Job | None:
         return _jobs.get((str(db), number))
 
 
-def registered(db: Path, number: int) -> Job | None:
+def registered(db: Path, number: int) -> Registration:
     """Le job, après toute création en cours sur cette base : une ligne « running » lue
-    pendant `start` trouve ainsi son job. Les autres bases n'attendent pas."""
-    with _creation_lock(db):
-        return job(db, number)
+    pendant `start` trouve ainsi son job. Les autres bases n'attendent pas. Une création
+    trop longue garde « running » sans progression, pour que l'écran réessaie."""
+    lock = _creation_lock(db)
+    if not lock.acquire(timeout=CREATION_WAIT_SECONDS):
+        return Registration(None, pending=True)
+    try:
+        return Registration(job(db, number))
+    finally:
+        lock.release()
 
 
 def _position(columns: list[str], name: str) -> int:
