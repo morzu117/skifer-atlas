@@ -12,8 +12,14 @@ cd "$ROOT/core"
 SYNC=(uv sync --group build)
 # cryptography n'a plus de wheel macOS x86_64 : uv la compile. Liée dynamiquement à
 # l'OpenSSL de Homebrew, elle heurterait le libssl du Python embarqué (même nom, autre
-# version) ; on la lie en statique, et on ignore une compilation dynamique en cache.
-if [ "$TRIPLE" = "x86_64-apple-darwin" ] && [ -z "${OPENSSL_DIR:-}" ] && command -v brew > /dev/null; then
+# version) ; on la lie en statique, et on ignore une compilation dynamique en cache
+# (recompilée à chaque construction : quelques minutes, sur cette seule cible).
+if [ "$TRIPLE" = "x86_64-apple-darwin" ] && [ -z "${OPENSSL_DIR:-}" ]; then
+  if ! command -v brew > /dev/null || [ ! -d "$(brew --prefix openssl@3 2>/dev/null)" ]; then
+    echo "macOS x86_64 : cryptography se compile contre un OpenSSL statique. Installer" \
+      "openssl@3 (brew install openssl@3), ou désigner un OpenSSL par OPENSSL_DIR." >&2
+    exit 1
+  fi
   export OPENSSL_DIR="$(brew --prefix openssl@3)" OPENSSL_STATIC=1
   SYNC+=(--reinstall-package cryptography --refresh-package cryptography)
 fi
