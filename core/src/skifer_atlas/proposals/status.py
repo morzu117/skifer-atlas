@@ -12,7 +12,7 @@ from ..governance.rules import decide, requirement
 from ..model.io import read_yaml
 from ..repo.git import RepoError
 from ..repo.layout import document_path
-from .common import Context, open_context, parse_body
+from .common import Context, open_context, parse_body, review_domain
 
 
 def _label(context: Context, target: dict, revision: str) -> str:
@@ -49,7 +49,8 @@ def describe(context: Context, pull: PullRequest, detail: bool = False) -> dict:
                  base_version=block.get("base_version"), version=block.get("version"))
     reviews = context.host.get_reviews(pull.number) if pull.state == "open" or detail else []
     if pull.state == "open":
-        decision = decide(context.governance, block["nature"], block.get("domain"),
+        domain = review_domain(context, target, block.get("base_version"), block.get("domain"))
+        decision = decide(context.governance, block["nature"], domain,
                           pull.author, reviews, pull.head)
         found.update(decision.to_dict())
         found["awaiting_me"] = _awaiting(context, pull, block, decision)
@@ -72,7 +73,9 @@ def _awaiting(context: Context, pull: PullRequest, block: dict, decision) -> boo
     """Ouverte, d'un autre auteur, et j'y suis habilité sans m'être encore prononcé sur le
     dernier commit : c'est le compteur orange de la navigation."""
     account = context.account
-    eligible = requirement(context.governance, block["nature"], block.get("domain")).eligible
+    domain = review_domain(context, block["target"], block.get("base_version"),
+                           block.get("domain"))
+    eligible = requirement(context.governance, block["nature"], domain).eligible
     return (account != pull.author and account in eligible
             and account not in decision.approvers
             and account not in decision.changes_requested_by)

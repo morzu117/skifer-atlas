@@ -18,7 +18,7 @@ from ..model.resolve import ResolvedGraph, resolve
 from ..repo import versions as repo_versions
 from ..repo.git import RepoError
 from ..sheet import labelled_layout, resolved_graph
-from .common import Context, open_context, parse_body
+from .common import Context, open_context, parse_body, review_domain
 from .status import list_proposals
 
 
@@ -46,7 +46,9 @@ def viewer(context: Context, found: dict) -> dict:
     """Ce que le compte courant peut faire de la proposition, et pourquoi pas."""
     account = context.account
     open_ = found.get("state") == "open"
-    eligible = requirement(context.governance, found["nature"], found.get("domain")).eligible
+    domain = review_domain(context, found["block"]["target"], found.get("base_version"),
+                           found.get("domain"))
+    eligible = requirement(context.governance, found["nature"], domain).eligible
     if not open_:
         reason = "La proposition n'est plus ouverte."
     elif account == found["author"]:

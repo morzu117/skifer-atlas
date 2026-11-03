@@ -181,6 +181,20 @@ def test_solo_workspace_documents():
     assert (decision.ready_to_merge, decision.merge_mode) == (True, "no_other_eligible")
 
 
+def test_no_review_exception_requires_the_author_to_be_eligible():
+    from skifer_atlas.governance.model import Governance
+
+    governance_without_approver = Governance.model_validate({
+        "members": [{"account": "writer", "name": "Writer",
+                     "roles": [{"role": "contributeur"}]}],
+        "domains": [{"id": "finance", "label": "Finance"}],
+    })
+    decision = decide(governance_without_approver, "new_version", "finance", "writer", [], HEAD)
+    assert not decision.ready_to_merge
+    assert decision.merge_mode == "reviewed"
+    assert decision.mention != NO_REVIEW_MENTION
+
+
 # --- CODEOWNERS ---------------------------------------------------------------------------
 
 DOCUMENTS = [OwnedDocument("kpis/revenu-net.yaml", "kpi", "finance"),

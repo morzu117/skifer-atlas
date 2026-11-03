@@ -85,11 +85,13 @@ def decide(governance: Governance, nature: str, domain_id: str | None, author: s
                       if a in others and r.state == "changes_requested")
     decision = Decision(len(approvers), need.required, approvers, blocking,
                         mention=need.mention)
-    if not others:
+    if not others and author in need.eligible:
         decision.ready_to_merge = True
         decision.merge_mode = "no_other_eligible"
         decision.mention = NO_REVIEW_MENTION
         decision.explanation = "Aucun autre compte n'est habilité à approuver."
+    elif not need.eligible:
+        decision.explanation = "Aucun compte n'est habilité à approuver dans ce domaine."
     elif blocking:
         decision.explanation = f"Changements demandés par {', '.join(blocking)}."
     elif len(approvers) >= need.required:
