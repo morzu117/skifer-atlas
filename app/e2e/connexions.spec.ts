@@ -83,6 +83,12 @@ test("nouveau point d'accès : OAuth et test avant de le proposer", async ({ pag
   await panel.getByRole("link", { name: "Voir la proposition" }).click();
   await expect(page).toHaveURL(/#\/w\/groupe-nordis\/propositions\?n=\d+&status=open&domain=tous$/);
   await expect(page.getByRole("heading", { name: /dbx-de/ }).first()).toBeVisible();
+  await page.goto(CONNECTIONS);
+  const drafts = page.getByRole("complementary", { name: "Nouveau point d'accès" });
+  await expect(drafts.getByText("Connexions de brouillon à nettoyer")).toBeVisible();
+  await expect(drafts.getByText("dbx-de", { exact: true })).toBeVisible();
+  await drafts.getByRole("button", { name: "Oublier" }).click();
+  await expect(drafts.getByText("Connexions de brouillon à nettoyer")).toHaveCount(0);
 });
 
 test("[S-0018-02] Snowflake : SSO puis paire de clés, tester, révoquer (plan 0018)", async ({ page }) => {
