@@ -22,7 +22,7 @@ NORMALIZATION = "atlas1"
 _METADATA = ("id", "type", "label", "note", "inputs", "owner", "bypass_reason")
 
 
-def _canonical_json(value: Any) -> str:
+def canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
@@ -90,6 +90,8 @@ def logical_graph(document: Any) -> LogicalGraph:
     # filtre qu'il est seul à consommer. Le groupe est désigné par son dernier filtre.
     group_of: dict[str, list[str]] = {}
     for node_id in view.topological_order():
+        if node_id not in useful:
+            continue
         node = view.by_id[node_id]
         if node.type != "filter":
             continue
@@ -123,7 +125,7 @@ def logical_graph(document: Any) -> LogicalGraph:
 
     signature: dict[str, str] = {}
     for node_id, node in nodes.items():
-        payload = _canonical_json([node.type, node.content, [signature[i] for i in node.inputs]])
+        payload = canonical_json([node.type, node.content, [signature[i] for i in node.inputs]])
         signature[node_id] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     return LogicalGraph(nodes, view.output, signature)
 
@@ -135,7 +137,7 @@ def normalized_form(document: Any) -> dict:
     # Étape 3 : ordre topologique départagé par (type, contenu, signature) ; renumérotation.
     def rank(node_id: str) -> tuple[str, str, str]:
         node = logical[node_id]
-        return node.type, _canonical_json(node.content), graph.signature[node_id]
+        return node.type, canonical_json(node.content), graph.signature[node_id]
 
     remaining = {node_id: set(node.inputs) for node_id, node in logical.items()}
     new_id: dict[str, str] = {}

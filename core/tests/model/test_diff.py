@@ -34,6 +34,18 @@ def test_identical_up_to_filter_order():
     assert report.differences == [] and report.pairs == []
 
 
+def test_orphan_filter_after_output_does_not_break_diff():
+    base = revenu_net()
+    base["graph"]["output"] = "n02"
+    other = copy.deepcopy(base)
+    other["graph"]["nodes"].append({
+        "id": "n91", "type": "filter", "inputs": ["n02"],
+        "condition": "statut:equals:annulée", "nulls": "drop",
+    })
+    report = versions(base, other)
+    assert report.identical
+
+
 def test_de_against_canonical_matches_the_mockup():
     base, other = variant("revenu-net--nordis-de.yaml")
     report = diff(base, other, DiffContext("override"))

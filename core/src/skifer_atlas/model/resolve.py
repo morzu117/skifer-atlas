@@ -10,8 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from pydantic import ValidationError
+
 from .check import check_document, has_errors
-from .document import KpiDocument
+from .document import KpiDocument, Semantics
 from .errors import Issue, pointer
 from .graph import Library
 from .variants import OverrideVariant
@@ -83,7 +85,16 @@ def _apply_overrides(variant: OverrideVariant, canonical: KpiDocument) -> Resolv
             nodes[position[override.node]] = override.replace
         else:
             attribute = override.node.removeprefix("semantics.")
-            semantics = semantics.model_copy(update={attribute: override.value})
+            try:
+                semantics = Semantics.model_validate({
+                    **semantics.model_dump(), attribute: override.value,
+                })
+            except ValidationError:
+                result.issues.append(Issue(
+                    pointer(["overrides", index, "value"]), None, "invalid_override_value",
+                    f"Valeur invalide pour {override.node}.",
+                ))
+                continue
         classification: Classification = "declared" if override.node in declared else "undeclared"
         result.overrides.append(
             ResolvedOverride(override.node, classification, override.justification)

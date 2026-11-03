@@ -82,6 +82,17 @@ def test_semantics_override():
     ]
 
 
+def test_semantics_override_is_revalidated_after_application():
+    variant = build(de())
+    bad = variant.overrides[0].model_copy(update={"node": "semantics.currency", "value": 42,
+                                                  "replace": None})
+    variant = variant.model_copy(update={"overrides": [bad]})
+    result = resolve(variant, build(revenu_net()))
+    assert result.document is None
+    assert [(issue.code, issue.path) for issue in result.issues] == [
+        ("invalid_override_value", "/overrides/0/value")]
+
+
 def test_variant_of_mismatch():
     canonical = revenu_net()
     canonical["data_product"]["version"] = 5
