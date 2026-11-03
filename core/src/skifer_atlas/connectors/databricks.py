@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime
 import threading
 import time
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from ..repo.git import RepoError
@@ -27,18 +27,24 @@ _DONE = {"SUCCEEDED", "FAILED", "CANCELED", "CLOSED"}
 def _value(text: str | None, kind: str) -> Any:
     if text is None:
         return None
-    if kind in ("byte", "short", "int", "long"):
-        return int(text)
-    if kind == "decimal":
-        return Decimal(text)
-    if kind in ("float", "double"):
-        return float(text)
-    if kind == "boolean":
-        return text.lower() == "true"
-    if kind == "date":
-        return datetime.date.fromisoformat(text)
-    if kind in ("timestamp", "timestamp_ntz"):
-        return datetime.datetime.fromisoformat(text)
+    try:
+        if kind in ("byte", "short", "int", "long"):
+            return int(text)
+        if kind == "decimal":
+            return Decimal(text)
+        if kind in ("float", "double"):
+            return float(text)
+        if kind == "boolean":
+            if not isinstance(text, str) or text.lower() not in ("true", "false"):
+                raise ValueError("booléen invalide")
+            return text.lower() == "true"
+        if kind == "date":
+            return datetime.date.fromisoformat(text)
+        if kind in ("timestamp", "timestamp_ntz"):
+            return datetime.datetime.fromisoformat(text)
+    except (ValueError, TypeError, InvalidOperation):
+        raise RepoError("query_failed", f"Valeur {kind} invalide dans la réponse "
+                        "Databricks.") from None
     return text
 
 
@@ -58,7 +64,7 @@ class DatabricksConnector:
         if reply.status == 404:
             raise RepoError("platform_not_found", f"Introuvable sur Databricks (warehouse "
                             f"{self.point.warehouse()} ?) : {message_of(reply.body)}")
-        if reply.status >= 400:
+        if reply.status >= 300:
             raise RepoError("query_failed", f"Databricks a répondu HTTP {reply.status} : "
                             f"{message_of(reply.body)}")
         return reply.body if isinstance(reply.body, dict) else {}
@@ -80,6 +86,8 @@ class DatabricksConnector:
         deadline = time.monotonic() + timeout
         reply = self._call("POST", "/api/2.0/sql/statements", body)
         statement = reply.get("statement_id")
+        if not isinstance(statement, str) or not statement:
+            raise RepoError("query_failed", "Réponse Databricks sans identifiant de requête.")
         while reply.get("status", {}).get("state") not in _DONE:
             if cancel is not None and cancel.is_set():
                 self._cancel(statement)
@@ -106,6 +114,9 @@ class DatabricksConnector:
         chunk = reply.get("result") or {}
         while True:
             for raw in chunk.get("data_array") or []:
+                if not isinstance(raw, (list, tuple)) or len(raw) != len(kinds):
+                    raise RepoError("query_failed", "Ligne incomplète dans la réponse "
+                                    "Databricks.")
                 rows.append(tuple(_value(v, k) for v, k in zip(raw, kinds, strict=True)))
             following = chunk.get("next_chunk_internal_link")
             if not following:

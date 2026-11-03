@@ -34,6 +34,7 @@ from .workspaces import repo_dir
 SUPPORTED_PLATFORMS = ("databricks", "snowflake")
 _draft_lock = threading.Lock()
 _draft_attempts: dict[tuple[str, str], object] = {}
+_refresh_locks = [threading.Lock() for _ in range(64)]
 
 
 def _new_draft_attempt(key: tuple[str, str]) -> object:
@@ -375,18 +376,29 @@ def _store_key_pair(workspace_id: str, point: AccessPoint, user: str, private_ke
 
 
 def _refresh(workspace_id: str, point: AccessPoint, credential: Credential,
-             vault: Vault) -> Credential:
-    if not _bound_to(point, credential):
-        raise _host_mismatch(point)
-    try:
-        renewed = oauth.refresh(oauth.discover(point), credential)
-    except oauth.RefreshRefused:
-        credential.rejected = True
-        vault.put(workspace_id, point.id, credential)
-        raise RepoError("access_expired", "Session expirée : se reconnecter.") from None
-    renewed.host = point.base_url
-    vault.put(workspace_id, point.id, renewed)
-    return renewed
+             vault: Vault, force: bool = False) -> Credential:
+    lock = _refresh_locks[hash((workspace_id, point.id)) % len(_refresh_locks)]
+    with lock:
+        current = vault.get(workspace_id, point.id)
+        if current is None:
+            raise RepoError("not_connected", f"Pas encore connecté à « {point.id} ».")
+        if not _bound_to(point, current):
+            raise _host_mismatch(point)
+        if current.rejected:
+            raise RepoError("access_expired", "Session expirée : se reconnecter.")
+        if (current.kind != "oauth" or
+                (force and current.access_token != credential.access_token) or
+                (not force and not current.needs_refresh())):
+            return current
+        try:
+            renewed = oauth.refresh(oauth.discover(point), current)
+        except oauth.RefreshRefused:
+            current.rejected = True
+            vault.put(workspace_id, point.id, current)
+            raise RepoError("access_expired", "Session expirée : se reconnecter.") from None
+        renewed.host = point.base_url
+        vault.put(workspace_id, point.id, renewed)
+        return renewed
 
 
 def _usable(workspace_id: str, point: AccessPoint, vault: Vault) -> Credential:
@@ -459,7 +471,7 @@ def _with_connector(workspace_id: str, access_point_id: str | AccessPoint, vault
         return _attempt(workspace_id, point, credential, vault, action)
     except AuthRejected:
         if credential.kind == "oauth" and credential.refresh_token:
-            credential = _refresh(workspace_id, point, credential, vault)
+            credential = _refresh(workspace_id, point, credential, vault, force=True)
             try:
                 return _attempt(workspace_id, point, credential, vault, action)
             except AuthRejected:
