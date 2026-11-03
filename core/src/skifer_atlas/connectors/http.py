@@ -17,6 +17,14 @@ from ..repo.git import RepoError
 TIMEOUT = 30  # secondes, par appel
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 @dataclass
 class Response:
     status: int
@@ -39,7 +47,7 @@ def request(method: str, url: str, *, token: str | None = None, json_body: Any =
         headers["Content-Type"] = "application/x-www-form-urlencoded"
     call = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(call, timeout=timeout) as reply:
+        with _OPENER.open(call, timeout=timeout) as reply:
             return Response(reply.status, _decode(reply.read()))
     except urllib.error.HTTPError as error:
         return Response(error.code, _decode(error.read()))

@@ -48,8 +48,21 @@ def discover(point: AccessPoint) -> Endpoints:
     if reply.status != 200 or "authorization_endpoint" not in body or "token_endpoint" not in body:
         raise RepoError("oauth_unavailable", f"OAuth indisponible sur {point.host} "
                         f"(HTTP {reply.status}) : utiliser un token personnel.")
-    return Endpoints(body["authorization_endpoint"], body["token_endpoint"],
-                     body.get("revocation_endpoint"))
+    origin = urlparse(point.base_url)
+    endpoints = (body["authorization_endpoint"], body["token_endpoint"],
+                 body.get("revocation_endpoint"))
+    for endpoint in endpoints:
+        if endpoint is None:
+            continue
+        if not isinstance(endpoint, str):
+            raise RepoError("oauth_unavailable", "Métadonnées OAuth invalides : adresse "
+                            "de point d'entrée incorrecte.")
+        parsed = urlparse(endpoint)
+        if (parsed.scheme != origin.scheme or parsed.netloc.lower() != origin.netloc.lower()
+                or parsed.username or parsed.password or not parsed.path or parsed.fragment):
+            raise RepoError("oauth_unavailable", "Métadonnées OAuth invalides : les points "
+                            "d'entrée doivent appartenir à l'hôte du point d'accès.")
+    return Endpoints(*endpoints)
 
 
 def pkce() -> tuple[str, str]:

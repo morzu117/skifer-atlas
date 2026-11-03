@@ -8,6 +8,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -271,6 +272,32 @@ def test_expired_token_is_refreshed(client, fake):
     after = Vault().get("nordis", "dbx-fr")
     assert after.access_token != before.access_token and not after.needs_refresh()
     assert fake.state.token_requests[-1]["grant_type"] == "refresh_token"
+
+
+def test_concurrent_refreshes_use_one_new_token(client, fake, monkeypatch):
+    space("nordis", [point(fake)])
+    fake.state.expires_in = 0
+    login(client)
+    fake.state.expires_in = 3600
+    original = oauth.refresh
+
+    def slow_refresh(*args):
+        time.sleep(0.05)
+        return original(*args)
+
+    monkeypatch.setattr(oauth, "refresh", slow_refresh)
+    barrier = threading.Barrier(3)
+
+    def use():
+        barrier.wait()
+        connections.ensure_usable("nordis", "dbx-fr")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(use) for _ in range(2)]
+        barrier.wait()
+        for future in futures:
+            future.result()
+    assert [r["grant_type"] for r in fake.state.token_requests].count("refresh_token") == 1
 
 
 def test_refused_refresh_gives_expired(client, fake):

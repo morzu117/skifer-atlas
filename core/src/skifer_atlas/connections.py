@@ -34,6 +34,7 @@ from .workspaces import repo_dir
 SUPPORTED_PLATFORMS = ("databricks", "snowflake")
 _draft_lock = threading.Lock()
 _draft_attempts: dict[tuple[str, str], object] = {}
+_refresh_locks = [threading.Lock() for _ in range(64)]
 
 
 def _new_draft_attempt(key: tuple[str, str]) -> object:
@@ -376,17 +377,26 @@ def _store_key_pair(workspace_id: str, point: AccessPoint, user: str, private_ke
 
 def _refresh(workspace_id: str, point: AccessPoint, credential: Credential,
              vault: Vault) -> Credential:
-    if not _bound_to(point, credential):
-        raise _host_mismatch(point)
-    try:
-        renewed = oauth.refresh(oauth.discover(point), credential)
-    except oauth.RefreshRefused:
-        credential.rejected = True
-        vault.put(workspace_id, point.id, credential)
-        raise RepoError("access_expired", "Session expirée : se reconnecter.") from None
-    renewed.host = point.base_url
-    vault.put(workspace_id, point.id, renewed)
-    return renewed
+    lock = _refresh_locks[hash((workspace_id, point.id)) % len(_refresh_locks)]
+    with lock:
+        current = vault.get(workspace_id, point.id)
+        if current is None:
+            raise RepoError("not_connected", f"Pas encore connecté à « {point.id} ».")
+        if not _bound_to(point, current):
+            raise _host_mismatch(point)
+        if current.rejected:
+            raise RepoError("access_expired", "Session expirée : se reconnecter.")
+        if current.access_token != credential.access_token and not current.needs_refresh():
+            return current
+        try:
+            renewed = oauth.refresh(oauth.discover(point), current)
+        except oauth.RefreshRefused:
+            current.rejected = True
+            vault.put(workspace_id, point.id, current)
+            raise RepoError("access_expired", "Session expirée : se reconnecter.") from None
+        renewed.host = point.base_url
+        vault.put(workspace_id, point.id, renewed)
+        return renewed
 
 
 def _usable(workspace_id: str, point: AccessPoint, vault: Vault) -> Credential:
