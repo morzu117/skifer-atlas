@@ -61,6 +61,6 @@ L'ADR 0014 fonce `--atlas-mid` et `--atlas-warn` d'environ 10 %. Le test n'a plu
 ## Conséquences
 
 - La liste des espaces reconstruit l'index d'un espace si son clone a changé. Le premier affichage après une synchronisation est donc un peu plus lent.
-- Avec GitHub, `open_proposals` interroge l'API de l'hébergeur : une requête par espace, plus une par proposition ouverte. Sans token ou sans réseau, le compteur est absent, mais l'accueil s'affiche.
+- La liste des espaces lit les données locales sans contacter GitHub. Chaque carte charge ensuite son compteur de propositions séparément ; sans token ou sans réseau, ce compteur reste absent, mais l'accueil s'affiche immédiatement. La coque charge directement son espace (avec vérification de son rôle courant auprès de l'hébergeur) et son propre compteur de propositions.
 - Les vues Catalogue, Propositions, Comparaison, Connexions et Administration sont des emplacements qui citent leur plan (0011 à 0017).
 - Les tests de bout en bout simulent l'arrêt du serveur en coupant les requêtes dans le navigateur (critère 5). Le serveur lui-même n'est pas arrêté.

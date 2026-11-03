@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, UnreachableError, type Workspace } from "../api";
+import { api, ApiError, UnreachableError, type Workspace } from "../api";
 import { Banner } from "../components/Banner";
 import { Brand } from "../components/Brand";
 import { Icon, type IconName } from "../components/Icon";
@@ -48,15 +48,14 @@ export function WorkspaceShell({
     let alive = true;
     setLoad({ kind: "loading" });
     api
-      .workspaces()
-      .then((list) => {
+      .workspace(wsId)
+      .then((ws) => {
         if (!alive) return;
-        const ws = list.find((w) => w.id === wsId);
-        if (ws) setLoad({ kind: "ready", ws });
-        else onUnknown(wsId);
+        setLoad({ kind: "ready", ws });
       })
       .catch((error) => {
         if (!alive) return;
+        if (error instanceof ApiError && error.code === "not_found") return onUnknown(wsId);
         setLoad(error instanceof UnreachableError ? { kind: "offline" } : { kind: "error", error: explain(error) });
       });
     return () => {

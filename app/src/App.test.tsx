@@ -18,6 +18,8 @@ function goTo(hash: string) {
 function nordisServer(proposals: unknown[] = [{ id: 1 }, { id: 2 }, { id: 3 }]) {
   return fakeServer(({ path }) => {
     if (path === "/api/workspaces") return { json: [workspace(), ALTAVIA] };
+    if (path === "/api/workspaces/groupe-nordis") return { json: workspace() };
+    if (path === "/api/workspaces/altavia-energie") return { json: ALTAVIA };
     if (path.endsWith("/proposals?status=open&for_me=true")) return { json: proposals };
   });
 }
@@ -37,7 +39,10 @@ describe("démarrage et serveur injoignable", () => {
   });
 
   it("affiche le bandeau, puis Réessayer fonctionne après redémarrage (critère 5)", async () => {
-    const server = fakeServer(({ path }) => (path === "/api/workspaces" ? { json: [workspace()] } : undefined));
+    const server = fakeServer(({ path }) => {
+      if (path === "/api/workspaces") return { json: [workspace()] };
+      if (path === "/api/workspaces/groupe-nordis") return { json: workspace() };
+    });
     server.setDown(true);
     render(<App startup={FAST} />);
     const banner = await screen.findByRole("alert");
@@ -63,13 +68,15 @@ describe("démarrage et serveur injoignable", () => {
 
 describe("coque d'un espace", () => {
   it("affiche l'espace courant dans le sélecteur, qui ramène à l'accueil (critère 6)", async () => {
-    nordisServer();
+    const server = nordisServer();
     window.location.hash = "#/w/groupe-nordis/catalogue";
     render(<App startup={FAST} />);
     const switcher = await screen.findByRole("link", { name: /Espace\s*Groupe Nordis/ });
     expect(switcher).toHaveAttribute("href", "#/");
     expect(screen.getByRole("heading", { name: "Catalogue" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Catalogue/ })).toHaveAttribute("aria-current", "page");
+    expect(server.calls.some((call) => call.path === "/api/workspaces/groupe-nordis")).toBe(true);
+    expect(server.calls.some((call) => call.path === "/api/workspaces")).toBe(false);
     await userEvent.click(switcher);
     expect(await screen.findByRole("heading", { name: "Vos espaces de travail" })).toBeInTheDocument();
   });
@@ -103,6 +110,7 @@ describe("coque d'un espace", () => {
   it("masque Administration à un référent de domaine : elle est réservée au référent d'espace (plan 0017)", async () => {
     fakeServer(({ path }) => {
       if (path === "/api/workspaces") return { json: [workspace({ account: "claire.m", space_referent: false })] };
+      if (path === "/api/workspaces/groupe-nordis") return { json: workspace({ account: "claire.m", space_referent: false }) };
       if (path.endsWith("/proposals?status=open&for_me=true")) return { json: [] };
     });
     window.location.hash = "#/w/groupe-nordis/administration";

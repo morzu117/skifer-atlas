@@ -632,6 +632,7 @@ const doc = (id: string, documentId: string) => `${ws(id)}/documents/${encodeURI
 export const api = {
   health: () => request<{ status: string; version: string }>("/health"),
   workspaces: () => request<Workspace[]>("/api/workspaces"),
+  workspace: (id: string) => request<Workspace>(ws(id)),
   createWorkspace: (body: NewWorkspace) => request<Workspace>("/api/workspaces", post(body)),
   joinWorkspace: (remoteUrl: string, githubFlow?: string) =>
     request<Workspace>("/api/workspaces/join", post({ remote_url: remoteUrl, ...(githubFlow ? { github_flow: githubFlow } : {}) })),

@@ -33,8 +33,7 @@ def test_admin_is_for_space_referents_only(client, joined, as_):
     """Critère 1 : un référent de domaine, un contributeur ou un inconnu reçoivent 403."""
     as_("julien.h")
     state = client.get(ADMIN).json()
-    listed = {w["id"]: w for w in client.get("/api/workspaces").json()}
-    assert listed["groupe-nordis"]["space_referent"] is True
+    assert client.get("/api/workspaces/groupe-nordis").json()["space_referent"] is True
     for account in ("claire.m", "anna.k", "inconnu.z"):
         as_(account)
         assert code(client.get(ADMIN)) == (403, "forbidden"), account
@@ -47,16 +46,14 @@ def test_admin_link_and_route_use_the_same_host_account_with_offline_fallback(
     """#35 : le lien et la route prennent la même décision, même si l'hôte est absent."""
     as_("julien.h")
     monkeypatch.setattr(admin, "host_account", lambda *args: "anna.k")
-    listed = {w["id"]: w for w in client.get("/api/workspaces").json()}
-    assert listed["groupe-nordis"]["space_referent"] is False
+    assert client.get("/api/workspaces/groupe-nordis").json()["space_referent"] is False
     assert code(client.get(ADMIN)) == (403, "forbidden")
 
     def unreachable(*args):
         raise RepoError("host_unreachable", "Hébergeur injoignable.")
 
     monkeypatch.setattr(admin, "host_account", unreachable)
-    listed = {w["id"]: w for w in client.get("/api/workspaces").json()}
-    assert listed["groupe-nordis"]["space_referent"] is True
+    assert client.get("/api/workspaces/groupe-nordis").json()["space_referent"] is True
     assert client.get(ADMIN).status_code == 200
 
 
