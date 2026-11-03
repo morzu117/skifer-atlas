@@ -32,6 +32,4 @@ def workspace_dir(workspace_id: str) -> Path:
     """
     if not is_workspace_id(workspace_id):
         raise ValueError(f"Identifiant d'espace invalide : {workspace_id!r}.")
-    p = data_dir() / "workspaces" / workspace_id
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+    return data_dir() / "workspaces" / workspace_id

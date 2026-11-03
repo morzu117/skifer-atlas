@@ -19,7 +19,9 @@ from ...index import document as search_document
 from ...index import ensure_index, index_fresh
 from ...index import facets as search_facets
 from ...index import summary as search_summary
+from ...index.schema import index_state
 from ...repo import versions as repo_versions
+from ...repo.git import show
 from ...repo.layout import read_governance
 from ...workspaces import index_path, repo_dir
 from .common import document_id_or_404, not_found, workspace_or_404
@@ -89,7 +91,8 @@ def get_summary(ws: str, document_id: str) -> dict:
 def get_document(ws: str, document_id: str) -> dict:
     with _index(ws) as connection:
         found = _document(connection, document_id)
-    found["content"] = (repo_dir(ws) / found["path"]).read_text(encoding="utf-8")
+        state = index_state(connection)
+    found["content"] = show(repo_dir(ws), state[0], found["path"])
     return found
 
 

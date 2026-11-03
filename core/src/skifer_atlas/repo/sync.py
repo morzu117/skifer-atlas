@@ -206,6 +206,14 @@ def _workspace(workspace_id: str) -> Workspace:
     return workspace
 
 
+def _valid_meta(repo: Path) -> WorkspaceMeta:
+    try:
+        return read_meta(repo)
+    except (OSError, ValueError, ValidationError) as error:
+        raise RepoError("invalid_workspace", "« atlas.yaml » absent ou invalide dans "
+                        "le dépôt de cet espace.") from error
+
+
 def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
     try:
         run_git(["merge-base", "--is-ancestor", ancestor, descendant], repo)
@@ -232,7 +240,7 @@ def sync_workspace(workspace_id: str) -> dict:
 def _sync(workspace_id: str) -> dict:
     workspace = _workspace(workspace_id)
     repo = repo_dir(workspace_id)
-    branch = read_meta(repo).main_branch
+    branch = _valid_meta(repo).main_branch
     if not run_git(["remote"], repo).split():
         raise RepoError("no_remote", "Cet espace n'a pas encore de dépôt distant.")
     run_git(["fetch", "--quiet", "--prune", "--tags", "origin"], repo,
@@ -250,7 +258,7 @@ def _sync(workspace_id: str) -> dict:
         run_git(["merge", "--quiet", "--ff-only", remote], repo, error_code="sync_conflict")
         result = {"status": "fast_forward", "commit": remote}
     warnings = _catch_up_tags(repo, local, remote, workspace.git_remote, workspace_id)
-    meta = read_meta(repo)
+    meta = _valid_meta(repo)
     account = workspace.account or _host_account(workspace.git_remote, branch, workspace_id)
     update_workspace(workspace.model_copy(update={
         "name": meta.name, "sector": meta.sector, "entities": meta.entities,

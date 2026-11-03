@@ -77,6 +77,15 @@ def test_create_workspace(atlas_env):
     assert error.value.code == "workspace_exists"
 
 
+def test_reading_workspace_paths_does_not_create_an_empty_workspace(atlas_env):
+    from skifer_atlas.workspaces import index_path
+
+    repo = repo_dir("absent")
+    index = index_path("absent")
+    assert repo.parent == index.parent
+    assert not repo.parent.exists()
+
+
 # --- adhésion (critère 2) -----------------------------------------------------------------
 
 def test_join_clones_and_registers(remote):
