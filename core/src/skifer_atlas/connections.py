@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -31,6 +32,24 @@ from .vault import Credential, Vault
 from .workspaces import repo_dir
 
 SUPPORTED_PLATFORMS = ("databricks", "snowflake")
+_draft_lock = threading.Lock()
+_draft_attempts: dict[tuple[str, str], object] = {}
+
+
+def _new_draft_attempt(key: tuple[str, str]) -> object:
+    marker = object()
+    with _draft_lock:
+        _draft_attempts[key] = marker
+    return marker
+
+
+def _store_draft(key: tuple[str, str], marker: object, store: Callable[[], None]) -> None:
+    """Un flux terminé après « Oublier » ne doit pas recréer le jeton du brouillon."""
+    with _draft_lock:
+        if _draft_attempts.get(key) is not marker:
+            raise RepoError("not_found", "Connexion de brouillon oubliée.")
+        store()
+        _draft_attempts.pop(key, None)
 
 
 def registry(workspace_id: str) -> AccessPoints:
@@ -203,12 +222,23 @@ def forget_draft_credential(workspace_id: str, access_point_id: str,
                             vault: Vault | None = None) -> dict:
     if registry(workspace_id).get(access_point_id) is not None:
         raise RepoError("access_point_exists", "Ce point d'accès est déclaré.")
-    if drafts.get(workspace_id, access_point_id) is None:
-        raise RepoError("not_found", "Brouillon inconnu.")
     vault = vault or Vault()
-    removed = vault.delete(workspace_id, access_point_id)
-    logins.delete(workspace_id, access_point_id)
-    drafts.delete(workspace_id, access_point_id)
+    key = (workspace_id, access_point_id)
+    with _draft_lock:
+        if drafts.get(workspace_id, access_point_id) is None:
+            raise RepoError("not_found", "Brouillon inconnu.")
+        _draft_attempts.pop(key, None)
+        removed = vault.delete(workspace_id, access_point_id)
+        logins.delete(workspace_id, access_point_id)
+        drafts.delete(workspace_id, access_point_id)
+        live = LIVE.pop(key, None)
+        oauth_flow = oauth.FLOWS.last(key)
+        sso_flow = SSO_FLOWS.last(key)
+    if live is not None:
+        snowflake_connector.close_quietly(live)
+    for flow in (oauth_flow, sso_flow):
+        if flow is not None and flow.status == "pending":
+            flow.finish("failed", "Connexion de brouillon oubliée.")
     return {"removed": removed}
 
 
@@ -238,23 +268,30 @@ def _authorize_sso(workspace_id: str, point: AccessPoint, vault: Vault | None,
     user = _user(workspace_id, point, user)
     vault = vault or Vault()
     key = (workspace_id, point.id)
+    attempt = _new_draft_attempt(key) if draft else None
 
     def store(connection) -> None:
         tokens = snowflake_connector.session_tokens(connection)
-        if draft:
-            drafts.put(workspace_id, point.id, point.base_url)
-        previous = LIVE.pop(key, None)
-        if previous is not None:
-            snowflake_connector.close_quietly(previous)
-        if tokens is not None:
-            vault.put(workspace_id, point.id, Credential("sso", tokens[0], tokens[1],
-                                                         expires_at=tokens[2],
-                                                         host=point.base_url))
-            snowflake_connector.close_quietly(connection)  # la session survit (keep-alive)
+        def save() -> None:
+            if draft:
+                drafts.put(workspace_id, point.id, point.base_url)
+            previous = LIVE.pop(key, None)
+            if previous is not None:
+                snowflake_connector.close_quietly(previous)
+            if tokens is not None:
+                vault.put(workspace_id, point.id, Credential("sso", tokens[0], tokens[1],
+                                                             expires_at=tokens[2],
+                                                             host=point.base_url))
+                snowflake_connector.close_quietly(connection)  # session keep-alive
+            else:
+                LIVE[key] = connection
+                vault.put(workspace_id, point.id, Credential("sso", "", host=point.base_url))
+            logins.put(workspace_id, point.id, Login(user))
+
+        if attempt is not None:
+            _store_draft(key, attempt, save)
         else:
-            LIVE[key] = connection
-            vault.put(workspace_id, point.id, Credential("sso", "", host=point.base_url))
-        logins.put(workspace_id, point.id, Login(user))
+            save()
 
     SSO_FLOWS.start(key, point, user, store)
     return {"authorize_url": None}
@@ -268,12 +305,20 @@ def _authorize(workspace_id: str, point: AccessPoint, vault: Vault | None,
         raise RepoError("platform_not_supported", f"OAuth n'est pas encore pris en charge "
                         f"pour « {point.platform} ».")
     vault = vault or Vault()
+    key = (workspace_id, point.id)
+    attempt = _new_draft_attempt(key) if draft else None
 
     def store(credential: Credential) -> None:
         credential.host = point.base_url
-        if draft:
-            drafts.put(workspace_id, point.id, point.base_url)
-        vault.put(workspace_id, point.id, credential)
+        def save() -> None:
+            if draft:
+                drafts.put(workspace_id, point.id, point.base_url)
+            vault.put(workspace_id, point.id, credential)
+
+        if attempt is not None:
+            _store_draft(key, attempt, save)
+        else:
+            save()
 
     url = oauth.FLOWS.start((workspace_id, point.id), point, store, listen_seconds)
     return {"authorize_url": url}

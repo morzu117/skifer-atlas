@@ -4,12 +4,17 @@ charge."""
 
 import time
 import urllib.request
+from unittest.mock import Mock
 
+import pytest
 from fake_databricks import FakeDatabricks
 from test_connections import client, env, fake, point, secrets_in, space
 
-from skifer_atlas.connectors import oauth
-from skifer_atlas.vault import SERVICE, keyring_vault
+from skifer_atlas import connections
+from skifer_atlas.connectors import drafts, oauth
+from skifer_atlas.connectors.snowflake import LIVE
+from skifer_atlas.repo.git import RepoError
+from skifer_atlas.vault import SERVICE, Credential, Vault, keyring_vault
 from skifer_atlas.workspaces import repo_dir
 
 __all__ = ["client", "env", "fake"]  # fixtures importées
@@ -125,4 +130,50 @@ def test_a_draft_access_point_has_a_size_limit(client, fake):
     response = client.post(f"{DRAFT}/status", json={"access_point": oversized})
     assert response.status_code == 422
     assert "16 Kio" in response.text
+
+
+def test_forgetting_a_draft_closes_its_live_sso_session(client):
+    space("nordis", [])
+    key = ("nordis", "snow-de")
+    host = "https://nordis.snowflakecomputing.com"
+    drafts.put(*key, host)
+    Vault().put(*key, Credential("sso", "", host=host))
+    connection = Mock()
+    LIVE[key] = connection
+
+    response = client.delete(f"{DRAFT}/credentials/snow-de")
+
+    assert response.json() == {"removed": True}
+    assert key not in LIVE
+    connection.close.assert_called_once_with()
+    assert drafts.get(*key) is None
+    assert Vault().get(*key) is None
+
+
+def test_forgetting_a_draft_invalidates_pending_sso_callback(client, monkeypatch):
+    space("nordis", [])
+    key = ("nordis", "snow-de")
+    host = "https://nordis.snowflakecomputing.com"
+    drafts.put(*key, host)
+    Vault().put(*key, Credential("sso", "", host=host))
+    captured = {}
+
+    def start(_key, _point, _user, on_success):
+        captured["on_success"] = on_success
+
+    monkeypatch.setattr(connections.SSO_FLOWS, "start", start)
+    draft = {"id": key[1], "platform": "snowflake", "host": host,
+             "schema": "FIN_GOLD.PUBLIC", "entity": "nordis-de", "owner": "anna.k"}
+    response = client.post(f"{DRAFT}/authorize", json={"access_point": draft,
+                                                        "user": "anna.k"})
+    assert response.status_code == 200, response.text
+    assert client.delete(f"{DRAFT}/credentials/snow-de").json() == {"removed": True}
+
+    connection = Mock()
+    connection._get_connection_info.side_effect = RuntimeError("sans jeton exportable")
+    with pytest.raises(RepoError, match="oubliée"):
+        captured["on_success"](connection)
+    assert drafts.get(*key) is None
+    assert Vault().get(*key) is None
+    assert key not in LIVE
 
