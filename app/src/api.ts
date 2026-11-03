@@ -726,6 +726,10 @@ export const api = {
     request<ConnectionStatus>(`${ws(id)}/access-point-draft/status`, post({ access_point: accessPoint })),
   testDraft: (id: string, accessPoint: AccessPointDraft) =>
     request<ConnectionTest>(`${ws(id)}/access-point-draft/test`, post({ access_point: accessPoint })),
+  draftCredentials: (id: string) =>
+    request<{ id: string; host: string }[]>(`${ws(id)}/access-point-draft/credentials`),
+  forgetDraftCredential: (id: string, accessPoint: string) =>
+    request<{ removed: boolean }>(`${ws(id)}/access-point-draft/credentials/${encodeURIComponent(accessPoint)}`, { method: "DELETE" }),
   admin: (id: string) => request<AdminState>(`${ws(id)}/admin`),
   saveGovernance: (id: string, governance: Governance, baseDigest: string) =>
     request<AdminSaved>(`${ws(id)}/admin/governance`, post({ governance, base_digest: baseDigest })),

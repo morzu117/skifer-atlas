@@ -69,6 +69,7 @@ def _credential(body: dict, client_id: str, previous: Credential | None = None) 
         refresh_token=body.get("refresh_token") or (previous.refresh_token if previous else None),
         expires_at=time.time() + float(expires_in) if expires_in is not None else None,
         client_id=client_id,
+        host=previous.host if previous else None,
     )
 
 

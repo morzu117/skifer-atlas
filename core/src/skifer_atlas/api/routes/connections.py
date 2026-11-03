@@ -7,8 +7,11 @@ n'en ressortent jamais.
 
 from __future__ import annotations
 
+import json
+from typing import Annotated
+
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from ... import connections
 from ...proposals import create_access_point_proposal
@@ -18,6 +21,16 @@ router = APIRouter(prefix="/api/workspaces/{ws}/connections")
 # Un point d'accès pas encore déclaré, dans le corps : se connecter et tester avant de le
 # proposer (plan 0016). Préfixe à part : `…/connections/{ap}/…` reste sans ambiguïté.
 drafts = APIRouter(prefix="/api/workspaces/{ws}/access-point-draft")
+MAX_DRAFT_POINT_BYTES = 16 * 1024
+
+
+def _bounded_draft_point(raw: dict) -> dict:
+    if len(json.dumps(raw, ensure_ascii=False).encode("utf-8")) > MAX_DRAFT_POINT_BYTES:
+        raise ValueError("Le point d'accès en brouillon dépasse 16 Kio.")
+    return raw
+
+
+DraftPoint = Annotated[dict, AfterValidator(_bounded_draft_point)]
 
 
 class DeclareRequest(BaseModel):
@@ -30,7 +43,7 @@ class DeclareRequest(BaseModel):
 class DraftRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    access_point: dict
+    access_point: DraftPoint
     user: str | None = None  # identifiant Snowflake, pour le SSO
 
 
@@ -49,7 +62,7 @@ class KeyPairRequest(BaseModel):
 
 
 class DraftKeyPairRequest(KeyPairRequest):
-    access_point: dict
+    access_point: DraftPoint
 
 
 class PersonalTokenRequest(BaseModel):
@@ -131,3 +144,13 @@ def draft_status(ws: str, body: DraftRequest) -> dict:
 @drafts.post("/test")
 def test_draft(ws: str, body: DraftRequest) -> dict:
     return connections.check_draft(workspace_or_404(ws).id, body.access_point)
+
+
+@drafts.get("/credentials")
+def draft_credentials(ws: str) -> list[dict]:
+    return connections.list_draft_credentials(workspace_or_404(ws).id)
+
+
+@drafts.delete("/credentials/{ap}")
+def forget_draft_credential(ws: str, ap: str) -> dict:
+    return connections.forget_draft_credential(workspace_or_404(ws).id, ap)

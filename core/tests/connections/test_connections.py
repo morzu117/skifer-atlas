@@ -187,13 +187,14 @@ def test_same_access_point_in_two_spaces_gives_two_entries(client, fake):
 # --- critère 3 : test de connexion ----------------------------------------------------------
 
 def test_test_is_ok_then_explicit_for_an_unreachable_host(client, fake):
-    space("nordis", [point(fake), point(fake, "dbx-mort", host=f"http://127.0.0.1:{free_port()}")])
+    dead_host = f"http://127.0.0.1:{free_port()}"
+    space("nordis", [point(fake), point(fake, "dbx-mort", host=dead_host)])
     login(client)
     ok = client.post("/api/workspaces/nordis/connections/dbx-fr/test").json()
     assert ok["ok"] is True and ok["latency_ms"] >= 0 and ok["error"] is None
     assert fake.state.seen_sql[-1] == "SELECT 1 AS ok"
     keyring_vault._memory.set_password(SERVICE, "nordis/dbx-mort",
-                                       Credential("pat", "dapi-perso-1").to_json())
+                                       Credential("pat", "dapi-perso-1", host=dead_host).to_json())
     dead = client.post("/api/workspaces/nordis/connections/dbx-mort/test").json()
     assert dead["ok"] is False
     assert dead["error"]["code"] == "host_unreachable"
@@ -204,6 +205,39 @@ def test_test_without_credentials_says_so(client, fake):
     space("nordis", [point(fake)])
     result = client.post("/api/workspaces/nordis/connections/dbx-fr/test").json()
     assert result["error"]["code"] == "not_connected"
+
+
+def test_a_declared_connection_is_not_sent_to_a_changed_host(client, fake):
+    """#33 : test, rafraîchissement et révocation ne transmettent pas le jeton à B."""
+    other = FakeDatabricks()
+    try:
+        original = point(fake)
+        space("nordis", [original])
+        login(client)
+        changed = {**original, "host": other.url}
+        repo = repo_dir("nordis") / "access_points.yaml"
+        repo.write_text(yaml.safe_dump({"schema_version": 1, "access_points": [changed]}),
+                        encoding="utf-8")
+        status = client.get("/api/workspaces/nordis/connections/dbx-fr/status").json()
+        assert (status["my_access"], status["error"]["code"]) == (
+            "expired", "access_host_mismatch")
+        tested = client.post("/api/workspaces/nordis/connections/dbx-fr/test").json()
+        assert tested["error"]["code"] == "access_host_mismatch"
+        revoked = client.delete("/api/workspaces/nordis/connections/dbx-fr/token").json()
+        assert revoked == {"revoked": True, "remote_revoked": False}
+        assert other.state.seen_sql == [] and other.state.revoked == []
+    finally:
+        other.close()
+
+
+def test_an_old_unbound_token_requires_reconnection(client, fake):
+    space("nordis", [point(fake)])
+    Vault().put("nordis", "dbx-fr", Credential("pat", "dapi-perso-1"))
+    status = client.get("/api/workspaces/nordis/connections/dbx-fr/status").json()
+    assert (status["my_access"], status["error"]["code"]) == (
+        "expired", "access_host_mismatch")
+    assert client.post("/api/workspaces/nordis/connections/dbx-fr/test").json()[
+        "error"]["code"] == "access_host_mismatch"
 
 
 @pytest.mark.databricks

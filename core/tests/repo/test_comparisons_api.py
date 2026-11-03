@@ -108,8 +108,8 @@ def test_needs_auth_before_any_execution(client, joined):
     assert code(response) == (409, "needs_auth")
     assert [(i["access_point"], i["code"]) for i in response.json()["detail"]["issues"]] == [
         ("dbx-de", "not_connected"), ("dbx-fr", "not_connected")]
-    Vault().put("groupe-nordis", "dbx-de", Credential("pat", "dapi-de"))
-    Vault().put("groupe-nordis", "dbx-fr", Credential("pat", "dapi-fr", expires_at=1.0))
+    Vault().put("groupe-nordis", "dbx-de", Credential("pat", "dapi-de", host="https://adb-1.2.azuredatabricks.net"))
+    Vault().put("groupe-nordis", "dbx-fr", Credential("pat", "dapi-fr", expires_at=1.0, host="https://adb-1.2.azuredatabricks.net"))
     response = client.post(COMPARISONS, json=BODY)
     assert [(i["access_point"], i["code"]) for i in response.json()["detail"]["issues"]] == [
         ("dbx-fr", "access_expired")]
@@ -126,7 +126,7 @@ def test_remote_comparison_uses_my_access(client, joined, monkeypatch):
                "entity": "nordis-de", "owner": "anna.k"}]
     (repo_dir("groupe-nordis") / "access_points.yaml").write_text(
         yaml.safe_dump({"schema_version": 1, "access_points": points}), encoding="utf-8")
-    Vault().put("groupe-nordis", "dbx-de", Credential("pat", "dapi-de"))
+    Vault().put("groupe-nordis", "dbx-de", Credential("pat", "dapi-de", host="https://adb-1.2.azuredatabricks.net"))
     seen, local_for = [], {}
     runner = LocalRunner(DATA)
 

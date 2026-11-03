@@ -92,7 +92,7 @@ def setup_space(client, remote, snow, monkeypatch, tmp_path) -> list[SourceTable
     path.write_bytes(key.private_bytes(
         serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
         serialization.BestAvailableEncryption(PASSPHRASE.encode())))
-    Vault().put("groupe-nordis", "dbx-fr", Credential("pat", "dapi-fr"))
+    Vault().put("groupe-nordis", "dbx-fr", Credential("pat", "dapi-fr", host="https://adb-1.2.azuredatabricks.net"))
     stored = client.put("/api/workspaces/groupe-nordis/connections/snow-de/key-pair", json={
         "user": "svc_de", "private_key_file": str(path), "passphrase": PASSPHRASE})
     assert stored.status_code == 200, stored.text
