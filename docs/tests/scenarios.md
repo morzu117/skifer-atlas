@@ -726,6 +726,13 @@ Plan 0024, critère 4 · Test : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024
 - **Alors** Propriétés affiche l'identifiant de la première, et la deuxième descend
 - **Et** les durées d'ouverture, de sélection et de déplacement sont notées dans les annotations du rapport et dans la console
 
+### S-0024-05 — Un rendu abandonné ne défait pas la stabilité des nœuds
+Plan 0024, ADR 0028 (complément, issue #48) · Test : `app/src/stable.test.tsx` › `[S-0024-05]` (Vitest)
+- **Étant donné** `useStable` rendu avec une liste de nœuds, seul ou sous StrictMode
+- **Quand** la liste revient recopiée à l'identique, ou avec un seul nœud modifié, ou après un rendu abandonné
+- **Alors** les nœuds inchangés gardent leur objet, le tableau aussi si rien n'a changé, et un rendu abandonné n'entre pas dans le cache
+- Limite : test du hook sous jsdom, sans React Flow.
+
 ## Propositions
 
 Les tests de `app/e2e/propositions.spec.ts` portent sur les cinq propositions de démonstration (`examples/propositions-nordis.py`). Trois comptes, trois serveurs sur le même dépôt nu : anna.k (autrice de la surcharge DE, serveur par défaut), claire.m (port 8798) et marc.d (port 8797), validateurs Finance. Pour claire.m, les requêtes de l'app sont relayées vers son serveur. Chaque test travaille sur sa propre copie de la démonstration, que claire.m et marc.d rejoignent.

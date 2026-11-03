@@ -25,3 +25,10 @@ Le plan 0013 a mesuré la validation sur 50 nœuds, pas le rendu. Le canevas de 
 - Tests :
   - `app/src/editor/Canvas.test.tsx` (5 tests : rendus comptés par carte, et cartes dessinées au-delà du seuil) ;
   - `app/e2e/graphe-volumineux.spec.ts` (200 nœuds dans l'éditeur, temps notés au plan 0024).
+
+## Complément (3 novembre 2026, issue #48)
+
+- **Cache écrit après validation du rendu.** `useStable` calcule pendant le rendu, mais n'écrit son cache que dans un effet de mise en page. Un rendu abandonné (rendu concurrent, double rendu de StrictMode) ne le modifie donc pas, et la stabilité vaut par rapport au dernier rendu validé.
+- **Coût de la comparaison.** La sérialisation est linéaire. Mesure du 3 novembre 2026 (V8, Apple M5), pour des nœuds de la forme du canevas : 0,10 ms par rendu à 200 nœuds, 0,22 ms à 500, 0,44 ms à 1 000, 0,88 ms à 2 000. Elle reste négligeable devant le redessin d'une carte ; à remesurer si un graphe réel dépasse quelques milliers de nœuds.
+- La tabulation au-delà de 50 nœuds et le rendu complet du graphe en lecture sont décrits plus haut ; le graphe de 200 nœuds sous WebKit est couvert par le plan 0026 (ADR 0030).
+- Tests : `app/src/stable.test.tsx` (S-0024-05).
