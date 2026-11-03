@@ -8,6 +8,7 @@ from test_comparisons_api import AUTH, BODY, COMPARISONS, DATA, WS, code, finish
 from workspace_helpers import atlas_env, remote
 
 from skifer_atlas.api.app import create_app
+from skifer_atlas.compare import service
 from skifer_atlas.vault import Credential, Vault, keyring_vault
 from skifer_atlas.workspaces import repo_dir
 
@@ -31,8 +32,17 @@ def local(monkeypatch):
     monkeypatch.setenv("ATLAS_COMPARE_DATA", str(DATA))
 
 
-def test_setup_lists_variants_scopes_granularities_and_tolerances(client, local):
+def test_setup_lists_variants_scopes_granularities_and_tolerances(client, local, monkeypatch):
+    analyze = service.analyze
+    calls = []
+
+    def counted(root):
+        calls.append(root)
+        return analyze(root)
+
+    monkeypatch.setattr(service, "analyze", counted)
     setup = client.get(f"{COMPARISONS}/setup?kpi=revenu-net").json()
+    assert len(calls) == 1  # le panneau réutilise l'analyse pour chaque déclinaison
     assert (setup["label"], setup["version"], setup["local"]) == ("Revenu net", 4, True)
     assert [(v["entity"], v["mode"], v["platform"], v["outdated"])
             for v in setup["variants"]] == [
@@ -112,3 +122,10 @@ def test_canonical_diff_of_a_variant(client):
     assert verdicts["n02"] == "override_undeclared"
     assert code(client.get(f"{WS}/documents/revenu-net/canonical-diff")) == (
         422, "not_a_variant")
+    path = repo_dir("groupe-nordis") / "variants/revenu-net/nordis-de.yaml"
+    variant = yaml.safe_load(path.read_text(encoding="utf-8"))
+    variant["variant_of"]["version"] = 999
+    path.write_text(yaml.safe_dump(variant, allow_unicode=True), encoding="utf-8")
+    missing = client.get(f"{WS}/documents/revenu-net--nordis-de/canonical-diff")
+    assert code(missing) == (404, "not_found")
+    assert "Version 999 du canonique" in missing.json()["detail"]["message"]

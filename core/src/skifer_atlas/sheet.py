@@ -178,9 +178,13 @@ def canonical_diff(repo: Path, variant_id: str) -> dict:
     document = entry.document
     if document is None or document.kind != "variant":
         raise RepoError("not_a_variant", f"« {variant_id} » n'est pas une déclinaison.")
+    canonical_document = analysis.library.kpi(document.variant_of.id,
+                                              document.variant_of.version)
+    if canonical_document is None:
+        raise RepoError("not_found", f"Version {document.variant_of.version} du canonique "
+                        f"« {document.variant_of.id} » introuvable.")
     resolved = resolved_graph(document, analysis, f"« {variant_id} »")
-    canonical = ResolvedGraph(analysis.library.kpi(document.variant_of.id,
-                                                   document.variant_of.version))
+    canonical = ResolvedGraph(canonical_document)
     report = diff(canonical, resolved, DiffContext(document.mode, analysis.library))
     return {
         "base": labelled_layout(canonical, f"Canonique v{document.variant_of.version}"),

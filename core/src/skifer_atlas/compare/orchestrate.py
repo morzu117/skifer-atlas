@@ -184,7 +184,7 @@ def _side(document: Any, dialect: str, scope: Scope, analysis: Analysis, calenda
     return Side(compiled, dims, values[0])
 
 
-def _platform(document: Any, entity: str) -> str:
+def platform_of(document: Any, entity: str) -> str:
     platforms = {n.platform for n in document.graph.nodes if n.type == "source"}
     if len(platforms) != 1:
         raise RepoError("mixed_platforms", f"Les sources de « {entity} » doivent être sur une "
@@ -234,7 +234,7 @@ def prepare(analysis: Analysis, calendars: dict, governance_tolerance: float,
             raise RepoError("invalid_document", f"La déclinaison « {entity} » ne se résout "
                             "pas.", [i.to_dict() for i in resolved.issues
                                      if i.severity == "error"])
-        platform = _platform(resolved.document, entity)
+        platform = platform_of(resolved.document, entity)
         access_point = choose(entity, platform, request.access_points.get(entity))
         dialect = dialect_for(platform)
         rebound = rebind(kpi, resolved, analysis.library)
