@@ -34,7 +34,9 @@ def github_repository(remote_url: str) -> tuple[str, str] | None:
 
 
 def github_token(workspace_id: str | None = None) -> str | None:
-    """Le jeton de l'espace au coffre s'il est utilisable, sinon `ATLAS_GITHUB_TOKEN`."""
+    """Le jeton de l'espace au coffre, sinon `ATLAS_GITHUB_TOKEN`. Un jeton au coffre mais
+    expiré ne cède pas la place à l'environnement : l'espace agirait sous une autre
+    identité. Il n'y a pas de rafraîchissement (hors périmètre, plan 0025) : se reconnecter."""
     if workspace_id:
         from .device import stored  # import tardif : device importe ce module
 
@@ -42,8 +44,8 @@ def github_token(workspace_id: str | None = None) -> str | None:
             credential = stored(workspace_id)
         except RepoError:
             credential = None  # coffre indisponible : le repli de l'environnement
-        if credential is not None and credential.state() == "connected":
-            return credential.access_token
+        if credential is not None:
+            return credential.access_token if credential.state() == "connected" else None
     return os.environ.get("ATLAS_GITHUB_TOKEN") or None
 
 
