@@ -39,11 +39,25 @@ def test_layout_of_the_demo_workspace():
     ("https://moi:secret@github.com/nordis/annuaire.git", "credentials_in_url"),
     ("--upload-pack=touch /tmp/x", "invalid_remote"),
     ("  ", "invalid_remote"),
+    ("file:///tmp/annuaire.git", "invalid_remote"),
+    ("/tmp/annuaire.git", "invalid_remote"),
+    ("ext::sh -c evil", "invalid_remote"),
+    ("http://github.com/nordis/annuaire.git", "invalid_remote"),
+    ("git://github.com/nordis/annuaire.git", "invalid_remote"),
 ])
 def test_remote_urls_never_carry_credentials(url, code):
     with pytest.raises(RepoError) as error:
         repo_git.check_remote_url(url)
     assert error.value.code == code
+
+
+@pytest.mark.parametrize("url", [
+    "https://github.com/nordis/annuaire.git",
+    "ssh://git@github.com/nordis/annuaire.git",
+    "git@github.com:nordis/annuaire.git",
+])
+def test_https_and_ssh_remotes_are_allowed(url):
+    repo_git.check_remote_url(url)
 
 
 def test_missing_git_is_explained(monkeypatch):

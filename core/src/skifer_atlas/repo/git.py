@@ -65,7 +65,10 @@ def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
             env: dict[str, str] | None = None, token: str | None = None) -> str:
     """Sortie standard d'une commande git ; lève `RepoError` si elle échoue."""
     git_version()
-    command = ["git"]
+    command = ["git", "-c", "protocol.allow=never", "-c", "protocol.https.allow=always",
+               "-c", "protocol.ssh.allow=always"]
+    if os.environ.get("ATLAS_ALLOW_LOCAL_GIT") == "1":
+        command += ["-c", "protocol.file.allow=always"]
     environment = _env() | (env or {})
     if token:
         command += ["-c", "credential.helper=", "-c", f"credential.helper={_CREDENTIAL_HELPER}"]
@@ -101,13 +104,26 @@ def clone_lock(repo: Path) -> Iterator[None]:
 
 
 def check_remote_url(url: str) -> None:
-    """Refuse une URL qui porte un identifiant (`https://jeton@hôte/…`)."""
-    parts = urlsplit(url)
-    if parts.scheme in ("http", "https") and (parts.username or parts.password):
-        raise RepoError("credentials_in_url", "L'adresse du dépôt ne doit contenir ni "
-                       "identifiant ni jeton : l'authentification passe par le coffre.")
-    if not url.strip() or url.startswith("-"):
+    """N'admet que HTTPS et SSH ; un chemin local exige le mode de test explicite."""
+    if not url or any(char.isspace() for char in url) or url.startswith("-"):
         raise RepoError("invalid_remote", "Adresse de dépôt invalide.")
+    if os.environ.get("ATLAS_ALLOW_LOCAL_GIT") == "1" and (
+            Path(url).is_absolute() or url.startswith("file://")):
+        return
+    try:
+        parts = urlsplit(url)
+        if parts.scheme in ("https", "ssh") and parts.hostname and parts.path:
+            if parts.password or (parts.scheme == "https" and parts.username):
+                raise RepoError("credentials_in_url", "L'adresse du dépôt ne doit contenir "
+                                "ni identifiant ni jeton : l'authentification passe par "
+                                "le coffre.")
+            if not parts.query and not parts.fragment:
+                return
+    except ValueError:
+        pass
+    if re.fullmatch(r"[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:.+", url):
+        return  # syntaxe SSH scp : git@github.com:organisation/depot.git
+    raise RepoError("invalid_remote", "Adresse de dépôt invalide : utiliser HTTPS ou SSH.")
 
 
 def head(repo: Path) -> str:

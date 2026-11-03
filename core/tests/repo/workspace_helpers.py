@@ -27,6 +27,7 @@ def atlas_env(tmp_path, monkeypatch) -> Path:
     """Données d'Atlas et configuration Git isolées du poste."""
     data = tmp_path / "donnees"
     monkeypatch.setenv("ATLAS_DATA_DIR", str(data))
+    monkeypatch.setenv("ATLAS_ALLOW_LOCAL_GIT", "1")
     config = tmp_path / "gitconfig"
     config.write_text("")
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
