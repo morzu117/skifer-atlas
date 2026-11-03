@@ -11,6 +11,7 @@ from skifer_atlas.proposals import common as proposals_common
 from skifer_atlas.repo import RepoError
 from skifer_atlas.repo import git as repo_git
 from skifer_atlas.repo import sync as repo_sync
+from skifer_atlas.repo import versions as repo_versions
 from skifer_atlas.repo.layout import WorkspaceMeta, document_files, read_meta
 from skifer_atlas.repo.sync import create_workspace, join_workspace, sync_workspace
 from skifer_atlas.repo.versions import document_at, versions
@@ -203,6 +204,49 @@ def test_sync_tags_a_version_merged_outside_atlas(remote):
     assert sync_workspace("groupe-nordis")["warnings"] == []
 
 
+def test_one_sync_tags_each_intermediate_version_without_scanning_unrelated_commits(
+        remote, monkeypatch):
+    bare, work = remote
+    join_workspace(str(bare))
+    third = merge_on_the_host(work, NORDIS_FR, "version: 2", "version: 3", "FR v3")
+    for number in range(3):
+        (work / "notes.md").write_text(f"Note {number}.\n", encoding="utf-8")
+        commit_all(work, f"Note {number}")
+    git(work, "push", "--quiet", "origin", "main")
+    fourth = merge_on_the_host(work, NORDIS_FR, "version: 3", "version: 4", "FR v4")
+    checked = []
+    version_at = repo_versions.version_at
+
+    def counted(repo, revision, path):
+        checked.append((revision, path))
+        return version_at(repo, revision, path)
+
+    monkeypatch.setattr(repo_versions, "version_at", counted)
+    result = sync_workspace("groupe-nordis")
+    assert [warning["code"] for warning in result["warnings"]] == ["versions_tagged"]
+    assert len(checked) == 4  # deux lectures par fusion, aucune pour notes.md
+    clone = repo_dir("groupe-nordis")
+    assert [(v.version, v.commit) for v in versions(clone, "revenu-net--nordis-fr")] == [
+        (3, third), (4, fourth)]
+    for number, commit in ((3, third), (4, fourth)):
+        assert git(bare, "rev-parse", f"doc/revenu-net--nordis-fr/v{number}^{{commit}}") \
+            .strip() == commit
+
+
+def test_sync_does_not_tag_a_moved_document_with_the_same_version(remote):
+    bare, work = remote
+    join_workspace(str(bare))
+    moved = "variants/revenu-net/nordis-france.yaml"
+    git(work, "mv", NORDIS_FR, moved)
+    path = work / moved
+    path.write_text(path.read_text(encoding="utf-8").replace(
+        "revenu-net--nordis-fr", "revenu-net--nordis-france"), encoding="utf-8")
+    commit_all(work, "Renomme la déclinaison FR")
+    git(work, "push", "--quiet", "origin", "main")
+    assert sync_workspace("groupe-nordis")["warnings"] == []
+    assert git(bare, "tag", "--list", "doc/revenu-net--nordis-france/*") == ""
+
+
 def test_sync_leaves_versions_tagged_by_atlas_alone(remote):
     bare, work = remote
     join_workspace(str(bare))
@@ -223,6 +267,10 @@ def test_tags_stay_local_when_they_cannot_be_pushed(remote):
     assert codes == ["versions_tagged", "tags_not_pushed"]
     assert [v.version for v in versions(repo_dir("groupe-nordis"), "revenu-net--nordis-fr")] \
         == [3]
+    hook.unlink()
+    retried = sync_workspace("groupe-nordis")
+    assert (retried["status"], retried["warnings"]) == ("up_to_date", [])
+    assert git(bare, "rev-parse", "doc/revenu-net--nordis-fr/v3^{commit}").strip()
 
 
 def test_divergent_history_is_a_conflict_and_leaves_the_clone_untouched(remote):

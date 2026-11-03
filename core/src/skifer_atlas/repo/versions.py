@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
 from .git import RepoError, run_git, show
-from .layout import document_files
 
 _SEPARATOR = "\x1f"
 
@@ -78,28 +77,47 @@ def version_at(repo: Path, revision: str, path: str) -> int | None:
     return version if isinstance(version, int) and not isinstance(version, bool) else None
 
 
+def _document_id(path: str) -> str | None:
+    """Identifiant imposé par un chemin de document (ADR 0007)."""
+    parts = PurePosixPath(path).parts
+    if len(parts) == 2 and parts[0] in ("concepts", "kpis") and parts[1].endswith(".yaml"):
+        return PurePosixPath(parts[1]).stem
+    if len(parts) == 3 and parts[0] == "variants" and parts[2].endswith(".yaml"):
+        return f"{parts[1]}--{PurePosixPath(parts[2]).stem}"
+    return None
+
+
 def missing_tags(repo: Path, before: str, after: str) -> list[tuple[str, str]]:
     """Versions apparues entre `before` et `after` sur la branche principale sans leur tag.
 
-    Pour chaque document dont la version a changé, le tag revient au premier commit de la
-    branche principale (premier parent : la fusion, comme pour Atlas) qui porte la nouvelle
-    version. Une version déjà taguée, ou un document modifié sans changer de version, ne
-    donne rien. Renvoie `(tag, commit)` dans l'ordre des documents."""
-    changed = set(run_git(["diff", "--name-only", before, after], repo).splitlines())
+    Chaque commit de premier parent est comparé à son parent : seuls ses fichiers
+    documentaires modifiés sont lus. Un renommage avec version inchangée ne crée rien.
+    Renvoie `(tag, commit)` dans l'ordre des fusions et des chemins."""
     existing = set(run_git(["tag", "--list", "doc/*"], repo).split())
     commits = run_git(["rev-list", "--first-parent", "--reverse", f"{before}..{after}"],
                       repo).split()
     found = []
-    for file in document_files(repo):
-        if file.path not in changed:
-            continue
-        version = version_at(repo, after, file.path)
-        if version is None or version == version_at(repo, before, file.path):
-            continue
-        name = tag_name(file.expected_id, version)
-        if name in existing:
-            continue
-        first = next((c for c in commits if version_at(repo, c, file.path) == version), None)
-        if first is not None:
-            found.append((name, first))
+    parent = before
+    for commit in commits:
+        changed = run_git(["diff", "--name-status", "-M", parent, commit, "--",
+                           "concepts", "kpis", "variants"], repo).splitlines()
+        for line in changed:
+            fields = line.split("\t")
+            status = fields[0]
+            if status.startswith("D"):
+                continue
+            old_path, path = ((fields[1], fields[2]) if status.startswith("R") else
+                              (fields[1], fields[1]))
+            document_id = _document_id(path)
+            if document_id is None:
+                continue
+            version = version_at(repo, commit, path)
+            previous = version_at(repo, parent, old_path)
+            if version is None or version == previous:
+                continue
+            name = tag_name(document_id, version)
+            if name not in existing:
+                found.append((name, commit))
+                existing.add(name)
+        parent = commit
     return found
