@@ -72,6 +72,7 @@ class Flow:
     next_poll: float = 0
     status: str = "pending"  # pending, connected, denied, expired
     credential: Credential | None = field(default=None, repr=False)
+    polling: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
 _flows: dict[str, Flow] = {}
@@ -127,8 +128,14 @@ def _flow(flow_id: str) -> Flow:
 
 
 def poll(flow_id: str) -> dict:
-    """Où en est le flux. Au plus une requête à GitHub par intervalle."""
+    """Où en est le flux. Au plus une requête à GitHub par intervalle, même pour deux
+    relectures simultanées : la seconde attend la première, puis voit `next_poll`."""
     flow = _flow(flow_id)
+    with flow.polling:
+        return _poll(flow)
+
+
+def _poll(flow: Flow) -> dict:
     now = time.time()
     if flow.status == "pending" and now > flow.expires_at:
         flow.status = "expired"

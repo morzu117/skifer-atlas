@@ -11,10 +11,11 @@ from workspace_helpers import atlas_env, remote
 
 from skifer_atlas.api.app import create_app
 from skifer_atlas.githost import device, host_for, remote_token
+from skifer_atlas.githost.github import github_token
 from skifer_atlas.repo.sync import join_workspace
 from skifer_atlas.vault import GITHUB_ENTRY, Credential, Vault
 from skifer_atlas.vault.keyring_vault import _memory
-from skifer_atlas.workspaces import get_workspace
+from skifer_atlas.workspaces import get_workspace, repo_dir
 
 __all__ = ["atlas_env", "remote"]  # fixtures importées
 
@@ -111,7 +112,8 @@ def test_device_flow_stores_the_token_in_the_workspace_vault(github, remote):
 
 
 def test_the_token_is_scoped_to_its_workspace(github, monkeypatch):
-    """Critère 3 : chaque espace lit son propre jeton ; à défaut, `ATLAS_GITHUB_TOKEN`."""
+    """Critère 3 : chaque espace lit son propre jeton ; sans jeton au coffre,
+    `ATLAS_GITHUB_TOKEN`. Un jeton refusé ne cède pas la place au repli (ADR 0029, #50)."""
     Vault().put("groupe-nordis", GITHUB_ENTRY, Credential(kind="github", access_token=TOKEN))
     assert remote_token(GITHUB, "groupe-nordis") == TOKEN
     assert remote_token(GITHUB, "autre-espace") is None
@@ -121,7 +123,7 @@ def test_the_token_is_scoped_to_its_workspace(github, monkeypatch):
     assert remote_token(GITHUB, "groupe-nordis") == TOKEN
     Vault().put("groupe-nordis", GITHUB_ENTRY,
                 Credential(kind="github", access_token=TOKEN, rejected=True))
-    assert remote_token(GITHUB, "groupe-nordis") == "ghp_repli"
+    assert remote_token(GITHUB, "groupe-nordis") is None
 
 
 def test_join_takes_the_token_of_a_flow_made_before_the_workspace_exists(github, remote):
@@ -148,6 +150,77 @@ def test_a_failed_join_keeps_the_flow(github, atlas_env, tmp_path):
                                                        "github_flow": flow})
     assert failed.json()["detail"]["code"] == "clone_failed"
     assert device.pending(flow).access_token == TOKEN
+
+
+def test_a_join_that_fails_after_the_clone_leaves_nothing_and_can_be_retried(
+        github, remote, monkeypatch):
+    """#50 : l'ajout au registre échoue après le clonage et le rangement du jeton : ni clone
+    ni jeton ne restent, le flux garde son jeton, et l'adhésion se retente."""
+    bare, _ = remote
+    client = TestClient(create_app(token="secret"), headers=AUTH)
+    flow, _ = connect(client)
+
+    def full_disk(workspace):
+        raise OSError("disque plein")
+
+    # Un contexte, et non `monkeypatch.undo()`, qui déferait aussi l'environnement des
+    # fixtures (dossier de données, coffre en mémoire) avant la seconde adhésion.
+    with monkeypatch.context() as patched:
+        patched.setattr("skifer_atlas.repo.sync.add_workspace", full_disk)
+        with pytest.raises(OSError):
+            join_workspace(str(bare), flow)
+    assert not repo_dir("groupe-nordis").exists()
+    assert Vault().get("groupe-nordis", GITHUB_ENTRY) is None
+    assert device.pending(flow).access_token == TOKEN
+    joined = client.post("/api/workspaces/join", json={"remote_url": str(bare),
+                                                       "github_flow": flow})
+    assert joined.status_code == 201, joined.text
+    assert Vault().get("groupe-nordis", GITHUB_ENTRY).access_token == TOKEN
+
+
+def test_an_expired_vault_token_does_not_fall_back_to_the_environment(github, remote,
+                                                                      monkeypatch):
+    """#50 : le jeton de l'espace a expiré ; `ATLAS_GITHUB_TOKEN` appartient peut-être à
+    une autre identité, il n'est pas pris. Sans jeton au coffre, il l'est."""
+    bare, _ = remote
+    join_workspace(str(bare))
+    monkeypatch.setenv("ATLAS_GITHUB_TOKEN", "ghp_jeton-de-l-integration")
+    assert github_token("groupe-nordis") == "ghp_jeton-de-l-integration"
+    Vault().put("groupe-nordis", GITHUB_ENTRY, Credential(kind="github", access_token=TOKEN,
+                                                          expires_at=1.0))
+    assert github_token("groupe-nordis") is None
+    client = TestClient(create_app(token="secret"), headers=AUTH)
+    state = client.get("/api/workspaces/groupe-nordis/github").json()
+    assert (state["state"], state["source"]) == ("expired", "vault")
+
+
+def test_two_simultaneous_polls_make_one_request(github, monkeypatch):
+    """#50 : la seconde relecture attend la réponse de la première au lieu de rendre
+    « pending » pendant que GitHub répond, et n'interroge pas GitHub une seconde fois."""
+    client = TestClient(create_app(token="secret"), headers=AUTH)
+    flow = client.post("/api/github/device", json={}).json()["flow"]
+    github["answers"][:] = [{"access_token": TOKEN, "token_type": "bearer", "scope": "repo"}]
+    post, asking, answer = device._post, threading.Event(), threading.Event()
+
+    def slow_post(path, form):
+        if path == "/login/oauth/access_token":
+            asking.set()
+            assert answer.wait(5)
+        return post(path, form)
+
+    monkeypatch.setattr(device, "_post", slow_post)
+    statuses = []
+    first = threading.Thread(target=lambda: statuses.append(device.poll(flow)["status"]))
+    first.start()
+    assert asking.wait(5)
+    second = threading.Thread(target=lambda: statuses.append(device.poll(flow)["status"]))
+    second.start()
+    second.join(0.3)  # sans verrou, elle rend « pending » ici
+    answer.set()
+    first.join(5)
+    second.join(5)
+    assert statuses == ["connected", "connected"]
+    assert [path for path, _ in github["calls"]].count("/login/oauth/access_token") == 1
 
 
 def test_refused_expired_and_unconfigured(github, monkeypatch):

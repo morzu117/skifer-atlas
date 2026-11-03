@@ -31,5 +31,11 @@ Les propositions, revues et fusions passent par l'API de GitHub, et un dépôt p
 - Un jeton à durée limitée (option des GitHub Apps) n'est pas rafraîchi : une fois expiré, l'écran propose « Reconnecter GitHub ».
 - En SSH, git utilise la clé de l'agent ; le jeton ne sert qu'à l'API.
 - Tests :
-  - `core/tests/repo/test_github_device.py` (8 tests, contre un faux GitHub) ;
+  - `core/tests/repo/test_github_device.py` (11 tests, contre un faux GitHub) ;
   - `app/src/screens/GitHub.test.tsx` (6 tests).
+
+## Complément (3 novembre 2026, issue #50)
+
+- **Pas de repli derrière un jeton expiré.** Un espace qui a un jeton au coffre, expiré ou refusé, ne prend pas `ATLAS_GITHUB_TOKEN` : ce jeton peut appartenir à une autre identité, et l'espace agirait en son nom. Il agit sans jeton (`host_auth_failed`), et l'écran propose « Reconnecter GitHub ». Le repli ne vaut que sans jeton au coffre, ou coffre indisponible. Le rafraîchissement reste hors périmètre : GitHub exige le secret du client, qu'une app de bureau ne peut pas garder.
+- **Une relecture à la fois par flux.** Deux relectures simultanées du même flux ne font qu'une requête : la seconde attend la réponse de la première.
+- **Adhésion sans reste.** Si l'adhésion échoue après le clonage (coffre, compte, registre), le clone et le jeton rangés pour l'espace sont retirés ; le flux garde son jeton, et l'adhésion se retente sans refaire la connexion.
