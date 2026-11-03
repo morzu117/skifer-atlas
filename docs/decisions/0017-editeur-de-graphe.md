@@ -45,6 +45,7 @@ Le critère 11 (validation sous 150 ms sur 50 nœuds) a aussi révélé un coût
 - **Brouillons et positions** :
   - emplacement : `.atlas/drafts/<id>.json` et `.atlas/layout/<id>.json`, dans le dossier de l'espace, hors dépôt ;
   - contenu du brouillon : le document, les positions, `highest` et la version de base ;
+  - écriture réservée aux membres autres que lecteurs, avec une limite de 2 Mio par brouillon ;
   - enregistrement automatique 800 ms après la dernière modification.
 
   À la réouverture, le brouillon est repris avec un bandeau. Si la version courante a changé depuis, le bandeau le signale (« La version courante a changé depuis ce brouillon ») et propose de repartir de la nouvelle version.

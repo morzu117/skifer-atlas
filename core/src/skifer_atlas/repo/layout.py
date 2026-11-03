@@ -28,7 +28,7 @@ from ..paths import WORKSPACE_ID_PATTERN
 META_FILE = "atlas.yaml"
 GOVERNANCE_FILE = "governance.yaml"
 FOLDERS = {"concept": "concepts", "kpi": "kpis", "variant": "variants"}
-SLUG = r"^[a-z0-9][a-z0-9-]{1,63}$"
+SLUG = r"^[a-z0-9][a-z0-9-]{1,63}\Z"
 
 
 class WorkspaceMeta(BaseModel):

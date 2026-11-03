@@ -6,6 +6,7 @@ import statistics
 import subprocess
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +14,8 @@ from workspace_helpers import EXAMPLE, atlas_env
 
 from skifer_atlas.api.app import create_app
 from skifer_atlas.model.io import read_yaml
+from skifer_atlas.paths import workspace_dir
+from skifer_atlas.workspaces import get_workspace, update_workspace
 
 __all__ = ["atlas_env"]  # fixture importée
 
@@ -148,6 +151,14 @@ def test_new_document_and_existing_id(client):
     assert opened(client, "revenu-net-2")["document"]["label"] == "Revenu net"
 
 
+def test_document_id_with_trailing_newline_is_invalid(client):
+    body = {"kind": "kpi", "id": "nouveau-id\n", "label": "Nouveau", "domain": "finance",
+            "owner": "anna.k"}
+    response = client.post(f"{EDITOR}/documents", json=body)
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_document"
+
+
 def test_draft_survives_and_is_deleted(client):
     """Critère 9 : le brouillon et les positions sont relus à la réouverture."""
     document = opened(client)["document"]
@@ -161,6 +172,54 @@ def test_draft_survives_and_is_deleted(client):
     assert (info["draft"]["highest"], info["positions"]) == (8, {"n01": {"x": 24, "y": 48}})
     assert client.delete(f"{EDITOR}/documents/revenu-net/draft").status_code == 204
     assert opened(client)["draft"] is None
+
+
+def test_corrupt_document_in_draft_is_reported(client):
+    draft = workspace_dir("groupe-nordis") / ".atlas/drafts/nouveau-corrompu.json"
+    draft.parent.mkdir(parents=True, exist_ok=True)
+    draft.write_text('{"document": ["not", "an", "object"]}', encoding="utf-8")
+    response = client.get(f"{EDITOR}/documents/nouveau-corrompu")
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_document"
+
+
+def test_reader_cannot_change_draft(client):
+    workspace = get_workspace("groupe-nordis")
+    update_workspace(workspace.model_copy(update={"role": "lecteur"}))
+    path = f"{EDITOR}/documents/revenu-net/draft"
+    assert client.put(path, json={"document": {"kind": "kpi"}}).status_code == 403
+    assert client.delete(path).status_code == 403
+
+
+def test_oversized_draft_is_rejected_before_writing(client):
+    path = f"{EDITOR}/documents/revenu-net/draft"
+    response = client.put(path, json={"document": {"label": "x" * (2 * 1024 * 1024)}})
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_document"
+    assert not (workspace_dir("groupe-nordis") / ".atlas/drafts/revenu-net.json").exists()
+
+
+def test_editor_analysis_cache_evicts_old_workspaces(monkeypatch, tmp_path):
+    from skifer_atlas.api.routes import editor as editor_routes
+
+    calls = []
+    monkeypatch.setattr(editor_routes, "workspace_or_404", lambda ws: SimpleNamespace(id=ws))
+    monkeypatch.setattr(editor_routes, "repo_dir", lambda ws: tmp_path / ws)
+    monkeypatch.setattr(editor_routes, "head", lambda repo: "same-commit")
+    monkeypatch.setattr(editor_routes, "analyze", lambda repo: calls.append(repo) or object())
+    monkeypatch.setattr(editor_routes.editor, "calendars_of", lambda repo: {})
+    previous = editor_routes._cache.copy()
+    try:
+        editor_routes._cache.clear()
+        for number in range(editor_routes.MAX_CACHED_WORKSPACES + 1):
+            editor_routes._context(f"space-{number}")
+        assert len(editor_routes._cache) == editor_routes.MAX_CACHED_WORKSPACES
+        editor_routes._context("space-0")
+        assert calls[-1] == tmp_path / "space-0"
+        assert len(calls) == editor_routes.MAX_CACHED_WORKSPACES + 2
+    finally:
+        editor_routes._cache.clear()
+        editor_routes._cache.update(previous)
 
 
 def test_parse_reports_the_line(client):
