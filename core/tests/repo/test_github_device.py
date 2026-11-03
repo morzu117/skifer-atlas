@@ -178,6 +178,26 @@ def test_a_join_that_fails_after_the_clone_leaves_nothing_and_can_be_retried(
     assert Vault().get("groupe-nordis", GITHUB_ENTRY).access_token == TOKEN
 
 
+def test_a_failed_join_restores_an_existing_token(github, remote, monkeypatch):
+    """#92 : rejoindre à nouveau un espace ne détruit pas son ancien jeton si l'ajout échoue."""
+    bare, _ = remote
+    old = Credential(kind="github", access_token="gho_ancien-jeton")
+    Vault().put("groupe-nordis", GITHUB_ENTRY, old)
+    client = TestClient(create_app(token="secret"), headers=AUTH)
+    flow, _ = connect(client)
+
+    def full_disk(workspace):
+        raise OSError("disque plein")
+
+    with monkeypatch.context() as patched:
+        patched.setattr("skifer_atlas.repo.sync.add_workspace", full_disk)
+        with pytest.raises(OSError, match="disque plein"):
+            join_workspace(str(bare), flow)
+    assert not repo_dir("groupe-nordis").exists()
+    assert Vault().get("groupe-nordis", GITHUB_ENTRY) == old
+    assert device.pending(flow).access_token == TOKEN
+
+
 def test_an_expired_vault_token_does_not_fall_back_to_the_environment(github, remote,
                                                                       monkeypatch):
     """#50 : le jeton de l'espace a expiré ; `ATLAS_GITHUB_TOKEN` appartient peut-être à
@@ -195,12 +215,14 @@ def test_an_expired_vault_token_does_not_fall_back_to_the_environment(github, re
 
 
 def test_two_simultaneous_polls_make_one_request(github, monkeypatch):
-    """#50 : la seconde relecture attend la réponse de la première au lieu de rendre
-    « pending » pendant que GitHub répond, et n'interroge pas GitHub une seconde fois."""
+    """#92 : la seconde relecture rend l'état courant sans attendre GitHub et sans
+    lancer une deuxième requête. Son entrée dans `poll` est synchronisée par événement."""
     client = TestClient(create_app(token="secret"), headers=AUTH)
     flow = client.post("/api/github/device", json={}).json()["flow"]
     github["answers"][:] = [{"access_token": TOKEN, "token_type": "bearer", "scope": "repo"}]
     post, asking, answer = device._post, threading.Event(), threading.Event()
+    second_entered, second_done = threading.Event(), threading.Event()
+    find_flow = device._flow
 
     def slow_post(path, form):
         if path == "/login/oauth/access_token":
@@ -208,19 +230,63 @@ def test_two_simultaneous_polls_make_one_request(github, monkeypatch):
             assert answer.wait(5)
         return post(path, form)
 
+    def traced_flow(flow_id):
+        if threading.current_thread().name == "second-poll":
+            second_entered.set()
+        return find_flow(flow_id)
+
     monkeypatch.setattr(device, "_post", slow_post)
-    statuses = []
-    first = threading.Thread(target=lambda: statuses.append(device.poll(flow)["status"]))
+    monkeypatch.setattr(device, "_flow", traced_flow)
+    statuses = {}
+    first = threading.Thread(target=lambda: statuses.update(first=device.poll(flow)["status"]))
     first.start()
     assert asking.wait(5)
-    second = threading.Thread(target=lambda: statuses.append(device.poll(flow)["status"]))
-    second.start()
-    second.join(0.3)  # sans verrou, elle rend « pending » ici
-    answer.set()
+    def second_poll():
+        statuses["second"] = device.poll(flow)["status"]
+        second_done.set()
+
+    second = threading.Thread(target=second_poll, name="second-poll")
+    try:
+        second.start()
+        assert second_entered.wait(5)
+        assert second_done.wait(2)  # GitHub n'a toujours pas répondu
+        assert statuses["second"] == "pending"
+    finally:
+        answer.set()
     first.join(5)
     second.join(5)
-    assert statuses == ["connected", "connected"]
+    assert not first.is_alive() and not second.is_alive()
+    assert statuses == {"second": "pending", "first": "connected"}
+    assert device.poll(flow)["status"] == "connected"
     assert [path for path, _ in github["calls"]].count("/login/oauth/access_token") == 1
+
+
+def test_poll_does_not_report_connected_before_the_token_is_stored(github, monkeypatch):
+    """#92 : une écriture lente au coffre ne rend pas « connected » trop tôt."""
+    flow = device.start("groupe-nordis")["flow"]
+    github["answers"][:] = [{"access_token": TOKEN, "token_type": "bearer", "scope": "repo"}]
+    writing, allow_write = threading.Event(), threading.Event()
+    put = Vault.put
+
+    def slow_put(self, workspace_id, entry, credential):
+        writing.set()
+        assert allow_write.wait(5)
+        return put(self, workspace_id, entry, credential)
+
+    monkeypatch.setattr(Vault, "put", slow_put)
+    statuses = {}
+    first = threading.Thread(target=lambda: statuses.update(first=device.poll(flow)["status"]))
+    first.start()
+    try:
+        assert writing.wait(5)
+        assert Vault().get("groupe-nordis", GITHUB_ENTRY) is None
+        assert device.poll(flow)["status"] == "pending"
+    finally:
+        allow_write.set()
+        first.join(5)
+    assert not first.is_alive()
+    assert statuses == {"first": "connected"}
+    assert Vault().get("groupe-nordis", GITHUB_ENTRY).access_token == TOKEN
 
 
 def test_refused_expired_and_unconfigured(github, monkeypatch):
