@@ -275,18 +275,20 @@ def _authorize_sso(workspace_id: str, point: AccessPoint, vault: Vault | None,
         def save() -> None:
             if draft:
                 drafts.put(workspace_id, point.id, point.base_url)
-            previous = LIVE.pop(key, None)
-            if previous is not None:
-                snowflake_connector.close_quietly(previous)
             if tokens is not None:
                 vault.put(workspace_id, point.id, Credential("sso", tokens[0], tokens[1],
                                                              expires_at=tokens[2],
                                                              host=point.base_url))
+            else:
+                vault.put(workspace_id, point.id, Credential("sso", "", host=point.base_url))
+            logins.put(workspace_id, point.id, Login(user))
+            previous = LIVE.pop(key, None)
+            if previous is not None:
+                snowflake_connector.close_quietly(previous)
+            if tokens is not None:
                 snowflake_connector.close_quietly(connection)  # session keep-alive
             else:
                 LIVE[key] = connection
-                vault.put(workspace_id, point.id, Credential("sso", "", host=point.base_url))
-            logins.put(workspace_id, point.id, Login(user))
 
         if attempt is not None:
             _store_draft(key, attempt, save)

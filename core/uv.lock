@@ -1178,7 +1178,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "skifer", git = "https://github.com/morzu117/skifer.git?rev=v4.0.0" },
-    { name = "snowflake-connector-python", specifier = ">=3.12" },
+    { name = "snowflake-connector-python", specifier = ">=5.1" },
     { name = "sqlglot", specifier = ">=25.0" },
     { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2024.1" },
     { name = "uvicorn", specifier = ">=0.30" },
