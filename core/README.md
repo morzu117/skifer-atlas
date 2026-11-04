@@ -22,6 +22,8 @@ uv run atlas extract notebook.py --dialect snowflake --format json      # brouil
 uv run atlas compile ../examples/espace-nordis/kpis/revenu-net.yaml --dialect snowflake   # SQL d'un dialecte
 uv run atlas compile revenu-net.yaml --period FY2026_Q1 --perimeter entite:in:FR --by entite
 uv run atlas compile revenu-net.yaml --compilability          # statut JSON par dialecte ; 2 si un dialecte est exclu
+
+Avec `--out`, `atlas compile` écrase le fichier cible s'il existe déjà.
 uv run atlas run ../examples/espace-nordis/kpis/revenu-net.yaml --data tests/fixtures/compile/revenu-net   # CSV
 uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-de,nordis-fr --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net   # 0 dans la tolérance, 2 écarts
 uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-es --scope fy2026-mois-entite --duckdb-data tests/fixtures/compare/revenu-net   # from scratch, rebranchée par binding : 75 %
