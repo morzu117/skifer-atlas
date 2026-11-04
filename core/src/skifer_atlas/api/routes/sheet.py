@@ -8,6 +8,8 @@ from fastapi import APIRouter, Query
 from ... import sheet as fiche
 from ...index import document as search_document
 from ...index import ensure_index
+from ...index.schema import index_state
+from ...repo.git import show
 from ...workspaces import index_path, repo_dir
 from .common import document_id_or_404, not_found, workspace_or_404
 
@@ -62,11 +64,12 @@ def get_draft(ws: str, document_id: str) -> dict:
     connection = ensure_index(repo_dir(workspace.id), index_path(workspace.id))
     try:
         found = search_document(connection, document_id_or_404(document_id))
+        commit = index_state(connection)[0]
     finally:
         connection.close()
     if found is None:
         raise not_found(f"Document « {document_id} » introuvable.")
-    text = (repo_dir(workspace.id) / found["path"]).read_text(encoding="utf-8")
+    text = show(repo_dir(workspace.id), commit, found["path"])
     content, base, version = fiche.next_version(text)
     return {"id": document_id, "kind": found["kind"], "label": found["label"],
             "base_version": base, "version": version, "content": content}

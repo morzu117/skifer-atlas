@@ -11,6 +11,7 @@ from workspace_helpers import EXAMPLE, atlas_env
 from skifer_atlas.api.app import create_app
 from skifer_atlas.repo.git import RepoError
 from skifer_atlas.sheet import next_version
+from skifer_atlas.workspaces import repo_dir
 
 __all__ = ["atlas_env"]  # fixture importée
 
@@ -85,6 +86,31 @@ def test_layout_shows_variation_points(client):
     assert variant["overrides"] == ["n02", "n03", "semantics.timezone"]
 
 
+def test_sheet_analysis_is_reused_until_the_checkout_changes(client, monkeypatch):
+    from skifer_atlas import sheet as fiche
+
+    repo = repo_dir("groupe-nordis")
+    original = fiche.analyze
+    calls = []
+
+    def counted(path):
+        calls.append(path)
+        return original(path)
+
+    monkeypatch.setattr(fiche, "analyze", counted)
+    fiche._cached_analysis.cache_clear()
+    try:
+        assert client.get(f"{DOCS}/revenu-net/layout").status_code == 200
+        assert client.get(f"{DOCS}/revenu-net/diff?base=3&other=4").status_code == 200
+        assert len(calls) == 1
+        source = repo / "kpis/revenu-net.yaml"
+        source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        assert client.get(f"{DOCS}/revenu-net/layout").status_code == 200
+        assert len(calls) == 2
+    finally:
+        fiche._cached_analysis.cache_clear()
+
+
 def test_version_diff(client):
     """Critère 3 : v3 → v4, écarts classés du plan 0003."""
     report = client.get(f"{DOCS}/revenu-net/diff", params={"base": 3, "other": 4}).json()
@@ -121,6 +147,18 @@ def test_draft_increments_version_only(client):
     changed = [line for line in difflib.ndiff(current.splitlines(), draft["content"].splitlines())
                if line[:1] in "+-"]
     assert changed == ["-   version: 4", "+   version: 5"]
+
+
+def test_draft_reports_missing_content_as_a_business_error(client, monkeypatch):
+    from skifer_atlas.api.routes import sheet as sheet_routes
+
+    def missing(*args):
+        raise RepoError("not_found", "Version indexée introuvable.")
+
+    monkeypatch.setattr(sheet_routes, "show", missing)
+    response = client.get(f"{DOCS}/revenu-net/draft")
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "not_found"
 
 
 def test_concept_sheet(client):
