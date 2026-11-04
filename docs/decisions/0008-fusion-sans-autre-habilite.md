@@ -16,12 +16,12 @@ Le brief (5.2) demande de ne pas bloquer l'adoption par une gouvernance trop exi
 
 ## Décision
 
-- **Règle.** L'auteur peut fusionner sa proposition sans approbation lorsqu'**aucun autre compte n'est habilité** à l'approuver :
+- **Règle.** L'auteur peut fusionner sa proposition sans approbation lorsqu'il est lui-même habilité et qu'**aucun autre compte n'est habilité** à l'approuver :
   - pour une modification de `governance.yaml`, aucun autre référent d'espace ;
   - pour un document, aucun autre compte `validateur` ou `referent` sur son domaine.
   
   La règle vaut pour la gouvernance comme pour les documents.
-- **Calcul sur la branche principale.** Les habilités se comptent dans le `governance.yaml` de la branche principale, jamais dans celui de la proposition. Sinon, une proposition qui retire les autres référents permettrait à son auteur de se retrouver seul et de fusionner sans revue.
+- **Calcul sur la branche principale.** Les habilités se comptent dans le `governance.yaml` de la branche principale, jamais dans celui de la proposition. Pour une nouvelle version, le domaine retenu est celui du document sur la branche principale, même si la proposition déplace le document vers un autre domaine. Une proposition ne peut ainsi retirer ses propres validateurs en changeant la gouvernance ou le domaine.
 - **Pas d'abaissement du nombre requis.** S'il existe au moins un autre habilité, le décompte normal s'applique en entier. Si un domaine exige deux validations et qu'un seul autre compte est habilité, la proposition reste bloquée, et le décompte l'explique (« 2 validations requises, 1 seul autre compte habilité »). L'exception ne vaut que lorsqu'il n'y a personne d'autre.
 - **Trace.**
   - La proposition porte la mention « Fusionnée sans revue : aucun autre compte habilité ».

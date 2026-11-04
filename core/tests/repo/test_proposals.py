@@ -253,6 +253,21 @@ def test_stale_base(client, joined, as_):
     assert code(propose(client, revenu_net("Autre"), 4)) == (409, "stale_base")
 
 
+def test_moving_a_kpi_keeps_its_original_domain_reviewers(client, joined, as_):
+    as_("julien.h")  # seul habilité dans Marketing, mais pas dans Finance
+    changed = revenu_net().replace("domain: finance", "domain: marketing", 1)
+    proposal = propose(client, changed, 4)
+    assert proposal.status_code == 201, proposal.text
+    assert proposal.json()["domain"] == "marketing"
+    assert proposal.json()["merge_mode"] == "reviewed"
+    assert not proposal.json()["ready_to_merge"]
+    assert code(client.post(f"{PROPOSALS}/1/merge")) == (409, "not_ready")
+    as_("marc.d")  # validateur du domaine initial Finance
+    review = client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"})
+    assert review.status_code == 200, review.text
+    assert review.json()["approvals"]["obtained"] == 1
+
+
 @pytest.mark.parametrize("text", [
     "kind: [",  # YAML illisible
     revenu_net().replace("type: source", "type: inconnu", 1),  # schéma

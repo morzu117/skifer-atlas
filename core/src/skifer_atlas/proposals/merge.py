@@ -13,7 +13,7 @@ from ..governance.rules import decide
 from ..repo.git import RepoError
 from ..repo.sync import sync_workspace
 from ..repo.versions import tag_name
-from .common import open_context, parse_body
+from .common import open_context, parse_body, review_domain
 from .create import SHARED_FILES, current_version
 
 
@@ -28,7 +28,8 @@ def merge_proposal(workspace_id: str, number: int) -> dict:
         raise RepoError("not_found", f"La pull request #{number} n'est pas une proposition "
                         "Atlas.")
     target = block["target"]
-    decision = decide(context.governance, block["nature"], block.get("domain"), pull.author,
+    domain = review_domain(context, target, block.get("base_version"), block.get("domain"))
+    decision = decide(context.governance, block["nature"], domain, pull.author,
                       context.host.get_reviews(number), pull.head)
     if not decision.ready_to_merge:
         raise RepoError("not_ready", decision.explanation or "Validations insuffisantes.")

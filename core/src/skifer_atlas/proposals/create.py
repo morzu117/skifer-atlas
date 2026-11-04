@@ -43,6 +43,7 @@ from .common import (
     push,
     remote_branches,
     render_body,
+    review_domain,
 )
 
 # Fichiers partagés de l'espace, approuvés par un référent d'espace et sans version.
@@ -197,7 +198,8 @@ def create_proposal(workspace_id: str, document_yaml: str, justification: str,
                         "avant de proposer.", _issues(errors or entry.issues))
     nature = _nature(target, entry)
     domain = _domain(target, analysis, entry)
-    need = requirement(context.governance, nature, domain)
+    need = requirement(context.governance, nature,
+                       review_domain(context, target, base_version, domain))
     title = _title(target, entry, analysis, version)
     block = {
         "schema_version": 1, "target": target, "nature": nature, "domain": domain,

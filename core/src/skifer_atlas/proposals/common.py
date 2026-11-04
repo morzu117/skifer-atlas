@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ..githost import GitHost, host_for, remote_token
 from ..governance.model import ROLE_RANK, Governance, parse_governance, role_of
+from ..model.io import read_yaml
 from ..repo.git import RepoError, clone_lock, run_git
 from ..repo.layout import GOVERNANCE_FILE, read_meta
 from ..repo.sync import sync_workspace
@@ -97,6 +98,21 @@ def parse_body(body: str) -> tuple[str, dict | None]:
     justification = body[:match.start()].replace(
         "<!-- Bloc lu par Atlas : ne pas modifier. -->", "").strip()
     return justification, block
+
+
+def review_domain(context: Context, target: dict, base_version: int | None,
+                  proposed_domain: str | None) -> str | None:
+    """Une version existante garde les validateurs de son domaine sur main.
+
+    Un déplacement de domaine ne peut ainsi pas débloquer une fusion sans revue.
+    """
+    if base_version is None or target["kind"] not in ("kpi", "concept"):
+        return proposed_domain
+    text = context.show(target["path"])
+    raw, _ = read_yaml(text) if text else (None, [])
+    product = raw.get("data_product") if isinstance(raw, dict) else None
+    domain = product.get("domain") if isinstance(product, dict) else None
+    return domain if isinstance(domain, str) else None
 
 
 # --- plomberie Git -------------------------------------------------------------------------
