@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+from argparse import Namespace
 
 import duckdb
 import pytest
@@ -12,11 +13,13 @@ from compile_support import FIXTURES, NORDIS, catalogue, expected, load, nordis_
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from skifer_atlas.cli import _calendars
 from skifer_atlas.compile import (
     DIALECTS,
     CompileError,
     NotCompilable,
     Scope,
+    SourceTable,
     compilability,
     compile_document,
     load_calendars,
@@ -25,7 +28,7 @@ from skifer_atlas.compile import (
 )
 from skifer_atlas.compile.dialects import check_window
 from skifer_atlas.model import validate_data
-from skifer_atlas.run import MissingData
+from skifer_atlas.run import DataLoadError, MissingData, open_database
 
 GOLDEN = FIXTURES / "golden"
 ATLAS = os.path.join(os.path.dirname(sys.executable), "atlas")
@@ -428,6 +431,15 @@ def test_cli_compile_finds_the_space_calendars():
     assert result.stdout.startswith("-- atlas: revenu-net v4, duckdb\n")
 
 
+def test_cli_does_not_load_calendars_above_a_git_root(tmp_path):
+    (tmp_path / "calendars").mkdir()
+    workspace = tmp_path / "repo"
+    (workspace / ".git").mkdir(parents=True)
+    document = workspace / "kpis" / "kpi.yaml"
+    document.parent.mkdir()
+    assert _calendars(Namespace(calendars=None), str(document)) == {}
+
+
 def test_cli_run_prints_csv():
     folder = FIXTURES / "nulls"
     result = atlas("run", folder / "kpi.yaml", "--data", folder)
@@ -457,3 +469,14 @@ def test_cli_compile_error_is_explained(tmp_path):
 def test_missing_data_names_the_table(tmp_path):
     with pytest.raises(MissingData, match="ventes.clients"):
         run(load(FIXTURES / "nulls" / "kpi.yaml"), tmp_path)
+
+
+def test_bad_csv_value_names_file_table_and_column(tmp_path):
+    source = SourceTable("ventes.clients", (("id_client", "integer"),))
+    path = tmp_path / "ventes.clients.csv"
+    path.write_text("id_client\nnot-an-integer\n", encoding="utf-8")
+    with pytest.raises(DataLoadError) as found:
+        open_database([source], tmp_path)
+    assert str(path) in str(found.value)
+    assert "ventes.clients" in str(found.value)
+    assert "id_client" in str(found.value)

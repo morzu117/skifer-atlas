@@ -27,6 +27,10 @@ class MissingData(Exception):
         self.table = table
 
 
+class DataLoadError(Exception):
+    """Une source locale ne correspond pas aux types déclarés dans le document."""
+
+
 @dataclass
 class Result:
     columns: list[str]
@@ -60,7 +64,27 @@ def _load(connection: duckdb.DuckDBPyConnection, table: str,
         reader = "read_csv(?, header = true, all_varchar = true)"
     else:
         reader = "read_parquet(?)"
-    connection.execute(f"CREATE TABLE {target} AS SELECT {typed} FROM {reader}", [str(path)])
+    try:
+        connection.execute(f"CREATE TABLE {target} AS SELECT {typed} FROM {reader}", [str(path)])
+    except duckdb.Error as error:
+        for name, kind in columns:
+            target_type = _TYPES.get(kind or "")
+            if not target_type:
+                continue
+            try:
+                invalid = connection.execute(
+                    f"SELECT 1 FROM {reader} WHERE {_quote(name)} IS NOT NULL "
+                    f"AND TRY_CAST({_quote(name)} AS {target_type}) IS NULL LIMIT 1",
+                    [str(path)],
+                ).fetchone()
+            except duckdb.Error:
+                break
+            if invalid:
+                raise DataLoadError(
+                    f"Données invalides dans {path} (table {table}, colonne {name}, "
+                    f"type attendu {kind})."
+                ) from error
+        raise DataLoadError(f"Chargement impossible de {path} (table {table}) : {error}") from error
 
 
 def open_database(sources: list[SourceTable], data: Path) -> duckdb.DuckDBPyConnection:

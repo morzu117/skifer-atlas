@@ -35,7 +35,7 @@ from .model.jsonschema import schema_text
 from .model.normalize import normalized_form
 from .model.resolve import ResolvedGraph, resolve
 from .repo.git import RepoError
-from .run import MissingData, run_local
+from .run import DataLoadError, MissingData, run_local
 from .workspaces import get_workspace, index_path, repo_dir
 
 _SEVERITY = {"error": "erreur", "warning": "avertissement", "info": "info"}
@@ -316,8 +316,11 @@ def _calendars(args: argparse.Namespace, path: str) -> dict:
     if args.calendars:
         return load_calendars(Path(args.calendars))
     for folder in Path(path).resolve().parents:
-        if (folder / "calendars").is_dir():
-            return load_calendars(folder / "calendars")
+        if (folder / "atlas.yaml").is_file():
+            calendars = folder / "calendars"
+            return load_calendars(calendars) if calendars.is_dir() else {}
+        if (folder / ".git").exists():
+            break
     return {}
 
 
@@ -368,7 +371,7 @@ def _run(args: argparse.Namespace) -> int:
         return 1
     try:
         result = run_local(compiled, Path(args.data))
-    except MissingData as error:
+    except (MissingData, DataLoadError) as error:
         print(error, file=sys.stderr)
         return 1
     except duckdb.Error as error:
