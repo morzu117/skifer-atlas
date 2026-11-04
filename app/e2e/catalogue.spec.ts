@@ -84,10 +84,12 @@ test("[S-0011-04] une ligne ouvre l'aperçu : références et points de variatio
 });
 
 test("[S-0011-05] « + Nouveau » absent pour un lecteur (critère 5)", async ({ page }) => {
-  await page.route(`${API}/api/workspaces`, async (route) => {
+  // La coque lit l'espace par `GET /api/workspaces/{id}` (PR #122, « Découpler l'accueil des
+  // appels à GitHub »), plus dans la liste des espaces.
+  await page.route(`${API}/api/workspaces/groupe-nordis`, async (route) => {
     const response = await route.fetch();
-    const listed = (await response.json()) as { role: string; role_label: string }[];
-    await route.fulfill({ response, json: listed.map((ws) => ({ ...ws, role: "lecteur", role_label: "Lecteur" })) });
+    const found = (await response.json()) as { role: string; role_label: string };
+    await route.fulfill({ response, json: { ...found, role: "lecteur", role_label: "Lecteur" } });
   });
   await page.goto(CATALOGUE);
   await expect(table(page).getByRole("link", { name: "Revenu net" })).toBeVisible();

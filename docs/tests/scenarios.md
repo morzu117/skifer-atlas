@@ -211,7 +211,7 @@ Plan 0011, critère 4 · Test : `app/e2e/catalogue.spec.ts` › `[S-0011-04]`
 
 ### S-0011-05 — Pas de « + Nouveau » pour un lecteur
 Plan 0011, critère 5 · Test : `app/e2e/catalogue.spec.ts` › `[S-0011-05]`
-- **Étant donné** la liste des espaces réécrite par interception pour donner le rôle Lecteur
+- **Étant donné** la réponse de `GET /api/workspaces/groupe-nordis` (l'espace que lit la coque depuis la PR #122, plus la liste des espaces) réécrite par interception pour donner le rôle Lecteur
 - **Quand** j'ouvre le catalogue
 - **Alors** Revenu net est listé, et le lien « Nouveau concept ou KPI » est absent
 
@@ -354,7 +354,7 @@ Plan 0012, critère 2 · Test : `app/e2e/fiche.spec.ts` › `[S-0012-02]`
 Plan 0012, critère 3 · Test : `app/e2e/fiche.spec.ts` › `[S-0012-03]`
 - **Étant donné** l'onglet Versions de Revenu net : quatre versions, « v4 · courante », Marc D. auteur de v3, De 3 et À 4 présélectionnés
 - **Quand** je clique « Afficher les écarts »
-- **Alors** l'adresse porte `tab=versions&base=3&other=4` ; trois écarts : n04 « À examiner » à bordure orange, puis deux « Divergence critique » à bordure rouge (`--atlas-bad`) ; le résumé dit « 3 écarts : 2 critiques, 1 à surveiller, 0 sans effet. »
+- **Alors** l'adresse porte `tab=versions&base=3&other=4` ; trois écarts, tous « Divergence critique » à bordure rouge (`--atlas-bad`), n04 en premier avec `date_facture → date_comptable` (changer la colonne d'entrée d'un nœud temporel est critique depuis la PR #126, plan 0003 ; c'était « À examiner » avant) ; le résumé dit « 3 écarts : 3 critiques, 0 à surveiller, 0 sans effet. »
 - **Et** le graphe de la version 4 marque n06 « ajouté » (bordure verte, `--atlas-ok`) et n04 « modifié », comme celui de la version 3 ; après rechargement, les trois écarts restent
 
 ### S-0012-04 — Implémentations : extraire un SQL et voir son diff au canonique
