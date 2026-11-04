@@ -460,6 +460,7 @@ export type EditorDocument = {
 };
 
 export type NewDocument = { kind: "concept" | "kpi"; id: string; label: string; domain: string; owner: string };
+export type NewVariant = { kpi_id: string; entity: string; mode: "override" | "from_scratch"; owner: string; justification: string };
 
 export type ProposalPreview = {
   nature: string;
@@ -668,6 +669,7 @@ export const api = {
   editorOpen: (id: string, documentId: string) =>
     request<EditorDocument>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}`),
   editorNew: (id: string, body: NewDocument) => request<EditorDocument>(`${ws(id)}/editor/documents`, post(body)),
+  editorNewVariant: (id: string, body: NewVariant) => request<EditorDocument>(`${ws(id)}/editor/variants`, post(body)),
   editorCheck: (id: string, document: unknown, nodeId: string | null) =>
     request<CheckResult>(`${ws(id)}/editor/check`, post({ document, node_id: nodeId })),
   editorParse: (id: string, text: string) =>

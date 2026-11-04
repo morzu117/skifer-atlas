@@ -51,8 +51,9 @@
 | 0028 | 3 | 2 | 0 | 1 | 0 |
 | 0029 | 4 | 2 | 0 | 2 | 0 |
 | 0030 | 4 | 3 | 0 | 1 | 0 |
+| 0032 | 2 | 2 | 0 | 0 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **232** | **171** | **5** | **56** | **0** |
+| **Total** | **234** | **173** | **5** | **56** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -543,6 +544,21 @@ Plan 0007, critère 7 · Test : `app/e2e/sql.spec.ts` › `[S-0007-07]`
 - **Étant donné** un brouillon de trois nœuds (source, calcul n02 `TRY_CAST(montant_ttc AS DOUBLE)`, agrégation)
 - **Quand** j'ouvre « SQL compilé » et choisis Snowflake
 - **Alors** le panneau affiche « Non compilable (n02) » et une raison qui cite `TRY_CAST`
+
+**Plan 0032**
+
+### S-0032-01 — Créer une surcharge depuis la fiche du KPI
+Plan 0032, critère 1 · Test : `app/e2e/editor.spec.ts` › `[S-0032-01]`
+- **Étant donné** un espace isolé où l'entité `nordis-it` n'a pas de déclinaison de Revenu net
+- **Quand** j'ouvre l'onglet Déclinaisons, choisis cette entité, le mode Surcharge du canonique et sa justification, puis crée le brouillon
+- **Alors** l'éditeur ouvre `revenu-net--nordis-it` en v1, lié au canonique v4 et dont les surcharges sont vides
+- Limite : les refus d'entité inconnue, de doublon dans le dépôt et de brouillon local sont vérifiés par `core/tests/repo/test_editor_api.py`.
+
+### S-0032-02 — Commencer un graphe indépendant
+Plan 0032, critère 2 · Test : `app/e2e/editor.spec.ts` › `[S-0032-02]`
+- **Étant donné** le même espace, avec l'entité libre `nordis-pt`
+- **Quand** je choisis Graphe indépendant, crée le brouillon et ajoute une source depuis la palette
+- **Alors** le premier nœud est `n01`, devient la sortie et le brouillon local l'enregistre
 
 **Plan 0013**
 

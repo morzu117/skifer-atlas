@@ -143,7 +143,7 @@ export function Fiche({
       </nav>
       {tab === "definition" && <Definition ws={ws} doc={doc} />}
       {tab === "definition" && doc.kind === "variant" && <AgainstCanonical ws={ws} doc={doc} params={params} />}
-      {tab === "declinaisons" && <Variants doc={doc} />}
+      {tab === "declinaisons" && <Variants ws={ws} doc={doc} />}
       {tab === "versions" && <Versions ws={ws} doc={doc} params={params} />}
       {tab === "dependances" && <Dependencies ws={ws} doc={doc} />}
       {tab === "implementations" && <Implementations ws={ws} doc={doc} />}
@@ -378,9 +378,12 @@ function Graph({ ws, id, label }: { ws: Workspace; id: string; label: string }) 
   return <GraphView layout={layout.value} label={label} />;
 }
 
-function Variants({ doc }: { doc: DocumentSheet }) {
+function Variants({ ws, doc }: { ws: Workspace; doc: DocumentSheet }) {
   return (
-    <Panel title="Déclinaisons">
+    <Panel
+      title="Déclinaisons"
+      aside={ws.role !== "lecteur" && <a className="btn btn-secondary" href={href.editor(ws.id, { variant_of: doc.id })}>Créer une déclinaison</a>}
+    >
       {doc.variants.length === 0 ? (
         <p className="muted">Ce KPI n'a pas de déclinaison : toutes les entités suivent le canonique.</p>
       ) : (

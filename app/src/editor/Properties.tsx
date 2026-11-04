@@ -268,6 +268,7 @@ function DocumentPanel({ doc, mode, dispatch, info, vocabulary }: PropertiesProp
   const product = isRaw(doc.data_product) ? doc.data_product : {};
   const semantics = isRaw(doc.semantics) ? doc.semantics : {};
   const synonyms = Array.isArray(doc.synonyms) ? (doc.synonyms as string[]) : [];
+  const concepts = Array.isArray(doc.concepts) ? (doc.concepts as string[]) : [];
   const calendars = [{ value: "TODO", label: "À déclarer (TODO)" }, ...info.calendars.map((c) => ({ value: `${c.key}@${c.version}`, label: `${c.key} ${c.version}` }))];
   const calendar = isRaw(semantics.calendar) ? `${text(semantics.calendar.key)}@${text(semantics.calendar.version)}` : text(semantics.calendar);
   const entity = isRaw(doc.entity) ? doc.entity : null;
@@ -378,6 +379,23 @@ function DocumentPanel({ doc, mode, dispatch, info, vocabulary }: PropertiesProp
             <span className="mono">{text(doc.entity)}</span>.
           </p>
           <TextProp label="Justification de la déclinaison" required multiline value={doc.justification} onChange={(v) => set(["justification"], v)} />
+          {mode === "from_scratch" && (
+            <RowsProp
+              label="Concepts représentés"
+              required
+              addLabel="Ajouter un concept"
+              rows={concepts}
+              onAdd={() => set(["concepts"], [...concepts, ""])}
+              onRemove={(index) => set(["concepts"], concepts.filter((_, i) => i !== index))}
+              render={(value, index) => (
+                <InlineText
+                  label={`Concept ${index + 1}`}
+                  value={value}
+                  onChange={(next) => set(["concepts"], concepts.map((item, i) => i === index ? next : item))}
+                />
+              )}
+            />
+          )}
         </>
       )}
       <p className="prop-hint">
