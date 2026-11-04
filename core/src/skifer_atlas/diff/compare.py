@@ -21,7 +21,7 @@ from sqlglot import exp
 from sqlglot.optimizer.simplify import simplify
 
 from ..model.functions import parse_sql
-from ..model.normalize import LogicalNode, _condition
+from ..model.normalize import LogicalNode, condition_text
 
 # Nature d'un changement, d'où découlent classe et gravité (classify.py).
 CRITICAL = "critical"
@@ -37,7 +37,7 @@ _CRITICAL_FIELDS = {
     "filter_set": {"condition", "nulls", "conditions"},
     "aggregate": {"group_by", "measures", "having"},
     "join": {"how", "keys", "cardinality", "check"},
-    "temporal": {"timezone", "grain"},
+    "temporal": {"column", "timezone", "grain"},
     "metric_op": {"order", "aggregate"},
 }
 
@@ -57,7 +57,7 @@ def compared_content(node: LogicalNode) -> dict:
     if node.type == "filter_set":
         if len(node.members) == 1:
             member = node.members[0]
-            return {"condition": _condition(member.condition), "nulls": member.nulls}
+            return {"condition": condition_text(member.condition), "nulls": member.nulls}
         return {"conditions": node.content["conditions"]}
     content = copy.deepcopy(node.content)
     content.pop("calendar", None)
@@ -92,6 +92,14 @@ def _rename_condition(text: str, mapping: dict[str, str]) -> str:
     return f"{mapping.get(column, column)}:{rest}"
 
 
+def _rename_filter_condition(text: str, mapping: dict[str, str]) -> str:
+    """Ne sépare que le suffixe `nulls` connu ; `||` peut figurer dans le SQL."""
+    condition, marker, nulls = text.rpartition("|")
+    if marker and nulls in {"keep", "drop"}:
+        return f"{_rename_condition(condition, mapping)}|{nulls}"
+    return _rename_condition(text, mapping)
+
+
 def _names(values: list, mapping: dict[str, str]) -> list:
     return [mapping.get(value, value) for value in values]
 
@@ -110,7 +118,7 @@ def rename_references(kind: str, content: dict, mapping: dict[str, str]) -> dict
             c["condition"] = _rename_condition(c["condition"], mapping)
         else:
             c["conditions"] = sorted(
-                "|".join([_rename_condition(text.rsplit("|", 1)[0], mapping), text.rsplit("|", 1)[1]])
+                _rename_filter_condition(text, mapping)
                 for text in c["conditions"]
             )
     elif kind == "compute":

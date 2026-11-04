@@ -33,7 +33,7 @@ Fichiers : `core/src/skifer_atlas/diff/{align,compare,classify,report}.py`.
 | `override_declared` (normal) | écart sur un nœud surchargé et classé `declared` à la résolution | teal |
 | `override_undeclared` (à examiner) | surcharge `undeclared` | orange |
 | `from_scratch` (justifié, à suivre) | toute différence quand la relation est `from_scratch` ; les sous-classes critiques ci-dessous restent indiquées dans `severity` | orange |
-| `critical` | changement de condition ou de `nulls` d'un filtre, de `group_by` ou de fonction d'agrégation, de `how`, `keys` ou `cardinality` d'une jointure, de `check` (bypass), de calendrier ou de fuseau, nœud structurant ajouté ou retiré, `reordered` | rouge |
+| `critical` | changement de condition ou de `nulls` d'un filtre, de `group_by` ou de fonction d'agrégation, de `how`, `keys` ou `cardinality` d'une jointure, de `check` (bypass), de colonne d'entrée d'un nœud temporel, de calendrier ou de fuseau, nœud structurant ajouté ou retiré, `reordered` | rouge |
 | `cosmetic` | seuls `label`, `note` ou des noms de colonnes de sortie changent, de façon cohérente en aval | gris |
 | `to_verify` | `compute` ou `metric_op` dont les expressions diffèrent mais dont l'équivalence ne peut être tranchée ; appariement à score faible | orange |
 
@@ -108,7 +108,7 @@ L'ordre des `differences` est déterministe : ordre topologique de `base`, puis 
 - **Gravité** :
   - écarts critiques ajoutés à la spécification : `grain` d'un découpage, `having`, `order` et `aggregate` d'un `metric_op`, fuseau ou format d'une colonne de source, filtre ajouté ou retiré ;
   - un calcul ajouté ou retiré est `warn` ;
-  - un écart ni critique ni cosmétique (table source, mode d'union, colonne d'un nœud temporel…) est classé `to_verify`.
+  - un écart ni critique ni cosmétique (table source, mode d'union…) est classé `to_verify` ; changer la colonne d'entrée d'un nœud temporel est critique, car les périodes obtenues peuvent changer.
 - Les classes `override_*` ne s'appliquent qu'en relation `override` : comparer deux variantes entre elles (`free`) ne réutilise pas leur classement de surcharge.
 - **`summary`** : l'exemple mélangeait gravité et classe. Le rapport donne `{by_classification: {…six classes…}, by_severity: {info, warn, critical}}`.
 - **CLI** :
