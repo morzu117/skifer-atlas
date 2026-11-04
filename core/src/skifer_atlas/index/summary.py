@@ -45,8 +45,12 @@ def _last_comparison(connection: duckdb.DuckDBPyConnection, kpi_id: str,
     # Une lecture de l'index garde une transaction ouverte : créer le schéma ici
     # ferait entrer deux fiches simultanées en conflit jusqu'à leur fermeture.
     # Le stockage des comparaisons crée lui-même ses tables à la première écriture.
-    if not connection.execute("SELECT 1 FROM information_schema.schemata "
-                              "WHERE schema_name = 'results'").fetchone():
+    # L'initialisation peut aussi être en cours sur une autre connexion : le schéma
+    # existe alors déjà, mais pas nécessairement toutes les tables de cette lecture.
+    [tables] = connection.execute("SELECT count(*) FROM information_schema.tables "
+                                  "WHERE table_schema = 'results' "
+                                  "AND table_name IN ('comparisons', 'summaries')").fetchone()
+    if tables != 2:
         return None
     found = _records(connection.execute("""
         SELECT c.id, c.finished_at, c.kpi_version, c.status,
