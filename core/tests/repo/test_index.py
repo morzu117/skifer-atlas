@@ -37,6 +37,36 @@ def ids(rows):
     return [row["id"] for row in rows]
 
 
+def test_two_readers_can_open_summaries_before_the_first_comparison(repo, tmp_path):
+    from skifer_atlas.index.summary import summary
+
+    db = tmp_path / "atlas.duckdb"
+    first = ensure_index(repo, db)
+    second = ensure_index(repo, db)
+    try:
+        assert summary(first, repo, "revenu-net")["last_comparison"] is None
+        assert summary(second, repo, "revenu-net")["last_comparison"] is None
+        assert first.execute("SELECT 1 FROM information_schema.schemata "
+                             "WHERE schema_name = 'results'").fetchone() is None
+    finally:
+        first.close()
+        second.close()
+
+
+def test_summary_during_comparison_schema_initialization(repo, tmp_path):
+    from skifer_atlas.index.summary import summary
+
+    db = tmp_path / "atlas.duckdb"
+    ensure_index(repo, db).close()
+    with connect(db) as writer:
+        writer.execute("CREATE SCHEMA results; CREATE TABLE results.comparisons(id INTEGER)")
+    reader = ensure_index(repo, db)
+    try:
+        assert summary(reader, repo, "revenu-net")["last_comparison"] is None
+    finally:
+        reader.close()
+
+
 def snapshot(db):
     connection = connect(db)
     try:
