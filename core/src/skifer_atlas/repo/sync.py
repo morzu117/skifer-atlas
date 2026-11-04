@@ -270,9 +270,20 @@ def _sync(workspace_id: str) -> dict:
 def _catch_up_tags(repo: Path, before: str, after: str, remote_url: str,
                    workspace_id: str | None = None) -> list[dict]:
     """Rattrape les nouvelles versions et republie les tags locaux absents du distant."""
-    found = missing_tags(repo, before, after) if before != after else []
+    # Le clone peut avoir avancé avant un échec de création du tag. Ce repère ne
+    # progresse qu'une fois les tags locaux créés, pour que le prochain sync reprenne
+    # le parcours même si HEAD est déjà à jour.
+    unchecked = False
+    try:
+        checked = run_git(["rev-parse", "--verify", "refs/atlas/tags-checked"], repo).strip()
+    except RepoError:
+        checked = before
+        unchecked = True
+    found = missing_tags(repo, checked, after) if checked != after else []
     for name, commit in found:
         run_git(["tag", name, commit], repo)
+    if unchecked or checked != after:
+        run_git(["update-ref", "refs/atlas/tags-checked", after], repo)
     warnings = []
     if found:
         names = ", ".join(name.removeprefix("doc/").replace("/v", " v") for name, _ in found)

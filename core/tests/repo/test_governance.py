@@ -143,6 +143,14 @@ def test_changes_requested_block_until_reapproved():
     assert decision.ready_to_merge
 
 
+def test_dismissed_review_clears_previous_change_request():
+    reviews = [approve("julien.h"), Review("marc.d", "changes_requested", HEAD),
+               Review("marc.d", "dismissed", HEAD)]
+    decision = decide(governance(), "new_version", "finance", "claire.m", reviews, HEAD)
+    assert decision.changes_requested_by == []
+    assert not decision.ready_to_merge  # une deuxième approbation reste nécessaire
+
+
 # --- ADR 0008 : personne d'autre n'est habilité --------------------------------------------
 
 def test_single_referent_merges_governance_without_review():

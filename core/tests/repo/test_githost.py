@@ -140,6 +140,9 @@ def test_github_cycle(github):
     reviews = host.get_reviews(1)
     assert len(reviews) == 121  # deux pages, la revue en attente écartée
     assert (reviews[-1].account, reviews[-1].state) == ("marc-d", "changes_requested")
+    state["reviews"].append({"user": {"login": "marc-d"}, "state": "DISMISSED",
+                             "commit_id": "a" * 40})
+    assert host.get_reviews(1)[-1].state == "dismissed"
     assert [c.body for c in host.list_comments(1)] == ["Et les avoirs ?"]
     assert [p.number for p in host.list_pull_requests("open")] == [1]
     with pytest.raises(RepoError) as error:
@@ -221,6 +224,11 @@ def test_the_token_stays_out_of_urls_config_and_errors(atlas_env, tmp_path):
     filled = run_git(["credential", "fill"], repo, input="protocol=https\nhost=github.com\n\n",
                      token=TOKEN)
     assert f"password={TOKEN}" in filled.splitlines()
+    for protocol, host in (("https", "gitlab.com"), ("http", "github.com")):
+        with pytest.raises(RepoError) as rejected:
+            run_git(["credential", "fill"], repo,
+                    input=f"protocol={protocol}\nhost={host}\n\n", token=TOKEN)
+        assert TOKEN not in str(rejected.value)
     assert "ATLAS_GIT_TOKEN" not in os.environ
     with pytest.raises(RepoError) as error:
         run_git(["ls-remote", f"http://127.0.0.1:9/{TOKEN}.git"], repo, timeout=20,

@@ -21,7 +21,8 @@ from .base import Comment, GitHost, PullRequest, ReviewEvent
 
 API_URL = "https://api.github.com"
 _EVENTS = {"approve": "APPROVE", "request_changes": "REQUEST_CHANGES", "comment": "COMMENT"}
-_STATES = {"APPROVED": "approved", "CHANGES_REQUESTED": "changes_requested"}
+_STATES = {"APPROVED": "approved", "CHANGES_REQUESTED": "changes_requested",
+           "DISMISSED": "dismissed"}
 _REMOTE = re.compile(r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
                      r"(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$")
 _ERRORS = {401: "host_auth_failed", 403: "host_forbidden", 404: "not_found",

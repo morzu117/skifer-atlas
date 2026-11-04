@@ -56,8 +56,12 @@ def git_version() -> tuple[int, ...]:
 
 # Lit le jeton dans l'environnement du sous-processus : la ligne de commande ne le
 # contient pas, et rien n'est écrit dans la configuration du dépôt.
-_CREDENTIAL_HELPER = ('!f() { test "$1" = get || exit 0; echo username=x-access-token; '
-                      'echo "password=$ATLAS_GIT_TOKEN"; }; f')
+_CREDENTIAL_HELPER = ('!f() { test "$1" = get || exit 0; '
+                      'while IFS= read -r line && test -n "$line"; do '
+                      'test "$line" = protocol=https && protocol_ok=1; '
+                      'test "$line" = host=github.com && host_ok=1; done; '
+                      'test "$protocol_ok" = 1 && test "$host_ok" = 1 || exit 0; '
+                      'echo username=x-access-token; echo "password=$ATLAS_GIT_TOKEN"; }; f')
 
 
 def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
