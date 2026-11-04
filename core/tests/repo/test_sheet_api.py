@@ -117,7 +117,7 @@ def test_version_diff(client):
     assert (report["relation"], report["identical"]) == ("version", False)
     assert [(d["kind"], d["node_ref"], d["classification"], d["severity"])
             for d in report["differences"]] == [
-        ("modified", {"base": "n04", "other": "n04"}, "to_verify", "warn"),
+        ("modified", {"base": "n04", "other": "n04"}, "critical", "critical"),
         ("added", {"base": None, "other": "n06"}, "critical", "critical"),
         ("added", {"base": None, "other": "n07"}, "critical", "critical"),
     ]

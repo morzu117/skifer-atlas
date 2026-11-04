@@ -146,8 +146,17 @@ def test_comparison_across_databricks_and_snowflake(client, remote, snow, monkey
 
 def test_cardinality_check_fails_on_snowflake(client, remote, snow, monkeypatch, tmp_path):
     """Critère 4 : jours comptables en double, la garde fait échouer la requête Snowflake
-    avec le message d'Atlas ; DE n'a pas de résultat, FR si."""
+    avec le message d'Atlas ; l'historique conserve une erreur neutralisée."""
     tables = setup_space(client, remote, snow, monkeypatch, tmp_path)
+    translated = []
+    original_translate = connector.translate
+
+    def capture(error):
+        result = original_translate(error)
+        translated.append(str(result))
+        return result
+
+    monkeypatch.setattr(connector, "translate", capture)
     database = open_database(tables, DATA / "nordis-de")
     database.execute("INSERT INTO gold.finance.dim_date SELECT * FROM gold.finance.dim_date")
     snow.use_database(database)
@@ -156,6 +165,7 @@ def test_cardinality_check_fails_on_snowflake(client, remote, snow, monkeypatch,
     canonical = next(r for r in found["runs"]
                      if r["variant_id"].endswith("nordis-de") and r["side"] == "canonical")
     assert canonical["status"] == "failed"
-    assert canonical["error"].startswith(
-        "query_failed: atlas: cardinalité N:1 non respectée en n07, clés en double à droite")
+    assert any("atlas: cardinalité N:1 non respectée en n07, clés en double à droite"
+               in error for error in translated)
+    assert canonical["error"] == "query_failed: Échec de la requête sur la plateforme."
     assert [r["entity"] for r in found["results"]] == ["nordis-fr"]
