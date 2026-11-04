@@ -174,9 +174,22 @@ def test_new_variant_starts_a_local_draft_for_the_current_canonical(client, mode
     assert not check(client, document)["submittable"]
     if mode == "override":
         assert document["overrides"] == []
+        replaced = copy.deepcopy(node(info["canonical"], "n02"))
+        replaced["condition"] = "statut:in:validée,expédiée"
+        document["overrides"].append({"node": "n02", "justification": "Expédiées comprises.",
+                                      "replace": replaced})
     else:
         assert document["graph"] == {"nodes": []}
         assert "commande" in document["concepts"]
+        document["graph"] = copy.deepcopy(info["canonical"]["graph"])
+    checked = check(client, document)
+    assert checked["submittable"], checked["issues"]
+    proposal = client.post("/api/workspaces/groupe-nordis/proposals", json={
+        "document_yaml": checked["yaml"], "justification": "Déclinaison locale.",
+        "base_version": None,
+    })
+    assert proposal.status_code == 201, proposal.text
+    assert proposal.json()["document_id"] == "revenu-net--nordis-it"
     duplicate = client.post(f"{EDITOR}/variants", json=body)
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"]["code"] == "draft_exists"
