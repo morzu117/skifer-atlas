@@ -231,7 +231,7 @@ def test_the_token_stays_out_of_urls_config_and_errors(atlas_env, tmp_path):
         assert TOKEN not in str(rejected.value)
     assert "ATLAS_GIT_TOKEN" not in os.environ
     with pytest.raises(RepoError) as error:
-        run_git(["ls-remote", f"http://127.0.0.1:9/{TOKEN}.git"], repo, timeout=20,
+        run_git(["ls-remote", f"https://127.0.0.1:9/{TOKEN}.git"], repo, timeout=20,
                 token=TOKEN)
     assert TOKEN not in str(error.value) and "***" in str(error.value)
     config = (repo / ".git" / "config").read_text(encoding="utf-8")
