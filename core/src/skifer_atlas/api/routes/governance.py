@@ -1,4 +1,4 @@
-"""Gouvernance d'un espace et rattachement de son dépôt distant (plans 0006 et 0017)."""
+"""Gouvernance d'un espace (plans 0006 et 0017)."""
 
 from __future__ import annotations
 
@@ -9,8 +9,7 @@ from ...admin import admin_state, save_governance
 from ...governance.model import parse_governance, role_of, space_referents
 from ...proposals import create_governance_proposal
 from ...repo.layout import GOVERNANCE_FILE
-from ...repo.sync import set_remote
-from ...workspaces import ROLE_LABELS, repo_dir
+from ...workspaces import repo_dir
 from .common import workspace_or_404
 
 router = APIRouter(prefix="/api/workspaces/{ws}")
@@ -28,12 +27,6 @@ class AdminSaveRequest(BaseModel):
 
     governance: dict
     base_digest: str
-
-
-class RemoteRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    remote_url: str
 
 
 @router.get("/governance")
@@ -71,8 +64,3 @@ def post_admin_governance(ws: str, body: AdminSaveRequest) -> dict:
     """Proposition « Gouvernance », fusionnée aussitôt par un référent seul (ADR 0008)."""
     return save_governance(workspace_or_404(ws).id, body.governance, body.base_digest)
 
-
-@router.post("/remote")
-def post_remote(ws: str, body: RemoteRequest) -> dict:
-    workspace = set_remote(workspace_or_404(ws).id, body.remote_url)
-    return {**workspace.model_dump(), "role_label": ROLE_LABELS[workspace.role]}

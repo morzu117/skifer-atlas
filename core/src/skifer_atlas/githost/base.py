@@ -46,6 +46,10 @@ class GitHost(ABC):
     @abstractmethod
     def current_account(self) -> str: ...
 
+    def check_writable(self) -> None:
+        """Lève `remote_not_found` ou `remote_not_writable` si le dépôt n'existe pas ou ne
+        reçoit pas les poussées de l'utilisateur. Rien à vérifier par défaut : git le dira."""
+
     @abstractmethod
     def create_pull_request(self, branch: str, title: str, body: str) -> PullRequest: ...
 

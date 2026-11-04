@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { api, ApiError, type Workspace } from "../api";
+import { AttachRemote } from "../components/AttachRemote";
 import { Banner } from "../components/Banner";
 import { Drawer } from "../components/Drawer";
 import { Field } from "../components/Field";
@@ -61,6 +62,28 @@ export function CreateWorkspace({ onClose, onCreated }: { onClose: () => void; o
     }
   }
 
+  // L'espace existe, seul le dépôt n'a pas suivi : on le rattache ici, en reprenant l'adresse.
+  if (created && errors.remote) {
+    return (
+      <Drawer title="Créer un espace" onClose={onClose}>
+        <div className="form">
+          <Banner
+            tone="warn"
+            title="Espace créé, dépôt distant non rattaché"
+            action={
+              <button type="button" className="btn btn-secondary" onClick={() => onCreated(created)}>
+                Ouvrir l'espace
+              </button>
+            }
+          >
+            {errors.remote.title} : {errors.remote.text} Réessayez ci-dessous, ou rattachez-le plus tard depuis l'administration.
+          </Banner>
+          <AttachRemote ws={created} initialUrl={remote.trim()} onAttached={onCreated} />
+        </div>
+      </Drawer>
+    );
+  }
+
   return (
     <Drawer title="Créer un espace" onClose={onClose}>
       <form className="form" onSubmit={submit} noValidate>
@@ -83,28 +106,14 @@ export function CreateWorkspace({ onClose, onCreated }: { onClose: () => void; o
         <Field label="Entités" id="ws-entities" hint="Séparées par des virgules, ex. nordis-fr, nordis-de.">
           <input className="mono" value={entities} onChange={(e) => setEntities(e.target.value)} />
         </Field>
-        <Field label="Dépôt distant" id="ws-remote" hint="Facultatif : un dépôt vide, rattachable plus tard.">
+        <Field label="Dépôt distant" id="ws-remote" hint="Facultatif : un dépôt vide, rattachable plus tard depuis l'administration.">
           <input className="mono" value={remote} onChange={(e) => setRemote(e.target.value)} />
         </Field>
         {errors.form && <Banner tone="bad" title={errors.form.title}>{errors.form.text}</Banner>}
-        {created && errors.remote ? (
-          <Banner
-            tone="warn"
-            title="Espace créé, dépôt distant non rattaché"
-            action={
-              <button type="button" className="btn btn-secondary" onClick={() => onCreated(created)}>
-                Ouvrir l'espace
-              </button>
-            }
-          >
-            {errors.remote.title} : {errors.remote.text} Rattachez-le plus tard depuis l'administration.
-          </Banner>
-        ) : (
-          <button type="submit" className="btn btn-primary" disabled={pending}>
-            <Icon name="plus" className="icon-sm" />
-            {pending ? "Création…" : "Créer l'espace"}
-          </button>
-        )}
+        <button type="submit" className="btn btn-primary" disabled={pending}>
+          <Icon name="plus" className="icon-sm" />
+          {pending ? "Création…" : "Créer l'espace"}
+        </button>
       </form>
     </Drawer>
   );

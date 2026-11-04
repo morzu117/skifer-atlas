@@ -9,7 +9,7 @@ import { API, demoRemote } from "./demo";
 // Dossiers de données des serveurs de playwright.config.ts : un espace isolé peut avoir été
 // rejoint par plusieurs comptes (relecteurs des propositions, par exemple).
 const DATA = process.env.ATLAS_E2E_DATA!;
-const SERVER_DATA = [DATA, ...["claire.m", "marc.d", "julien.h", "auth", "accueil"].map((dir) => join(DATA, dir))];
+const SERVER_DATA = [DATA, ...["claire.m", "marc.d", "julien.h", "auth", "accueil", "rattachement"].map((dir) => join(DATA, dir))];
 const temporary = new Set<string>();
 const joined = new Set<string>();
 
@@ -82,6 +82,12 @@ export async function isolatedDemo(request: APIRequestContext, server: string) {
     joined.add(id);
     for (const path of paths) temporary.add(path);
   });
+}
+/** Un espace créé par le scénario lui-même (formulaire « Créer un espace ») : retiré du
+ * registre de chaque serveur à la fin du test, avec les dossiers `paths`. */
+export function trackWorkspace(id: string, ...paths: string[]) {
+  joined.add(id);
+  for (const path of paths) temporary.add(path);
 }
 /** Un espace isolé partagé par les tests d'un fichier qui ne modifient ni le dépôt ni
  * l'espace (brouillons à identifiant unique, vérifications) : créé dans `beforeAll`, rendu

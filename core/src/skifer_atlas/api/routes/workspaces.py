@@ -11,7 +11,7 @@ from ...dbfile import without_waiting
 from ...index import ensure_index, index_fresh
 from ...repo.git import RepoError
 from ...repo.layout import WorkspaceMeta
-from ...repo.sync import create_workspace, join_workspace, sync_workspace
+from ...repo.sync import create_workspace, join_workspace, set_remote, sync_workspace
 from ...workspaces import (
     ROLE_LABELS,
     Workspace,
@@ -30,6 +30,12 @@ class JoinRequest(BaseModel):
 
     remote_url: str
     github_flow: str | None = None  # connexion GitHub faite avant d'adhérer (plan 0025)
+
+
+class RemoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    remote_url: str
 
 
 def _counts(ws: Workspace) -> dict:
@@ -81,6 +87,13 @@ def post_workspace(meta: WorkspaceMeta) -> dict:
 @router.post("/join", status_code=201)
 def post_join(body: JoinRequest) -> dict:
     return _out(join_workspace(body.remote_url, body.github_flow))
+
+
+@router.post("/{ws}/remote")
+def post_remote(ws: str, body: RemoteRequest) -> dict:
+    """Rattache l'espace à un dépôt distant vide et y pousse (plan 0033, ADR 0037). Le compte
+    et le rôle rendus sont ceux de l'hébergeur : le créateur y garde son rôle de référent."""
+    return _out(set_remote(workspace_or_404(ws).id, body.remote_url))
 
 
 @router.post("/{ws}/sync")

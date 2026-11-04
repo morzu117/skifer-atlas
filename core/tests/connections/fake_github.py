@@ -1,6 +1,9 @@
-"""GitHub local pour les scénarios front : code, autorisation explicite, /user.
+"""GitHub local pour les scénarios front : code, autorisation explicite, /user, dépôts.
 
 Le navigateur choisit autorisation, refus ou expiration ; aucun compte réel.
+`/repos/<propriétaire>/<dépôt>` (plan 0033) répond d'après le préfixe du nom : `introuvable-`
+donne 404, `lecture-` un compte sans droit de pousser, `archive-` un dépôt archivé ; tout
+autre dépôt est accessible en écriture.
 """
 
 import json
@@ -50,6 +53,21 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/user":
             return self.send(200, {"login": "julien.h"}) if self.headers.get(
                 "Authorization") == f"Bearer {TOKEN}" else self.send(401, {})
+        if url.path.startswith("/repos/"):
+            if self.headers.get("Authorization") != f"Bearer {TOKEN}":
+                return self.send(401, {"message": "Bad credentials"})
+            parts = url.path.removeprefix("/repos/").split("/")
+            if len(parts) == 3 and parts[2] == "pulls":
+                return self.send(200, [])  # aucune proposition ouverte
+            if len(parts) != 2:
+                return self.send(404, {"message": "Not Found"})
+            name = parts[1]
+            if name.startswith("introuvable-"):
+                return self.send(404, {"message": "Not Found"})
+            return self.send(200, {"full_name": url.path.removeprefix("/repos/"),
+                                   "archived": name.startswith("archive-"),
+                                   "permissions": {"push": not name.startswith("lecture-"),
+                                                   "pull": True}})
         if url.path == "/login/device":
             query = parse_qs(url.query)
             code = query.get("code", [""])[0]
