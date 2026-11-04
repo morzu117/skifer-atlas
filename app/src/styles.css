@@ -818,6 +818,9 @@ textarea.prop-input { resize: vertical; }
 .connections-github { display: flex; flex-direction: column; gap: var(--atlas-space-2); padding: var(--atlas-space-3) var(--atlas-space-4); background: var(--atlas-panel); border: var(--atlas-border) solid var(--atlas-line); border-radius: var(--atlas-radius-lg); }
 .connections-github-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--atlas-space-4); font-size: var(--atlas-text-md); }
 .connections-github-repo { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.attach-remote { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-3); }
+.attach-remote .field { align-self: stretch; }
+.attach-remote-github { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-2); font-size: var(--atlas-text-md); }
 .github-device { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-2); }
 .github-device p { margin: 0; }
 .github-code { font-size: var(--atlas-text-2xl); font-weight: 600; letter-spacing: 0.12em; }
@@ -867,6 +870,7 @@ textarea.prop-input { resize: vertical; }
 .admin-role .link-button { align-self: flex-start; }
 .admin-checks { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: var(--atlas-space-1); }
 .admin-checks legend { padding: 0; margin-bottom: var(--atlas-space-1); font-size: var(--atlas-text-md); color: var(--atlas-muted); }
+.admin-frozen { margin: 0; padding: 0; border: 0; min-width: 0; }
 .admin-platforms { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: var(--atlas-space-2); }
 .admin-platform { display: flex; justify-content: space-between; align-items: center; gap: var(--atlas-space-3); font-size: var(--atlas-text-md); }
 .admin-platform .check { font-size: var(--atlas-text-md); min-height: var(--atlas-control-h-xs); }

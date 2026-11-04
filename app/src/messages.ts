@@ -56,6 +56,26 @@ const KNOWN: Record<string, Explained> = {
     title: "Connexion liée à un autre hôte",
     text: "Ce point d'accès a changé d'hôte, ou sa connexion est ancienne. Reconnectez-vous avant de l'utiliser.",
   },
+  remote_not_found: {
+    title: "Dépôt introuvable",
+    text: "Vérifiez l'adresse. Si le dépôt est privé, le compte GitHub connecté doit y avoir accès.",
+  },
+  remote_not_empty: {
+    title: "Ce dépôt n'est pas vide",
+    text: "Atlas ne rattache qu'un dépôt vierge, pour ne rien écraser. Créez-en un sans README, licence ni .gitignore, puis réessayez.",
+  },
+  remote_not_writable: {
+    title: "Pas de droit d'écriture sur ce dépôt",
+    text: "Le compte connecté ne peut pas y pousser (lecture seule ou dépôt archivé). Demandez un accès en écriture ou choisissez un autre dépôt.",
+  },
+  remote_exists: {
+    title: "Espace déjà rattaché",
+    text: "Cet espace a déjà un dépôt distant : rien n'a été modifié.",
+  },
+  unsupported_host: {
+    title: "Hébergeur non pris en charge",
+    text: "Atlas rattache un dépôt GitHub. Vérifiez l'adresse.",
+  },
   workspace_exists: {
     title: "Identifiant déjà pris",
     text: "Un espace porte déjà cet identifiant sur ce poste. Choisissez-en un autre.",

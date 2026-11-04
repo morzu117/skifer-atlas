@@ -87,6 +87,24 @@ def initial_governance(account: str, name: str) -> Governance:
                                       roles=[MemberRole(role="referent")])])
 
 
+def rename_account(governance: Governance, old: str, new: str) -> Governance:
+    """La gouvernance où le compte `old` s'appelle `new`, rôles et domaines compris.
+
+    Sert au rattachement d'un espace à GitHub (plan 0033) : le créateur, inscrit sous son
+    identité locale, devient son compte GitHub. Inchangée si `old` n'est pas membre ou si
+    `new` l'est déjà : on ne fusionne jamais deux membres."""
+    if governance.member(old) is None or governance.member(new) is not None:
+        return governance
+    return governance.model_copy(update={
+        "members": [m.model_copy(update={"account": new}) if m.account == old else m
+                    for m in governance.members],
+        "domains": [d.model_copy(update={
+            "referents": [new if a == old else a for a in d.referents],
+            "validators": [new if a == old else a for a in d.validators]})
+            for d in governance.domains],
+    })
+
+
 def account_from_name(name: str) -> str:
     """Identifiant de compte tiré d'un nom (« Julien H. » → « julien-h »)."""
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip()).strip("-._").lower()

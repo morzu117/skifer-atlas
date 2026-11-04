@@ -26,11 +26,12 @@ TIMEOUT = 120  # secondes ; un clone d'annuaire reste petit
 class RepoError(Exception):
     """Échec d'une opération sur le dépôt d'un espace, avec un code stable pour l'API."""
 
-    def __init__(self, code: str, message: str, details: list | None = None):
+    def __init__(self, code: str, message: str, details: list | None = None, output: str = ""):
         super().__init__(message)
         self.code = code
         self.message = message
         self.details = details  # diagnostics, pour un document ou une gouvernance refusés
+        self.output = output  # sortie d'erreur de git, jeton masqué : jamais rendue par l'API
 
 
 def _env() -> dict[str, str]:
@@ -87,9 +88,11 @@ def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip().splitlines()
         message = detail[-1] if detail else "?"
+        output = (result.stderr or result.stdout).strip()
         if token:
             message = message.replace(token, "***")
-        raise RepoError(error_code, f"git {args[0]} a échoué : {message}")
+            output = output.replace(token, "***")
+        raise RepoError(error_code, f"git {args[0]} a échoué : {message}", output=output)
     return result.stdout
 
 

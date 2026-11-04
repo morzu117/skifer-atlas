@@ -114,6 +114,22 @@ class GitHubHost(GitHost):
             self._account = self._request("GET", "/user")["login"]
         return self._account
 
+    def check_writable(self) -> None:
+        """Le dépôt existe pour ce compte, n'est pas archivé et accepte ses poussées
+        (plan 0033). GitHub répond 404 aussi pour un dépôt privé sans accès."""
+        try:
+            data = self._request("GET", self._repo())
+        except RepoError as error:
+            if error.code == "not_found":
+                raise RepoError("remote_not_found", f"Dépôt {self.owner}/{self.repo} "
+                                "introuvable pour ce compte GitHub.") from None
+            raise
+        permissions = data.get("permissions") or {}
+        if data.get("archived") or not (permissions.get("push") or permissions.get("admin")):
+            raise RepoError("remote_not_writable", f"Le compte GitHub n'a pas le droit de "
+                            f"pousser sur {self.owner}/{self.repo}"
+                            + (" (dépôt archivé)." if data.get("archived") else "."))
+
     def create_pull_request(self, branch: str, title: str, body: str) -> PullRequest:
         return self._pull(self._request("POST", f"{self._repo()}/pulls", {
             "title": title, "head": branch, "base": self.main_branch, "body": body}))

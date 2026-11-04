@@ -169,6 +169,32 @@ describe("créer un espace", () => {
     expect(window.location.hash).toBe("#/w/acme/catalogue");
   });
 
+  it("[S-0033-05] après un refus du dépôt, le rattache sans quitter le panneau", async () => {
+    let attempts = 0;
+    const server = fakeServer(({ method, path }) => {
+      if (path === "/api/workspaces" && method === "GET") return { json: [] };
+      if (path === "/api/workspaces" && method === "POST") return { status: 201, json: workspace({ id: "acme", git_remote: "" }) };
+      if (path === "/api/workspaces/acme/remote") {
+        attempts += 1;
+        return attempts === 1
+          ? { status: 409, json: { detail: { code: "remote_not_empty", message: "x" } } }
+          : { json: workspace({ id: "acme" }) };
+      }
+    });
+    home();
+    await userEvent.click(await screen.findByRole("button", { name: "Créer un espace" }));
+    const dialog = within(screen.getByRole("dialog"));
+    await userEvent.type(dialog.getByLabelText(/^Nom/), "Acme");
+    await userEvent.type(dialog.getByLabelText("Dépôt distant"), "/depots/acme.git");
+    await userEvent.click(dialog.getByRole("button", { name: "Créer l'espace" }));
+    expect(await dialog.findByText("Espace créé, dépôt distant non rattaché")).toBeInTheDocument();
+    expect(dialog.getByText(/Ce dépôt n'est pas vide/)).toBeInTheDocument();
+    expect(dialog.getByLabelText(/^Adresse du dépôt vide/)).toHaveValue("/depots/acme.git");
+    await userEvent.click(dialog.getByRole("button", { name: "Rattacher le dépôt" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/w/acme/catalogue"));
+    expect(server.calls.filter((c) => c.path === "/api/workspaces/acme/remote")).toHaveLength(2);
+  });
+
   it("se ferme avec Échap et rend le focus au bouton", async () => {
     fakeServer(({ path }) => (path === "/api/workspaces" ? { json: [] } : undefined));
     home();

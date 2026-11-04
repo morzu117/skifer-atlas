@@ -7,7 +7,7 @@
 
 ## Lancer les tests
 
-- Parcours : `cd app && npm run e2e`. Playwright démarre lui-même les serveurs Python, les faux Databricks, Snowflake et GitHub, et Vite, sur des ports fixes (1420, 8791 à 8799, 8020 pour le retour OAuth). Chromium passe tous les scénarios, puis WebKit les `*.webkit.spec.ts`. Un seul worker, et une seule exécution à la fois sur le poste : deux exécutions se disputeraient les ports. Si un port est pris, la configuration s'arrête avant tout lancement et nomme le port et son processus (`app/e2e/ports.ts`).
+- Parcours : `cd app && npm run e2e`. Playwright démarre lui-même les serveurs Python, les faux Databricks, Snowflake et GitHub, et Vite, sur des ports fixes (1420, 8790 à 8799, 8020 pour le retour OAuth). Chromium passe tous les scénarios, puis WebKit les `*.webkit.spec.ts`. Un seul worker, et une seule exécution à la fois sur le poste : deux exécutions se disputeraient les ports. Si un port est pris, la configuration s'arrête avant tout lancement et nomme le port et son processus (`app/e2e/ports.ts`).
 - Tests de composants et unitaires : `cd app && npm test` (Vitest, jsdom). Ils rendent l'écran contre un faux serveur ; ils n'exercent pas de navigateur.
 
 ## Identifiants
@@ -52,8 +52,9 @@
 | 0029 | 4 | 2 | 0 | 2 | 0 |
 | 0030 | 4 | 3 | 0 | 1 | 0 |
 | 0032 | 2 | 2 | 0 | 0 | 0 |
+| 0033 | 9 | 8 | 0 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **234** | **173** | **5** | **56** | **0** |
+| **Total** | **243** | **181** | **5** | **57** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1316,6 +1317,80 @@ Plan 0023, critère 4 · Test : `app/e2e/administration.spec.ts` › `[S-0023-04
 - **Quand** je clique « + Ajouter un rôle », choisis validateur limité à Marketing, applique, enregistre et recharge
 - **Alors** « Rôle 1 » vaut contributeur et « Rôle 2 » validateur
 
+**Plan 0033**
+
+Les scénarios 1 à 4 passent par le formulaire « Rattacher un dépôt distant » de l'Administration, le 5 par le panneau de création ; ils partagent trois tests e2e dans `app/e2e/rattachement.spec.ts`. Les dépôts sont des dépôts nus locaux ; les adresses `https://github.com/e2e-atlas/…` sont redirigées vers eux par `url.<dossier>.insteadOf`, et le faux GitHub (serveur 8790) répond au device flow, à `/user` et à `/repos/…`.
+
+### S-0033-01 — Un dépôt vide reçoit l'espace
+Plan 0033, critère 1 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-01]`
+- **Étant donné** un espace créé sans adresse, dont Connexions dit « Cet espace n'a pas encore de dépôt distant » et renvoie à l'Administration, où « Enregistrer » est désactivé avec « Rattachez d'abord un dépôt distant pour enregistrer. »
+- **Quand** je saisis le chemin d'un dépôt nu vide dans « Adresse du dépôt vide » et clique « Rattacher le dépôt »
+- **Alors** la région « Dépôt Git de l'espace » affiche « Dépôt rattaché : l'espace est publié sur <adresse>, sous le compte anna.k. » et le bouton « Synchroniser » ; le groupe de rattachement a disparu
+- **Et** le dépôt nu a pour seul commit « Création de l'espace … », le clone a `origin`, et l'API rend `git_remote`, `account: anna.k` et `role: referent`
+- Limite : un push vers un vrai GitHub n'est pas exercé (S-0033-09). Le même parcours est rendu en Vitest : `app/src/screens/Rattachement.test.tsx` › `[S-0033-01]`.
+
+### S-0033-02 — Chaque refus dit pourquoi, et il ne reste rien
+Plan 0033, critère 2 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-02]`
+- **Étant donné** un espace sans dépôt distant ; sur le serveur local : une adresse invalide, un chemin absent, un dépôt avec un commit, un dépôt qui n'a plus qu'un tag ; sur le faux GitHub : un dépôt introuvable, un dépôt en lecture seule, un dépôt archivé, un dépôt avec un commit
+- **Quand** je tente de rattacher chacun
+- **Alors** une alerte nomme la cause (« Adresse de dépôt invalide », « Dépôt introuvable », « Ce dépôt n'est pas vide », « Pas de droit d'écriture sur ce dépôt ») ; le bouton reste actif, la région indique toujours « Pas encore de dépôt distant », et aucune alerte ne contient de jeton
+- **Et** le clone n'a pas de remote et son `HEAD` n'a pas bougé ; le dépôt plein garde sa branche, les dépôts en lecture seule et archivé n'ont aucune référence ; l'API rend toujours `git_remote` vide
+- Limite : chaque code est testé en Vitest (`app/src/screens/Rattachement.test.tsx` › `[S-0033-02]`) et par `core/tests/repo/test_set_remote.py` ; un push refusé par un hook ou une règle de branche réelle n'est exercé que par le core.
+
+### S-0033-03 — Une adresse GitHub demande d'abord la connexion
+Plan 0033, critère 3 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-03]`
+- **Étant donné** un espace sans dépôt distant, sans connexion GitHub, sur le serveur 8790
+- **Quand** je saisis une adresse `https://github.com/…`
+- **Alors** le groupe dit « Atlas se sert de votre compte GitHub » et « Rattacher le dépôt » est désactivé
+- **Quand** je clique « Se connecter à GitHub », « Ouvrir GitHub » et « Autoriser » dans la fenêtre du faux GitHub
+- **Alors** le groupe affiche « Connecté à GitHub en tant que @julien.h. » et « Rattacher le dépôt » s'active ; axe-core ne relève aucune violation sérieuse ou critique
+- Limite : une adresse hors GitHub ne demande aucune connexion, et un jeton refusé pendant le rattachement fait proposer la reconnexion : ces deux cas ne sont rendus qu'en Vitest (`app/src/screens/Rattachement.test.tsx` › `[S-0033-03]`).
+
+### S-0033-04 — Le créateur reste référent sous son compte GitHub
+Plan 0033, critère 4 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-04]`
+- **Étant donné** un espace créé par anna.k, connecté à GitHub en tant que julien.h, et un dépôt vide
+- **Quand** je rattache l'adresse du dépôt vide
+- **Alors** la région affiche « sous le compte julien.h. » ; la barre latérale montre julien.h, « Référent d'annuaire », et le tableau « Utilisateurs et rôles » ne contient plus anna.k
+- **Et** le dépôt a deux commits, « Identité du créateur : anna.k devient julien.h » puis « Création de l'espace … » ; son `governance.yaml` contient `account: julien.h` ; le clone est propre ; l'API rend `account: julien.h`, `role: referent`, `space_referent: true`
+- **Et** après un rechargement de la page, le rôle de référent est conservé
+- Limite : `core/tests/repo/test_set_remote.py` vérifie en plus les référents et validateurs de domaine et le rôle relu par `open_context`.
+
+### S-0033-05 — Une adresse refusée à la création se rattache dans le panneau
+Plan 0033, critère 5 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-05]`
+- **Étant donné** le dialogue « Créer un espace » rempli avec l'adresse d'un dépôt vide de GitHub, sans connexion GitHub
+- **Quand** je valide la création
+- **Alors** le panneau dit « Espace créé, dépôt distant non rattaché » et montre le groupe de rattachement, adresse préremplie ; le dépôt n'a reçu aucune référence
+- **Quand** je me connecte à GitHub dans le panneau, puis clique « Rattacher le dépôt »
+- **Alors** le catalogue de l'espace s'ouvre, la barre latérale montre julien.h et « Référent d'annuaire », et le dépôt a deux commits
+- Limite : le rendu seul est vérifié en Vitest : `app/src/screens/Home.test.tsx` › `[S-0033-05]`.
+
+### S-0033-06 — Une fois rattaché, l'enregistrement de la gouvernance passe
+Plan 0033, critère 6 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-06]`
+- **Étant donné** l'espace rattaché de S-0033-01, dont je suis le seul référent
+- **Quand** je coche « Databricks » et clique « Enregistrer et fusionner »
+- **Alors** l'écran affiche « Paramètres enregistrés : proposition n° … fusionnée sans revue. » et `governance.yaml` sur la branche principale du dépôt contient `- databricks`
+- Limite : sur le faux GitHub, qui n'a ni pull request ni fusion, l'enregistrement n'est pas parcouru ; le rôle sous l'identité GitHub est vérifié par S-0033-04 et par `core/tests/repo/test_set_remote.py`.
+
+### S-0033-07 — Les connexions deviennent utilisables
+Plan 0033, critère 7 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-07]`
+- **Étant donné** la plateforme Databricks autorisée sur l'espace rattaché de S-0033-06
+- **Quand** j'ouvre Connexions, clique « Ajouter un point d'accès », saisis identifiant, hôte, SQL warehouse et schéma, m'authentifie avec OAuth, teste, saisis une justification et clique « Proposer le point d'accès »
+- **Alors** la zone « Configurer les plateformes » n'est plus proposée, la plateforme et l'entité sont préremplies, « Connecté : le token est rangé dans votre coffre, sous dbx-perrault. », « Connexion OK · … ms » et « Proposition n° … ouverte. » s'affichent
+- **Et** aucun jeton n'apparaît dans la page ni dans le stockage du navigateur, et le dépôt a une branche `prop/…`
+
+### S-0033-08 — Les modifications non enregistrées survivent au rattachement
+Plan 0033, critère 8 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-08]`
+- **Étant donné** l'Administration d'un espace sans dépôt distant, où j'ai coché « Databricks » sans pouvoir enregistrer
+- **Quand** je rattache un dépôt vide
+- **Alors** la case « Databricks » est toujours cochée et « Enregistrer et fusionner » est actif, sans avertissement de perte
+- **Et** l'enregistrement fusionne `- databricks` dans `governance.yaml` (c'est le pas de S-0033-06)
+- **Étant donné** en Vitest seulement, un domaine ou un membre en cours de modification
+- **Alors** « Rattacher le dépôt » est désactivé (Entrée n'envoie rien) avec « Validez ou annulez la modification en cours avant de rattacher le dépôt. », et se réactive après « Annuler »
+- **Alors** pendant la requête, les cases, niveaux, boutons « Modifier » et « Domaine », « Annuler » et « Enregistrer » sont désactivés ; le brouillon conservé est celui d'où la requête est partie ; le gel dure jusqu'à la fin du rechargement de l'administration ; si la relecture échoue, il reste gelé avec une bannière et « Réessayer », qui le dégèle en gardant le brouillon
+- **Étant donné** en Vitest seulement, un brouillon qui a déjà ajouté un membre au compte du login GitHub
+- **Alors** après le rattachement, le brouillon est abandonné, l'avertissement « Vos modifications non enregistrées n'ont pas été reprises : le compte <login> figurait déjà dans le brouillon. Refaites-les à partir de la gouvernance du dépôt. » s'affiche, et le créateur est référent sous le login GitHub, sans rien à enregistrer
+- Limite : le compte du créateur réécrit dans le brouillon, la valeur des validateurs et la base relue envoyée à l'enregistrement sont vérifiés en Vitest, comme la suspension ci-dessus : `app/src/screens/Rattachement.test.tsx` › `[S-0033-08]` (cinq tests). Les refus `workspace_dirty` (gouvernance modifiée dans le clone, y compris quand elle retire le compte local) et `wrong_branch` (autre branche extraite), hors écran, sont des tests core : `core/tests/repo/test_set_remote.py::test_another_checked_out_branch_is_refused_before_any_remote_write`. Le refus `workspace_dirty` (gouvernance modifiée dans le clone, hors écran) est un test core : `core/tests/repo/test_set_remote.py::test_unsaved_changes_to_the_governance_are_refused_before_any_remote_write`.
+
 ## Hors ligne
 
 **Plan 0019**
@@ -1507,6 +1582,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0030-03 | La lecture d'un instant ne dépend pas du fuseau de session ; les trois dialectes rendent les mêmes jours locaux | Exécution sous plusieurs fuseaux de session : l'écran ne fait que montrer le SQL | `core/tests/compile/test_ecarts.py::test_an_instant_is_read_without_the_session_zone`, `::test_the_paris_day_does_not_depend_on_the_session_zone` |
 | S-0031-02 | La branche instant Snowflake ne dépend pas du fuseau de session, heure doublée et autre décalage compris | Exécution sous plusieurs fuseaux de session : l'écran ne fait que montrer le SQL | `core/tests/compile/test_ecarts.py::test_a_snowflake_instant_is_read_without_the_session_zone` |
 | S-0031-03 | Les trois dialectes rendent les mêmes jours locaux ; aucun SQL Snowflake ne contient `AS TIMESTAMP)` | Exécution DuckDB et SQL de référence, sans écran | `core/tests/compile/test_ecarts.py::test_the_paris_day_does_not_depend_on_the_session_zone`, `::test_no_timestamp_cast_depends_on_the_session`, `::test_no_reference_sql_casts_to_a_session_timestamp` |
+| S-0033-09 | Avec un compte GitHub réel, un dépôt vide créé sans README reçoit l'espace ; le créateur y reste référent | Compte GitHub réel : le faux GitHub reproduit la forme documentée de `/user` et de `/repos/…`, pas les droits réels (`permissions`), le SSO d'organisation ni les règles de branche | `core/tests/repo/test_set_remote.py` ; `app/e2e/rattachement.spec.ts` › `[S-0033-04]` |
 | S-RAF-01 | Installation sur un poste vierge de chaque OS, puis accueil → catalogue → fiche | Fenêtre native Tauri, installateurs signés, postes vierges ; WebKit ne teste que les vues | `.github/workflows/release.yml` ; `core/tests/test_sidecar.py` ; `core/tests/test_release.py` |
 | S-RAF-09 | Keyring et connecteurs figés sous Windows | Poste Windows réel ; l'e2e utilise un coffre en mémoire | `core/tests/test_sidecar.py` ; `core/tests/connections/test_connections.py` ; `core/tests/connections/test_snowflake.py` |
 | S-RAF-10 | Extraction d'un vrai script de production anonymisé | Revue produit : le script est à fournir et valider par son propriétaire | `core/tests/extract/test_extract.py` (corpus synthétique) |

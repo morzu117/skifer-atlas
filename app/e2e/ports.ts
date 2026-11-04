@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 
 /** Ports fixes de la suite : Vite, retour OAuth, serveurs Atlas et faux services. */
-export const E2E_PORTS = [1420, 8020, 8791, 8792, 8793, 8794, 8795, 8796, 8797, 8798, 8799];
+export const E2E_PORTS = [1420, 8020, 8790, 8791, 8792, 8793, 8794, 8795, 8796, 8797, 8798, 8799];
 
 // La configuration Playwright se charge de façon synchrone : un Node à part essaie d'écouter
 // sur chaque port, en IPv4 et en IPv6 (Vite écoute sur « localhost »). Seul EADDRINUSE

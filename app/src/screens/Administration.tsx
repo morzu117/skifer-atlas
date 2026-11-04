@@ -12,6 +12,7 @@ import {
   type Role,
   type Workspace,
 } from "../api";
+import { AttachRemote } from "../components/AttachRemote";
 import { Banner } from "../components/Banner";
 import { Field } from "../components/Field";
 import { Icon } from "../components/Icon";
@@ -76,11 +77,46 @@ function levelError(value: string): string | undefined {
   return Number.isInteger(n) && n >= 1 ? undefined : "Au moins 1.";
 }
 
+/** Modifications non enregistrées, gardées à travers un rattachement (plan 0033). */
+type Carried = { governance: Governance; levels: { canonical: string; variants: string } };
+
+/** Le serveur réécrit l'identité du créateur au rattachement : le brouillon suit, sinon
+ * l'enregistrement suivant le remettrait sous l'ancien compte. Même règle que le serveur :
+ * jamais deux membres fusionnés. */
+function renameAccount(g: Governance, from: string, to: string): Governance {
+  if (!from || from === to || !g.members.some((m) => m.account === from) || g.members.some((m) => m.account === to)) return g;
+  const swap = (accounts: string[]) => accounts.map((a) => (a === from ? to : a));
+  return {
+    ...g,
+    members: g.members.map((m) => (m.account === from ? { ...m, account: to } : m)),
+    domains: g.domains.map((d) => ({ ...d, referents: swap(d.referents), validators: swap(d.validators) })),
+  };
+}
+
 type Load = { kind: "loading" } | { kind: "ready"; state: AdminState } | { kind: "error"; error: Explained; forbidden: boolean };
 
-export function Administration({ ws, heading }: { ws: Workspace; heading: RefObject<HTMLHeadingElement> }) {
+export function Administration({
+  ws,
+  heading,
+  onWorkspaceChange,
+}: {
+  ws: Workspace;
+  heading: RefObject<HTMLHeadingElement>;
+  /** Le rattachement change le compte, le rôle et le dépôt de l'espace : la coque les relit. */
+  onWorkspaceChange?: (next: Workspace) => void;
+}) {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [revision, setRevision] = useState(0);
+  const [attached, setAttached] = useState<string | null>(null);
+  // Le rattachement relit les paramètres, ce qui remonte le formulaire : le brouillon passe ici.
+  const [carried, setCarried] = useState<Carried | null>(null);
+  // Vrai du rattachement réussi jusqu'à la fin du rechargement : le formulaire, remonté sur la
+  // gouvernance relue, perdrait ce qu'on y écrirait entre-temps.
+  const [reloading, setReloading] = useState(false);
+  // Le rechargement qui suit un rattachement a échoué : l'ancien état reste gelé, avec « Réessayer ».
+  // Compte GitHub déjà présent dans le brouillon : celui-ci n'a pas été repris (voir `Settings`).
+  const [discarded, setDiscarded] = useState<string | null>(null);
+  const [reloadError, setReloadError] = useState<Explained | null>(null);
   // Gardé ici : la fusion relit les paramètres, ce qui remonte le formulaire.
   const [saved, setSaved] = useState<AdminSaved | null>(null);
 
@@ -88,14 +124,25 @@ export function Administration({ ws, heading }: { ws: Workspace; heading: RefObj
     let alive = true;
     api
       .admin(ws.id)
-      .then((state) => alive && setLoad({ kind: "ready", state }))
+      .then((state) => {
+        if (!alive) return;
+        setLoad({ kind: "ready", state });
+        setReloading(false);
+        setReloadError(null);
+      })
       .catch((reason) => {
-        if (!alive || reason instanceof UnreachableError) return;
+        if (!alive) return;
+        if (reloading) {
+          setReloadError(explain(reason)); // le rattachement a réussi : on ne lâche pas le formulaire gelé
+          return;
+        }
+        if (reason instanceof UnreachableError) return;
         setLoad({ kind: "error", error: explain(reason), forbidden: reason instanceof ApiError && reason.status === 403 });
       });
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `reloading` ne relance pas le chargement
   }, [ws.id, revision]);
 
   return (
@@ -118,13 +165,47 @@ export function Administration({ ws, heading }: { ws: Workspace; heading: RefObj
           {load.forbidden ? "Seul un référent de l'espace, sans restriction de domaine, modifie ses paramètres." : load.error.text}
         </Banner>
       )}
+      {load.kind === "ready" && discarded && (
+        <Banner tone="warn" title="Modifications non reprises">
+          Vos modifications non enregistrées n'ont pas été reprises : le compte {discarded} figurait déjà dans le brouillon. Refaites-les à partir de la gouvernance du dépôt.
+        </Banner>
+      )}
+      {load.kind === "ready" && reloadError && (
+        <Banner
+          tone="bad"
+          title={reloadError.title}
+          action={
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm"
+              onClick={() => (setReloadError(null), setRevision((n) => n + 1))}
+            >
+              Réessayer
+            </button>
+          }
+        >
+          Le dépôt est rattaché, mais les paramètres n'ont pas pu être relus. {reloadError.text}
+        </Banner>
+      )}
       {load.kind === "ready" && (
         <Settings
-          key={load.state.base_digest}
+          key={`${load.state.base_digest}|${load.state.repository.url}`}
           ws={ws}
           initial={load.state}
           saved={saved}
-          setSaved={setSaved}
+          setSaved={(result) => (result && setDiscarded(null), setSaved(result))}
+          attached={attached}
+          carried={carried}
+          reloading={reloading}
+          onCarried={() => setCarried(null)}
+          onAttached={(next, pending, conflict) => {
+            setDiscarded(conflict ? next.account : null);
+            setCarried(pending && { ...pending, governance: renameAccount(pending.governance, ws.account, next.account) });
+            setAttached(`Dépôt rattaché : l'espace est publié sur ${next.git_remote}, sous le compte ${next.account}.`);
+            setReloading(true);
+            onWorkspaceChange?.(next);
+            setRevision((n) => n + 1);
+          }}
           onReload={() => setRevision((n) => n + 1)}
         />
       )}
@@ -139,22 +220,41 @@ function Settings({
   initial,
   saved,
   setSaved,
+  attached,
+  carried,
+  reloading,
+  onCarried,
+  onAttached,
   onReload,
 }: {
   ws: Workspace;
   initial: AdminState;
   saved: AdminSaved | null;
   setSaved: (saved: AdminSaved | null) => void;
+  attached: string | null;
+  carried: Carried | null;
+  reloading: boolean;
+  onCarried: () => void;
+  onAttached: (next: Workspace, pending: Carried | null, conflict: boolean) => void;
   onReload: () => void;
 }) {
-  const [draft, setDraft] = useState<Governance>(initial.governance);
-  const [levels, setLevels] = useState({
-    canonical: String(initial.governance.validators_required.canonical),
-    variants: String(initial.governance.validators_required.variants),
-  });
+  const [draft, setDraft] = useState<Governance>(carried?.governance ?? initial.governance);
+  const [levels, setLevels] = useState(
+    carried?.levels ?? {
+      canonical: String(initial.governance.validators_required.canonical),
+      variants: String(initial.governance.validators_required.variants),
+    },
+  );
+  useEffect(() => {
+    if (carried) onCarried(); // consommé au montage : un enregistrement ultérieur repart du serveur
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [repository, setRepository] = useState(initial.repository);
   const [editing, setEditing] = useState<Editing>(null);
   const [busy, setBusy] = useState(false);
+  // Pendant la requête de rattachement, le reste du formulaire est gelé : le brouillon que
+  // `onAttached` conserve doit être celui d'où la requête est partie.
+  const [attaching, setAttaching] = useState(false);
   const [failure, setFailure] = useState<{ error: Explained; issues: string[]; stale: boolean } | null>(null);
 
   const levelErrors = { canonical: levelError(levels.canonical), variants: levelError(levels.variants) };
@@ -165,6 +265,8 @@ function Settings({
   const dirty = JSON.stringify(proposed) !== JSON.stringify(initial.governance);
   const referents = draft.members.filter((m) => m.roles.some((r) => r.role === "referent" && r.domains.length === 0)).length;
   const alone = initial.single_referent;
+  // Sans dépôt distant, l'enregistrement (une proposition) échouerait : on rattache d'abord.
+  const local = !repository.url;
 
   function change(next: Governance) {
     setDraft(next);
@@ -197,175 +299,192 @@ function Settings({
 
   return (
     <form className="admin" onSubmit={(event) => void save(event)} noValidate>
+      {local && (
+        <Banner tone="info" title="Cet espace n'a pas encore de dépôt distant">
+          Rattachez-lui un dépôt vide dans « Dépôt Git de l'espace » : les paramètres, les plateformes autorisées et les propositions passent par ce dépôt.
+        </Banner>
+      )}
       {alone && (
         <Banner tone="warn" title="Vous êtes le seul référent de l'espace">
           Vos modifications de la gouvernance sont fusionnées sans revue, avec la mention « {NO_REVIEW} ». Un deuxième référent, ajouté
           dans Utilisateurs et rôles, les fera relire.
         </Banner>
       )}
-      <div className="admin-grid">
-        <Section title="Domaines métier" id="admin-domains" action={editing === null && <AddButton label="Domaine" onClick={() => setEditing({ kind: "domain", id: null })} />}>
-          <ul className="admin-list">
-            {draft.domains.map((d) =>
-              editing?.kind === "domain" && editing.id === d.id ? (
-                <li key={d.id}>
-                  <DomainForm
-                    g={draft}
-                    domain={d}
-                    documents={initial.document_counts[d.id] ?? 0}
-                    onApply={(next) => (change(replaceDomain(draft, d.id, next)), setEditing(null))}
-                    onRemove={() => (change(withoutDomain(draft, d.id)), setEditing(null))}
-                    onCancel={() => setEditing(null)}
-                  />
+      <fieldset className="admin-frozen" disabled={attaching || reloading}>
+        <div className="admin-grid">
+          <Section title="Domaines métier" id="admin-domains" action={editing === null && <AddButton label="Domaine" onClick={() => setEditing({ kind: "domain", id: null })} />}>
+            <ul className="admin-list">
+              {draft.domains.map((d) =>
+                editing?.kind === "domain" && editing.id === d.id ? (
+                  <li key={d.id}>
+                    <DomainForm
+                      g={draft}
+                      domain={d}
+                      documents={initial.document_counts[d.id] ?? 0}
+                      onApply={(next) => (change(replaceDomain(draft, d.id, next)), setEditing(null))}
+                      onRemove={() => (change(withoutDomain(draft, d.id)), setEditing(null))}
+                      onCancel={() => setEditing(null)}
+                    />
+                  </li>
+                ) : (
+                  <li key={d.id} className="admin-row">
+                    <DomainSummary g={draft} domain={d} kpis={initial.kpi_counts[d.id] ?? 0} />
+                    {editing === null && (
+                      <button type="button" className="btn btn-neutral btn-sm" aria-label={`Modifier le domaine ${d.label}`} onClick={() => setEditing({ kind: "domain", id: d.id })}>
+                        Modifier
+                      </button>
+                    )}
+                  </li>
+                ),
+              )}
+              {editing?.kind === "domain" && editing.id === null && (
+                <li>
+                  <DomainForm g={draft} domain={null} onApply={(next) => (change({ ...draft, domains: [...draft.domains, next] }), setEditing(null))} onCancel={() => setEditing(null)} />
                 </li>
-              ) : (
-                <li key={d.id} className="admin-row">
-                  <DomainSummary g={draft} domain={d} kpis={initial.kpi_counts[d.id] ?? 0} />
-                  {editing === null && (
-                    <button type="button" className="btn btn-neutral btn-sm" aria-label={`Modifier le domaine ${d.label}`} onClick={() => setEditing({ kind: "domain", id: d.id })}>
-                      Modifier
-                    </button>
-                  )}
-                </li>
-              ),
-            )}
-            {editing?.kind === "domain" && editing.id === null && (
-              <li>
-                <DomainForm g={draft} domain={null} onApply={(next) => (change({ ...draft, domains: [...draft.domains, next] }), setEditing(null))} onCancel={() => setEditing(null)} />
-              </li>
-            )}
-          </ul>
-          <span className="field-hint">Le canonique reste unique dans l'espace : un domaine organise, il ne cloisonne pas.</span>
-        </Section>
+              )}
+            </ul>
+            <span className="field-hint">Le canonique reste unique dans l'espace : un domaine organise, il ne cloisonne pas.</span>
+          </Section>
 
-        <Section title="Validateurs requis" id="admin-validators">
-          <div className="admin-pair">
-            <Field label="Canonique (min 1)" id="admin-canonical" error={levelErrors.canonical}>
-              <input type="number" min={1} step={1} value={levels.canonical} onChange={(e) => (setLevels({ ...levels, canonical: e.target.value }), setSaved(null))} />
-            </Field>
-            <Field label="Déclinaisons (min 1)" id="admin-variants" error={levelErrors.variants}>
-              <input type="number" min={1} step={1} value={levels.variants} onChange={(e) => (setLevels({ ...levels, variants: e.target.value }), setSaved(null))} />
-            </Field>
-          </div>
-          <div className="admin-overrides">
-            <span className="muted">Surcharges par domaine</span>
-            {draft.domains.filter((d) => d.validators_required).length === 0 ? (
-              <span className="field-hint">Aucune : « Modifier » sur un domaine pour en définir une.</span>
-            ) : (
-              <ul className="admin-list">
-                {draft.domains
-                  .filter((d) => d.validators_required)
-                  .map((d) => (
-                    <li key={d.id} className="admin-override">
-                      <strong>{d.label}</strong>
-                      <span>{levelsText(d.validators_required!)}</span>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </div>
-          <span className="field-hint">Une surcharge hors des points déclarés exige toujours le nombre canonique.</span>
-        </Section>
-
-        <Section title="Utilisateurs et rôles" id="admin-members" action={editing === null && <AddButton label="Inviter" onClick={() => setEditing({ kind: "member", account: null })} />}>
-          {editing?.kind === "member" ? (
-            <MemberForm
-              g={draft}
-              ws={ws}
-              member={editing.account === null ? null : (draft.members.find((m) => m.account === editing.account) ?? null)}
-              onApply={(next) => {
-                const members = editing.account === null ? [...draft.members, next] : draft.members.map((m) => (m.account === editing.account ? next : m));
-                change({ ...draft, members });
-                setEditing(null);
-              }}
-              onRemove={(account) => (change(withoutMember(draft, account)), setEditing(null))}
-              onCancel={() => setEditing(null)}
-            />
-          ) : (
-            <div className="table-wrap">
-              <table className="table table-dense admin-table" aria-label="Utilisateurs et rôles">
-                <thead>
-                  <tr>
-                    <th scope="col">Nom</th>
-                    <th scope="col">Entité</th>
-                    <th scope="col">Rôle</th>
-                    <th scope="col">Domaines</th>
-                    <th scope="col">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {draft.members.map((m) => (
-                    <tr key={m.account}>
-                      <td>
-                        <strong>{m.name}</strong>
-                        <span className="admin-sub mono">{m.account}</span>
-                      </td>
-                      <td>{entityLabel(m.entity)}</td>
-                      <td>{ROLES[mainRole(draft, m)]}</td>
-                      <td>{memberDomains(draft, m)}</td>
-                      <td>
-                        {editing === null && (
-                          <button type="button" className="link-button" aria-label={`Modifier ${m.name}`} onClick={() => setEditing({ kind: "member", account: m.account })}>
-                            Modifier
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <Section title="Validateurs requis" id="admin-validators">
+            <div className="admin-pair">
+              <Field label="Canonique (min 1)" id="admin-canonical" error={levelErrors.canonical}>
+                <input type="number" min={1} step={1} value={levels.canonical} onChange={(e) => (setLevels({ ...levels, canonical: e.target.value }), setSaved(null))} />
+              </Field>
+              <Field label="Déclinaisons (min 1)" id="admin-variants" error={levelErrors.variants}>
+                <input type="number" min={1} step={1} value={levels.variants} onChange={(e) => (setLevels({ ...levels, variants: e.target.value }), setSaved(null))} />
+              </Field>
             </div>
-          )}
-        </Section>
+            <div className="admin-overrides">
+              <span className="muted">Surcharges par domaine</span>
+              {draft.domains.filter((d) => d.validators_required).length === 0 ? (
+                <span className="field-hint">Aucune : « Modifier » sur un domaine pour en définir une.</span>
+              ) : (
+                <ul className="admin-list">
+                  {draft.domains
+                    .filter((d) => d.validators_required)
+                    .map((d) => (
+                      <li key={d.id} className="admin-override">
+                        <strong>{d.label}</strong>
+                        <span>{levelsText(d.validators_required!)}</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+            <span className="field-hint">Une surcharge hors des points déclarés exige toujours le nombre canonique.</span>
+          </Section>
 
-        <div className="admin-stack">
-          <Section title="Dépôt Git de l'espace" id="admin-repository">
-            <Repository
-              ws={ws}
-              repository={repository}
-              codeOwners={referents >= 2}
-              onSynced={(next) => {
-                setRepository(next);
-                if (!dirty) onReload(); // relit la gouvernance si rien n'est en cours
-              }}
-            />
+          <Section title="Utilisateurs et rôles" id="admin-members" action={editing === null && <AddButton label="Inviter" onClick={() => setEditing({ kind: "member", account: null })} />}>
+            {editing?.kind === "member" ? (
+              <MemberForm
+                g={draft}
+                ws={ws}
+                member={editing.account === null ? null : (draft.members.find((m) => m.account === editing.account) ?? null)}
+                onApply={(next) => {
+                  const members = editing.account === null ? [...draft.members, next] : draft.members.map((m) => (m.account === editing.account ? next : m));
+                  change({ ...draft, members });
+                  setEditing(null);
+                }}
+                onRemove={(account) => (change(withoutMember(draft, account)), setEditing(null))}
+                onCancel={() => setEditing(null)}
+              />
+            ) : (
+              <div className="table-wrap">
+                <table className="table table-dense admin-table" aria-label="Utilisateurs et rôles">
+                  <thead>
+                    <tr>
+                      <th scope="col">Nom</th>
+                      <th scope="col">Entité</th>
+                      <th scope="col">Rôle</th>
+                      <th scope="col">Domaines</th>
+                      <th scope="col">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draft.members.map((m) => (
+                      <tr key={m.account}>
+                        <td>
+                          <strong>{m.name}</strong>
+                          <span className="admin-sub mono">{m.account}</span>
+                        </td>
+                        <td>{entityLabel(m.entity)}</td>
+                        <td>{ROLES[mainRole(draft, m)]}</td>
+                        <td>{memberDomains(draft, m)}</td>
+                        <td>
+                          {editing === null && (
+                            <button type="button" className="link-button" aria-label={`Modifier ${m.name}`} onClick={() => setEditing({ kind: "member", account: m.account })}>
+                              Modifier
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Section>
-          <Section title="Plateformes autorisées" id="admin-platforms">
-            <fieldset className="admin-platforms">
-              <legend className="sr-only">Plateformes autorisées</legend>
-              {initial.platforms.map((p) => {
-                const checked = draft.allowed_platforms.includes(p.id);
-                return (
-                  <div key={p.id} className="admin-platform">
-                    <label className="check">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        aria-describedby={`platform-${p.id}-auth`}
-                        onChange={() =>
-                          change({
-                            ...draft,
-                            allowed_platforms: checked
-                              ? draft.allowed_platforms.filter((id) => id !== p.id)
-                              : [...draft.allowed_platforms, p.id].sort((a, b) => order(initial, a) - order(initial, b)),
-                          })
-                        }
-                      />
-                      {p.label}
-                    </label>
-                    <span id={`platform-${p.id}-auth`} className="muted">
-                      {p.auth}
-                    </span>
-                  </div>
-                );
-              })}
-            </fieldset>
-            <span className="field-hint">Les tokens restent dans le coffre personnel de chaque utilisateur.</span>
-          </Section>
+
+          <div className="admin-stack">
+            <Section title="Dépôt Git de l'espace" id="admin-repository">
+              <Repository
+                ws={ws}
+                repository={repository}
+                attached={attached}
+                onPending={setAttaching}
+                blocked={editing !== null ? "Validez ou annulez la modification en cours avant de rattacher le dépôt." : undefined}
+                onAttached={(next) => {
+                  // Le serveur renomme le créateur, sauf si le login GitHub est déjà membre. S'il ne l'était
+                  // pas avant et que le brouillon l'a ajouté, rejouer le renommage ou fusionner les rôles
+                  // ferait perdre l'administration au créateur : le brouillon n'est pas repris.
+                  const conflict = dirty && next.account !== ws.account && !initial.governance.members.some((m) => m.account === next.account) && draft.members.some((m) => m.account === next.account);
+                  onAttached(next, dirty && !conflict ? { governance: draft, levels } : null, conflict);
+                }}
+                codeOwners={referents >= 2}
+                onSynced={(next) => {
+                  setRepository(next);
+                  if (!dirty) onReload(); // relit la gouvernance si rien n'est en cours
+                }}
+              />
+            </Section>
+            <Section title="Plateformes autorisées" id="admin-platforms">
+              <fieldset className="admin-platforms">
+                <legend className="sr-only">Plateformes autorisées</legend>
+                {initial.platforms.map((p) => {
+                  const checked = draft.allowed_platforms.includes(p.id);
+                  return (
+                    <div key={p.id} className="admin-platform">
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          aria-describedby={`platform-${p.id}-auth`}
+                          onChange={() =>
+                            change({
+                              ...draft,
+                              allowed_platforms: checked
+                                ? draft.allowed_platforms.filter((id) => id !== p.id)
+                                : [...draft.allowed_platforms, p.id].sort((a, b) => order(initial, a) - order(initial, b)),
+                            })
+                          }
+                        />
+                        {p.label}
+                      </label>
+                      <span id={`platform-${p.id}-auth`} className="muted">
+                        {p.auth}
+                      </span>
+                    </div>
+                  );
+                })}
+              </fieldset>
+              <span className="field-hint">Les tokens restent dans le coffre personnel de chaque utilisateur.</span>
+            </Section>
+          </div>
         </div>
-      </div>
+      </fieldset>
 
       {failure && (
         <Banner
@@ -397,13 +516,14 @@ function Settings({
       )}
       <div className="admin-actions">
         {editing !== null && <span className="field-hint">Appliquez ou annulez la modification en cours.</span>}
-        <button type="button" className="btn btn-neutral" disabled={!dirty || busy} onClick={cancel}>
+        {local && <span className="field-hint">Rattachez d'abord un dépôt distant pour enregistrer.</span>}
+        <button type="button" className="btn btn-neutral" disabled={!dirty || busy || attaching || reloading} onClick={cancel}>
           Annuler
         </button>
         <button
           type="submit"
           className="btn btn-primary"
-          disabled={!dirty || busy || editing !== null || saved !== null || Boolean(levelErrors.canonical || levelErrors.variants)}
+          disabled={local || !dirty || busy || attaching || reloading || editing !== null || saved !== null || Boolean(levelErrors.canonical || levelErrors.variants)}
         >
           {alone ? "Enregistrer et fusionner" : "Enregistrer et créer la proposition"}
         </button>
@@ -786,11 +906,19 @@ function MemberForm({
 function Repository({
   ws,
   repository,
+  attached,
+  blocked,
+  onPending,
+  onAttached,
   codeOwners,
   onSynced,
 }: {
   ws: Workspace;
   repository: AdminState["repository"];
+  attached: string | null;
+  blocked?: string;
+  onPending?: (pending: boolean) => void;
+  onAttached: (next: Workspace) => void;
   codeOwners: boolean;
   onSynced: (next: AdminState["repository"]) => void;
 }) {
@@ -838,6 +966,12 @@ function Repository({
           </dd>
         </div>
       </dl>
+      {!repository.url && <AttachRemote ws={ws} blocked={blocked} onPending={onPending} onAttached={onAttached} />}
+      {attached && (
+        <span className="tone-ok admin-message" role="status">
+          {attached}
+        </span>
+      )}
       {repository.url && (
         <button type="button" className="btn btn-neutral btn-sm" disabled={busy} onClick={() => void sync()}>
           {busy ? "Synchronisation…" : "Synchroniser"}

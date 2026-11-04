@@ -423,6 +423,7 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
           <aside className="card connections-panel" aria-label="Configurer les plateformes">
             <h2 className="section-label">Aucune plateforme connectable autorisée</h2>
             <p>Un référent de l'espace doit autoriser Databricks ou Snowflake dans l'administration avant d'ajouter un point d'accès.</p>
+            {!ws.git_remote && <p>Cet espace n'a pas encore de dépôt distant : rattachez-en un dans l'administration avant d'autoriser une plateforme.</p>}
             {ws.space_referent && <a className="btn btn-primary" href={href.view(ws.id, "administration")}>Configurer les plateformes</a>}
           </aside>
         )}

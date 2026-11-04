@@ -23,6 +23,7 @@ from ..governance.model import (
     account_from_name,
     dump_governance,
     initial_governance,
+    rename_account,
     role_of,
 )
 from ..paths import data_dir
@@ -160,22 +161,148 @@ def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace
     return joined
 
 
+# Marqueurs de la sortie d'erreur de git (LC_ALL=C), pour dire pourquoi un dépôt ne convient pas.
+_NOT_FOUND = ("not found", "does not exist", "does not appear to be a git repository",
+              "no such file or directory", "returned error: 404")
+_AUTH = ("authentication failed", "could not read username", "could not read password",
+         "permission denied (publickey", "invalid credentials", "returned error: 401")
+_DENIED = ("permission to", "denied to", "returned error: 403", "protected branch",
+           "access denied", "insufficient permission")
+_STALE = ("non-fast-forward", "fetch first", "[rejected]")
+
+
+def _explain_git(error: RepoError, push: bool = False) -> RepoError:
+    """Le `RepoError` d'une commande git sur le dépôt distant, avec un code qui dit
+    pourquoi (plan 0033). La sortie de git ne remonte jamais à l'API."""
+    output = error.output.lower()
+    if any(marker in output for marker in _NOT_FOUND):
+        return RepoError("remote_not_found", "Dépôt introuvable : l'adresse est fausse, ou le "
+                         "compte connecté n'y a pas accès.")
+    if any(marker in output for marker in _AUTH):
+        return RepoError("host_auth_failed", "Le dépôt refuse l'authentification : se "
+                         "connecter à GitHub dans Atlas, ou charger la clé SSH de l'agent.")
+    if any(marker in output for marker in _DENIED):
+        return RepoError("remote_not_writable", "Le compte n'a pas le droit de pousser sur "
+                         "ce dépôt.")
+    if push and any(marker in output for marker in _STALE):
+        return RepoError("remote_not_empty", "Le dépôt a reçu des commits entre-temps : "
+                         "il n'est plus vide.")
+    if push:
+        return error  # `push_failed`, avec la dernière ligne de git
+    return RepoError("host_unreachable", "Le dépôt distant est injoignable : vérifier "
+                     "l'adresse et la connexion, puis réessayer.")
+
+
+def _require_empty(remote_url: str, token: str | None) -> None:
+    """Le dépôt n'a aucune référence (ni branche ni tag) : on n'y écrase rien et on n'y
+    mélange pas deux historiques. `ls-remote` ne laisse rien dans le clone."""
+    try:
+        refs = run_git(["ls-remote", "--", remote_url], token=token,
+                       error_code="remote_unreachable")
+    except RepoError as error:
+        raise _explain_git(error) from None
+    if refs.strip():
+        raise RepoError("remote_not_empty", "Ce dépôt n'est pas vide : Atlas ne rattache "
+                        "qu'un dépôt vierge, créé sans README, licence ni .gitignore.")
+
+
 def set_remote(workspace_id: str, remote_url: str) -> Workspace:
-    """Rattache un espace créé localement à son dépôt distant (vide) et y pousse."""
+    """Rattache un espace créé localement à son dépôt distant, vide, et y pousse (plan 0033).
+
+    Tout est vérifié avant d'écrire : adresse, hébergeur, compte, droits d'écriture, dépôt
+    vide. Le créateur est inscrit dans la gouvernance sous son identité locale ; sous
+    l'identité authentifiée de l'hébergeur (le login GitHub), il perdrait son rôle de
+    référent. Son compte est donc réécrit dans un commit dédié, poussé avec l'historique
+    (ADR 0037). Un échec ne laisse ni `origin` ni commit dans le clone."""
     workspace = _workspace(workspace_id)
     if workspace.git_remote:
-        raise RepoError("workspace_exists", "Cet espace a déjà un dépôt distant.")
+        raise RepoError("remote_exists", "Cet espace a déjà un dépôt distant.")
     check_remote_url(remote_url)
     repo = repo_dir(workspace_id)
-    branch = read_meta(repo).main_branch
+    with clone_lock(repo):
+        return _attach(workspace, repo, remote_url)
+
+
+def _require_main_checked_out(repo: Path, branch: str) -> None:
+    """Atlas ne change jamais de branche dans le clone ; après un `git checkout` à la main,
+    l'avance rapide qui suit le push ferait avancer une autre branche que la principale."""
+    try:
+        current = run_git(["symbolic-ref", "-q", "HEAD"], repo).strip()
+    except RepoError:
+        current = ""  # HEAD détachée
+    if current != f"refs/heads/{branch}":
+        shown = current.removeprefix("refs/heads/") or "aucune (HEAD détachée)"
+        raise RepoError("wrong_branch", f"La branche « {shown} » est extraite dans le clone de "
+                        f"l'espace : revenir sur « {branch} », puis rattacher le dépôt.")
+
+
+# Fichiers que git pose dans son dossier pendant une opération inachevée.
+_OPERATIONS = ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply")
+
+
+def _require_no_operation_in_progress(repo: Path) -> None:
+    """Ni conflit non résolu ni fusion, cherry-pick, revert ou rebase en cours : l'avance
+    rapide qui suit le push échouerait, après la publication."""
+    unmerged = run_git(["ls-files", "-u"], repo).strip()
+    running = [name for name in _OPERATIONS
+               if (repo / run_git(["rev-parse", "--git-path", name], repo).strip()).exists()]
+    if unmerged or running:
+        raise RepoError("workspace_dirty", "Une fusion (ou une opération git) est en cours "
+                        "dans le clone de l'espace, ou un conflit n'y est pas résolu : la "
+                        "terminer ou l'abandonner, puis rattacher le dépôt.")
+
+
+def _require_clean_governance(repo: Path) -> None:
+    """`governance.yaml` n'a aucun changement local, enregistré dans l'index ou non. Toujours
+    vérifié, qu'il y ait un compte à réécrire ou non : l'avance rapide qui suit le push
+    réécrit ce fichier et échouerait, après la publication, sur un fichier modifié ; et la
+    gouvernance lue plus bas (renommage, rôle) doit être celle du commit publié, non celle
+    d'un fichier modifié à la main. Une fois ce contrôle passé, arbre et branche coïncident."""
+    if run_git(["status", "--porcelain", "--", GOVERNANCE_FILE], repo).strip():
+        raise RepoError("workspace_dirty", f"« {GOVERNANCE_FILE} » a des modifications non "
+                        "enregistrées dans le clone de l'espace : les enregistrer ou les "
+                        "annuler, puis rattacher le dépôt.")
+
+
+def _attach(workspace: Workspace, repo: Path, remote_url: str) -> Workspace:
+    from ..githost import host_for  # import tardif : githost dépend de repo
+    from ..githost.github import GitHubHost, github_token
+    from ..proposals.common import commit_files  # idem : proposals dépend de ce module
+
+    branch = _valid_meta(repo).main_branch
+    _require_main_checked_out(repo, branch)
+    _require_no_operation_in_progress(repo)
+    _require_clean_governance(repo)
+    host = host_for(remote_url, branch, workspace.id)  # `unsupported_host` avant tout
+    if isinstance(host, GitHubHost) and not github_token(workspace.id):
+        raise RepoError("host_auth_failed", "Aucun jeton GitHub pour cet espace : se "
+                        "connecter à GitHub avant de rattacher le dépôt.")
+    account = host.current_account()
+    host.check_writable()
+    token = _token(remote_url, workspace.id)
+    _require_empty(remote_url, token)
+
+    governance = read_governance(repo)
+    renamed = (rename_account(governance, workspace.account, account) if governance
+               else governance)
+    commit = None
+    if renamed is not governance:
+        commit = commit_files(
+            repo, run_git(["rev-parse", f"refs/heads/{branch}"], repo).strip(),
+            {GOVERNANCE_FILE: dump_governance(renamed)},
+            f"Identité du créateur : {workspace.account} devient {account}\n\n"
+            f"« {workspace.account} » était l'identité locale du créateur de l'espace ; "
+            f"l'hébergeur l'authentifie sous « {account} ». Ses rôles sont conservés.")
     run_git(["remote", "add", "origin", "--", remote_url], repo)
     try:
-        run_git(["push", "--quiet", "--set-upstream", "origin", branch], repo,
-                error_code="push_failed", token=_token(remote_url, workspace_id))
-    except RepoError:
+        run_git(["push", "--quiet", "origin", f"{commit or branch}:refs/heads/{branch}"], repo,
+                error_code="push_failed", token=token)
+    except RepoError as error:
         run_git(["remote", "remove", "origin"], repo)
-        raise
-    account = _host_account(remote_url, branch, workspace_id) or workspace.account
+        raise _explain_git(error, push=True) from None
+    if commit:
+        run_git(["merge", "--quiet", "--ff-only", commit], repo)
+    run_git(["branch", f"--set-upstream-to=origin/{branch}", branch], repo)
     updated = workspace.model_copy(update={
         "git_remote": remote_url, "account": account,
         **_profile(read_governance(repo), account)})

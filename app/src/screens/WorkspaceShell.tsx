@@ -182,7 +182,7 @@ export function WorkspaceShell({
         {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} />}
         {ws && view === "comparaison" && <Comparison ws={ws} params={params} heading={heading} />}
         {ws && view === "connexions" && <Connections ws={ws} heading={heading} />}
-        {ws && view === "administration" && <Administration ws={ws} heading={heading} />}
+        {ws && view === "administration" && <Administration ws={ws} heading={heading} onWorkspaceChange={(next) => setLoad({ kind: "ready", ws: next })} />}
       </main>
     </div>
   );

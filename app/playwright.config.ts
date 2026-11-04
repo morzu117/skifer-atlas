@@ -14,6 +14,8 @@ process.env.ATLAS_E2E_DATA ??= mkdtempSync(join(tmpdir(), "atlas-e2e-"));
 // Les scénarios utilisent des dépôts locaux isolés ; le produit les refuse par défaut.
 process.env.ATLAS_ALLOW_LOCAL_GIT = "1";
 const API_PORT = 8799;
+// Dépôts nus qui tiennent lieu de `https://github.com/e2e-atlas/<nom>.git` (plan 0033).
+const GITHUB_REPOSITORIES = join(process.env.ATLAS_E2E_DATA, "depots-github");
 // Comparaisons chiffrées en local dans DuckDB, sans plateforme (plan 0009).
 const COMPARE_DATA = fileURLToPath(new URL("../core/tests/fixtures/compare/revenu-net", import.meta.url));
 
@@ -83,6 +85,25 @@ export default defineConfig({
         ATLAS_GITHUB_API_URL: "http://127.0.0.1:8792",
         ATLAS_GITHUB_CLIENT_ID: "Iv1.atlas-test",
         // Aucun ATLAS_COMPARE_DATA : la comparaison doit demander l'OAuth.
+      },
+    },
+    // Rattachement d'un espace neuf à GitHub (plan 0033) : le faux GitHub répond à l'API, et
+    // git redirige `https://github.com/e2e-atlas/` vers des dépôts nus du dossier de test.
+    {
+      command: "uv run --project ../core skifer-atlas-server",
+      url: "http://127.0.0.1:8790/health",
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        ATLAS_PORT: "8790", ATLAS_DEV_NO_TOKEN: "1",
+        ATLAS_DATA_DIR: join(process.env.ATLAS_E2E_DATA!, "rattachement"),
+        ATLAS_ACCOUNT: "anna.k", ATLAS_VAULT: "memory", ATLAS_LOG_LEVEL: "warning",
+        ATLAS_GITHUB_URL: "http://127.0.0.1:8792",
+        ATLAS_GITHUB_API_URL: "http://127.0.0.1:8792",
+        ATLAS_GITHUB_CLIENT_ID: "Iv1.atlas-test",
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: `url.${GITHUB_REPOSITORIES}/.insteadOf`,
+        GIT_CONFIG_VALUE_0: "https://github.com/e2e-atlas/",
       },
     },
     {

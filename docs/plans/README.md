@@ -36,6 +36,7 @@ Statut : plans validés le 30 octobre 2026, développement lancé par le plan 00
 | 0030 | Horodatages indépendants de la session | casts sans fuseau ; colonnes Databricks lues en heure murale de leur fuseau déclaré | 0007, 0010, 0021 | S |
 | 0031 | Horodatages avec fuseau des sources Snowflake | colonnes `TIMESTAMP_LTZ` et `TIMESTAMP_TZ` lues en heure murale de leur fuseau déclaré | 0018, 0030 | S |
 | 0032 | Création de déclinaisons depuis la fiche | brouillon v1 en surcharge ou from scratch, puis éditeur | 0012, 0013, 0006 | S |
+| 0033 | Rattacher un espace neuf à un dépôt vide | Administration et création : adresse d'un dépôt vide, connexion GitHub, push de l'espace, créateur toujours référent | 0005, 0008, 0017, 0025, 0032 | M |
 
 **Chemin critique** : 0001 → 0002 → 0003 → 0005 → 0006 → 0010 → 0011 → 0012 → 0013 → 0014. La branche « chiffrée » 0007 → 0008 → 0009 → 0018 peut avancer en parallèle dès 0002, et l'extraction 0004 dès 0003.
 
@@ -61,6 +62,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
   - l'enregistrement réel de la gouvernance avec la règle Code Owners (0017) ;
   - le tag posé au `sync` après une fusion faite dans l'interface de GitHub (0020) ;
   - la connexion par le device flow et l'adhésion à un dépôt privé (0025).
+  - le rattachement réel d'un espace local à un dépôt vide, créé sans README : push, droits (`permissions`) et règles de branche de l'organisation, SSO compris (0033).
 
 **Vérifications à la main** :
 - Installation sur un poste vierge de chaque OS, puis le parcours accueil → catalogue → fiche (0019).
@@ -88,6 +90,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 - Rafraîchissement des jetons GitHub à durée limitée (0025).
 
 **Réglé** depuis la mise à jour précédente :
+- Espace neuf sans dépôt distant, bloqué à « Pas encore de dépôt distant » : rattachement à un dépôt vide depuis l'Administration et le panneau de création, connexion GitHub comprise, créateur toujours référent (issue #137) : plan 0033, ADR 0037.
 - Onglets de la fiche sous WebKit macOS : boutons avec tabulation explicite, accessibles avec Tab seul (ADR 0030, complément du 4 novembre 2026).
 - Colonnes `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` d'une source Snowflake : plan 0031, ADR 0036.
 - Test de fumée de l'app trop juste sur le runner macOS Intel de la CI (6 à 15 s pour 10 s) : limite de 20 s sur ce runner seulement, ADR 0023 (#72).
