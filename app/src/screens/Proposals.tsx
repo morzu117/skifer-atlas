@@ -37,10 +37,8 @@ const CANONICAL = "canonique";
 
 type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "error"; error: Explained };
 
-/** Le titre de la PR porte le libellé du document : « Revenu net — nordis-de v4 » pour une
- * variante (le KPI, puis l'entité), « Revenu net v5 » sinon. */
 function labelOf(item: ProposalItem): string {
-  return item.title.replace(/ v\d+$/, "").split(" — ")[0];
+  return item.document_label;
 }
 
 function heading(item: ProposalItem): string {
@@ -104,7 +102,8 @@ export function Proposals({ ws, params, heading: title }: { ws: Workspace; param
 
   const ready = queue.kind === "ready" ? queue.value : null;
   // « Mes domaines » par défaut pour un validateur ; « Tous » pour les autres comptes.
-  const domain = params.domain || (ready && ready.review_domains.length > 0 ? MINE : ALL);
+  const domain = (params.domain === MINE && ready?.review_domains.length === 0 ? ALL : params.domain)
+    || (ready && ready.review_domains.length > 0 ? MINE : ALL);
   const entity = params.entity ?? "";
   const items = (ready?.items ?? []).filter(
     (item) =>
@@ -285,7 +284,7 @@ function Detail({
     return () => {
       alive = false;
     };
-  }, [ws.id, item.id]);
+  }, [ws.id, item.id, revision]);
 
   const found = detail.kind === "ready" ? detail.value : null;
   const viewer = found?.viewer;
@@ -512,6 +511,7 @@ const REVIEWS: Record<string, string> = {
   approved: "a approuvé",
   changes_requested: "demande des changements",
   commented: "a commenté",
+  dismissed: "a vu sa revue rejetée",
 };
 
 function Thread({
@@ -552,8 +552,8 @@ function Thread({
       {entries.length === 0 && <p className="muted">Aucun commentaire.</p>}
       {entries.length > 0 && (
         <ol className="thread">
-          {entries.map((entry, index) => (
-            <li key={index} className="thread-item">
+          {entries.map((entry) => (
+            <li key={`${entry.account}:${entry.at}:${entry.action}:${entry.body}`} className="thread-item">
               <span className="avatar-xs" aria-hidden="true">
                 {initials(name(entry.account))}
               </span>

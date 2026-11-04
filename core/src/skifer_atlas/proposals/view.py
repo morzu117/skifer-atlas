@@ -130,7 +130,7 @@ def _recurring(context: Context, analysis: Analysis, block: dict, number: int,
 def graphs(workspace_id: str, number: int) -> dict:
     """Les deux graphes disposés, le rapport de diff complet (plan 0003), les surcharges
     hors points déclarés et celles qui reviennent d'une entité à l'autre."""
-    context = open_context(workspace_id, fetch=False)
+    context = open_context(workspace_id)
     pull = context.host.get_pull_request(number)
     _, block = parse_body(pull.body)
     if block is None:
