@@ -42,9 +42,12 @@ def _last_comparison(connection: duckdb.DuckDBPyConnection, kpi_id: str,
                      version: int | None) -> dict | None:
     """Dernière comparaison terminée du KPI ; son taux de validation est la part des
     cellules dans la tolérance, toutes déclinaisons confondues."""
-    from ..compare.store import ensure_schema  # import tardif : `compare` lit l'index
-
-    ensure_schema(connection)
+    # Une lecture de l'index garde une transaction ouverte : créer le schéma ici
+    # ferait entrer deux fiches simultanées en conflit jusqu'à leur fermeture.
+    # Le stockage des comparaisons crée lui-même ses tables à la première écriture.
+    if not connection.execute("SELECT 1 FROM information_schema.schemata "
+                              "WHERE schema_name = 'results'").fetchone():
+        return None
     found = _records(connection.execute("""
         SELECT c.id, c.finished_at, c.kpi_version, c.status,
                sum(s.validation_pct * s.cell_count) / nullif(sum(s.cell_count), 0)
