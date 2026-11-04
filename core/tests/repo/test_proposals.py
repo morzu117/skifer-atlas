@@ -403,16 +403,17 @@ def test_access_point_is_declared_by_proposal(client, joined, as_, monkeypatch):
 
 
 def test_awaiting_my_review(client, joined, as_):
-    """Plan 0010 : le compteur orange de la navigation et des cartes d'accueil."""
+    """La file personnelle alimente le compteur de l'accueil sans bloquer la liste."""
     as_("claire.m")
     assert propose(client, revenu_net(), 4).status_code == 201
     assert client.get(PROPOSALS, params={"for_me": 1}).json() == []  # l'autrice
+    # L'accueil demande la file séparément ; la liste des espaces reste locale.
     assert client.get("/api/workspaces").json()[0]["counts"] == {
-        "kpi": 4, "concept": 3, "open_proposals": 0}
+        "kpi": 4, "concept": 3, "open_proposals": None}
     as_("marc.d")
     [waiting] = client.get(PROPOSALS, params={"for_me": 1}).json()
     assert waiting["id"] == 1 and waiting["awaiting_me"] is True
-    assert client.get("/api/workspaces").json()[0]["counts"]["open_proposals"] == 1
+    assert client.get("/api/workspaces").json()[0]["counts"]["open_proposals"] is None
     as_("anna.k")  # contributrice : son avis ne compte pas
     assert client.get(PROPOSALS, params={"for_me": 1}).json() == []
     as_("marc.d")
