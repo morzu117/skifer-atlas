@@ -173,6 +173,9 @@ def test_drafts_keep_their_status(repo, tmp_path):
     draft = load("concepts/commande.yaml")
     draft["data_product"]["id"] = "commande-brouillon"
     draft["status"] = "draft"
+    draft["extraction"] = {"source_file": "commande.sql", "line": 1,
+                           "dialect": "databricks", "sql_sha256": "0" * 64,
+                           "residues": []}
     draft["data_product"]["owner"] = "TODO"
     write(repo, "concepts/commande-brouillon.yaml", draft)
     commit_all(repo, "Brouillon")
