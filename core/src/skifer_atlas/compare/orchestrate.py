@@ -42,6 +42,18 @@ from .rebind import rebind
 from .reconcile import Cell, divergent_node, keyed, reconcile, summarize, target_of
 
 SIDES = ("canonical", "variant")
+_STORED_ERRORS = {
+    "query_failed": "Échec de la requête sur la plateforme.",
+    "duplicate_dimensions": "Plusieurs lignes correspondent à une même cellule.",
+    "result_too_large": "Le résultat dépasse la limite de lignes.",
+    "query_canceled": "Requête annulée.",
+    "missing_data": "Données locales introuvables.",
+}
+
+
+def _stored_error(error: RepoError) -> str:
+    """Les messages bruts d'un moteur peuvent contenir des valeurs du résultat."""
+    return f"{error.code}: {_STORED_ERRORS.get(error.code, 'Échec de la comparaison.')}"
 
 
 class CompareRequest(BaseModel):
@@ -312,11 +324,13 @@ class Job:
     prepared: Prepared
     cancel: threading.Event = field(default_factory=threading.Event)
     progress: dict[str, dict] = field(default_factory=dict)
+    progress_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def snapshot(self) -> list[dict]:
-        return [{"platform": p["platform"], "entities": p["entities"], "state": p["state"],
-                 "percent": round(100 * p["done"] / p["total"]) if p["total"] else 100}
-                for p in self.progress.values()]
+        with self.progress_lock:
+            return [{"platform": p["platform"], "entities": p["entities"], "state": p["state"],
+                     "percent": round(100 * p["done"] / p["total"]) if p["total"] else 100}
+                    for p in self.progress.values()]
 
 
 @dataclass(frozen=True)
@@ -374,14 +388,16 @@ def _execute(job: Job, runner: Runner) -> None:
     for plan in prepared.plans:
         groups.setdefault(plan.platform, []).append(plan)
     for platform, plans in groups.items():
-        job.progress[platform] = {"platform": platform, "entities": [p.entity for p in plans],
-                                  "state": "pending", "done": 0, "total": 2 * len(plans)}
+        with job.progress_lock:
+            job.progress[platform] = {"platform": platform, "entities": [p.entity for p in plans],
+                                      "state": "pending", "done": 0, "total": 2 * len(plans)}
     fetched: dict[tuple[str, str], QueryResult] = {}
     runs: list[dict] = []
 
     def work(platform: str) -> None:
         progress = job.progress[platform]
-        progress["state"] = "running"
+        with job.progress_lock:
+            progress["state"] = "running"
         for plan in groups[platform]:
             failed = False  # le canonique en échec : inutile d'exécuter la déclinaison
             for side in SIDES:
@@ -399,16 +415,18 @@ def _execute(job: Job, runner: Runner) -> None:
                     except RepoError as error:
                         canceled = job.cancel.is_set() or error.code == "query_canceled"
                         run["status"] = "cancelled" if canceled else "failed"
-                        run["error"] = f"{error.code}: {error.message}"
+                        run["error"] = _stored_error(error)
                         failed = True
                     else:
                         run["status"], run["row_count"] = "done", len(result.rows)
                         fetched[(plan.variant_id, side)] = result
                     run["finished_at"] = store.now()
-                progress["done"] += 1
+                with job.progress_lock:
+                    progress["done"] += 1
         mine = [r for r in runs if r["platform"] == platform]
-        progress["state"] = "cancelled" if job.cancel.is_set() else (
-            "failed" if any(r["status"] == "failed" for r in mine) else "done")
+        with job.progress_lock:
+            progress["state"] = "cancelled" if job.cancel.is_set() else (
+                "failed" if any(r["status"] == "failed" for r in mine) else "done")
 
     with ThreadPoolExecutor(max_workers=len(groups)) as pool:
         list(pool.map(work, groups))
@@ -428,7 +446,7 @@ def _execute(job: Job, runner: Runner) -> None:
                                   _keyed(variant, plan.variant, f"de « {plan.entity} »"),
                                   prepared.tolerance)
             except RepoError as error:
-                errors.append(f"{error.code}: {error.message}")
+                errors.append(_stored_error(error))
                 continue
             cells.extend(_cell_row(plan, cell) for cell in found)
             summary = summarize(found)
@@ -458,8 +476,12 @@ def _cell_row(plan: VariantPlan, cell: Cell) -> tuple:
 def _guarded(job: Job, runner: Runner) -> None:
     try:
         _execute(job, runner)
-    except Exception as error:  # noqa: BLE001 — la comparaison ne reste jamais « running »
-        store.finish(job.db, job.number, "failed", f"internal_error: {error}", [], [], [])
+    except Exception:  # noqa: BLE001 — une erreur interne peut contenir des données
+        try:
+            store.finish(job.db, job.number, "failed", "internal_error: Échec de la "
+                         "comparaison.", [], [], [])
+        except Exception:  # noqa: BLE001 — écriture transactionnelle indisponible
+            store.fail(job.db, job.number)
     finally:
         with _jobs_lock:
             _jobs.pop((str(job.db), job.number), None)
