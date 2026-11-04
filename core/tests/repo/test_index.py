@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import threading
 import time
 
 import pytest
@@ -51,6 +52,66 @@ def test_two_readers_can_open_summaries_before_the_first_comparison(repo, tmp_pa
     finally:
         first.close()
         second.close()
+
+
+def test_concurrent_catalogs_of_a_new_workspace_do_not_conflict(repo, tmp_path):
+    """Suivi #140 : au premier catalogue d'un espace neuf, plusieurs requêtes lisent en
+    même temps. Chacune garde sa transaction de lecture jusqu'à la fermeture de sa
+    connexion : créer le schéma `results` dans l'une la mettait en conflit avec les autres
+    (« Catalog write-write conflict on create with "results" »)."""
+    from skifer_atlas.compare import store
+
+    db = tmp_path / "atlas.duckdb"
+    ensure_index(repo, db).close()
+    readers = 6
+    opened = threading.Barrier(readers, timeout=20)
+    answered = threading.Barrier(readers, timeout=20)
+    outcomes: list = [None] * readers
+
+    def request(slot):
+        try:
+            opened.wait()  # toutes ouvrent leur lecture en même temps
+            connection = ensure_index(repo, db)
+            try:
+                rows = catalog(connection)
+                answered.wait()  # aucune ne ferme avant que toutes aient répondu
+                store.matrix(connection)
+                outcomes[slot] = len(rows)
+            finally:
+                connection.close()
+        except BaseException as error:  # noqa: BLE001 - remonté par l'assertion
+            outcomes[slot] = error
+
+    threads = [threading.Thread(target=request, args=(slot,)) for slot in range(readers)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert all(isinstance(outcome, int) for outcome in outcomes), outcomes
+
+
+def test_a_reader_never_creates_the_results_schema(repo, tmp_path):
+    from skifer_atlas.compare import store
+
+    db = tmp_path / "atlas.duckdb"
+    first = ensure_index(repo, db)
+    second = ensure_index(repo, db)
+    try:
+        assert store.latest(first) == [] and store.latest(second) == []
+        assert store.matrix(first) and store.matrix(second)
+        assert first.execute("SELECT 1 FROM information_schema.schemata "
+                             "WHERE schema_name = 'results'").fetchone() is None
+    finally:
+        first.close()
+        second.close()
+    # La première écriture crée le schéma, et les lectures suivantes le voient.
+    store.create(db, None, "revenu-net", 1, {}, 1.0)
+    reader = ensure_index(repo, db)
+    try:
+        assert store.latest(reader) == []
+        assert reader.execute("SELECT count(*) FROM results.comparisons").fetchone() == (1,)
+    finally:
+        reader.close()
 
 
 def test_summary_during_comparison_schema_initialization(repo, tmp_path):

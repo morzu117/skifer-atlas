@@ -95,9 +95,25 @@ def connect(db: Path) -> duckdb.DuckDBPyConnection:
 
 def ensure_schema(connection: duckdb.DuckDBPyConnection) -> None:
     """Crée le schéma `results` s'il manque. Toujours sous le verrou : deux créations
-    simultanées donnent « Catalog write-write conflict »."""
+    simultanées donnent « Catalog write-write conflict ».
+
+    À n'appeler que sur une connexion neuve (`connect`), en validation automatique : le
+    verrou ne protège que l'exécution de la requête, pas la transaction qui la contient.
+    Une création faite dans une transaction restée ouverte (une lecture de l'index, qui
+    ne se termine qu'à la fermeture de sa connexion) reste invisible et en attente, et
+    toute autre création du même schéma entre en conflit avec elle (suivi #140)."""
     with _lock:
         connection.execute(DDL)
+
+
+def _stored(connection: duckdb.DuckDBPyConnection, *tables: str) -> bool:
+    """Vrai si ces tables de `results` existent, vues par la transaction de `connection`.
+    Le stockage les crée d'un coup à la première écriture, mais une autre connexion peut
+    être en train de le faire : le schéma peut déjà exister sans toutes les tables."""
+    [found] = connection.execute(
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'results' "
+        f"AND table_name IN ({', '.join('?' for _ in tables)})", list(tables)).fetchone()
+    return found == len(tables)
 
 
 def _records(cursor: duckdb.DuckDBPyConnection) -> list[dict]:
@@ -261,15 +277,17 @@ LATEST = """
 
 
 def latest(connection: duckdb.DuckDBPyConnection) -> list[dict]:
-    """Dernier résultat par KPI × déclinaison. `connection` est celle de l'index."""
-    ensure_schema(connection)
+    """Dernier résultat par KPI × déclinaison. `connection` est celle de l'index : une
+    lecture, qui ne crée jamais le schéma (voir `ensure_schema`). Tant qu'aucune
+    comparaison n'a été écrite, il n'y a aucun résultat."""
+    if not _stored(connection, "comparisons", "summaries"):
+        return []
     return _records(connection.execute(LATEST + " ORDER BY kpi_id, entity"))
 
 
 def matrix(connection: duckdb.DuckDBPyConnection, domain: str | None = None) -> list[dict]:
     """Synthèse 10.5 : une ligne par KPI de l'index (filtré par domaine), et la dernière
     comparaison de chacune de ses déclinaisons à sa version courante."""
-    ensure_schema(connection)
     condition, parameters = ("AND d.domain = ?", [domain]) if domain else ("", [])
     kpis = _records(connection.execute(f"""
         SELECT d.id AS kpi_id, d.label, d.domain, d.version

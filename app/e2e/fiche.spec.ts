@@ -70,13 +70,14 @@ test("[S-0012-03] versions : diff de v3 à v4, classé et coloré (critère 3)",
   const items = page.locator(".diff-item");
   await expect(items).toHaveCount(3);
   await expect(items.nth(0)).toContainText("n04");
-  await expect(items.nth(0)).toContainText("À examiner");
-  await expect(items.nth(0)).toHaveCSS("border-left-color", "rgb(175, 90, 27)");
-  for (const index of [1, 2]) {
+  // Changer la colonne d'entrée d'un nœud temporel est critique, pas « À examiner » : les
+  // périodes obtenues peuvent changer (PR #126, plan 0003 : colonne ajoutée aux champs critiques).
+  for (const index of [0, 1, 2]) {
     await expect(items.nth(index)).toContainText("Divergence critique");
     await expect(items.nth(index)).toHaveCSS("border-left-color", "rgb(177, 59, 59)"); // --atlas-bad
   }
-  await expect(page.getByText("3 écarts : 2 critiques, 1 à surveiller, 0 sans effet.")).toBeVisible();
+  await expect(items.nth(0)).toContainText("date_facture → date_comptable");
+  await expect(page.getByText("3 écarts : 3 critiques, 0 à surveiller, 0 sans effet.")).toBeVisible();
 
   const after = "Graphe de la version 4";
   await expect(card(page, "n06", after)).toContainText("ajouté");
