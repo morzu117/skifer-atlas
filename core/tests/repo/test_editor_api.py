@@ -9,13 +9,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from workspace_helpers import EXAMPLE, atlas_env
 
 from skifer_atlas.api.app import create_app
 from skifer_atlas.model.io import read_yaml
 from skifer_atlas.paths import workspace_dir
-from skifer_atlas.workspaces import get_workspace, update_workspace
+from skifer_atlas.workspaces import get_workspace, repo_dir, update_workspace
 
 __all__ = ["atlas_env"]  # fixture importée
 
@@ -149,6 +150,61 @@ def test_new_document_and_existing_id(client):
     again = client.post(f"{EDITOR}/documents", json={**body, "id": "revenu-net-2"})
     assert again.status_code == 409
     assert opened(client, "revenu-net-2")["document"]["label"] == "Revenu net"
+
+
+@pytest.mark.parametrize("mode", ["override", "from_scratch"])
+def test_new_variant_starts_a_local_draft_for_the_current_canonical(client, mode):
+    repo = repo_dir("groupe-nordis")
+    meta = yaml.safe_load((repo / "atlas.yaml").read_text(encoding="utf-8"))
+    meta["entities"].append("nordis-it")
+    (repo / "atlas.yaml").write_text(yaml.safe_dump(meta), encoding="utf-8")
+    body = {"kpi_id": "revenu-net", "entity": "nordis-it", "mode": mode,
+            "owner": "anna.k", "justification": "Définition locale italienne."}
+    created = client.post(f"{EDITOR}/variants", json=body)
+    assert created.status_code == 201, created.text
+    info = created.json()
+    assert (info["id"], info["mode"], info["base_version"]) == (
+        "revenu-net--nordis-it", mode, None)
+    document = info["document"]
+    assert document["variant_of"] == {"id": "revenu-net", "version": 4}
+    assert document["data_product"] == {"id": "revenu-net--nordis-it", "version": 1,
+                                        "owner": "anna.k"}
+    assert info["canonical"]["data_product"]["version"] == 4
+    assert info["draft"]["document"] == document
+    assert not check(client, document)["submittable"]
+    if mode == "override":
+        assert document["overrides"] == []
+        replaced = copy.deepcopy(node(info["canonical"], "n02"))
+        replaced["condition"] = "statut:in:validée,expédiée"
+        document["overrides"].append({"node": "n02", "justification": "Expédiées comprises.",
+                                      "replace": replaced})
+    else:
+        assert document["graph"] == {"nodes": []}
+        assert "commande" in document["concepts"]
+        document["graph"] = copy.deepcopy(info["canonical"]["graph"])
+    checked = check(client, document)
+    assert checked["submittable"], checked["issues"]
+    proposal = client.post("/api/workspaces/groupe-nordis/proposals", json={
+        "document_yaml": checked["yaml"], "justification": "Déclinaison locale.",
+        "base_version": None,
+    })
+    assert proposal.status_code == 201, proposal.text
+    assert proposal.json()["document_id"] == "revenu-net--nordis-it"
+    duplicate = client.post(f"{EDITOR}/variants", json=body)
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["code"] == "draft_exists"
+
+
+def test_new_variant_rejects_unknown_entity_and_existing_variant(client):
+    body = {"kpi_id": "revenu-net", "entity": "inconnue", "mode": "override",
+            "owner": "anna.k", "justification": "Local"}
+    unknown = client.post(f"{EDITOR}/variants", json=body)
+    assert unknown.status_code == 422
+    assert unknown.json()["detail"]["code"] == "invalid_entity"
+    existing = client.post(f"{EDITOR}/variants", json={**body, "entity": "nordis-fr"})
+    assert existing.status_code == 409
+    invalid = client.post(f"{EDITOR}/variants", json={**body, "entity": "../secret"})
+    assert invalid.status_code == 422
 
 
 def test_document_id_with_trailing_newline_is_invalid(client):

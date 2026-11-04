@@ -56,6 +56,14 @@ class NewRequest(BaseModel):
     owner: str = Field(min_length=1)
 
 
+class NewVariantRequest(BaseModel):
+    kpi_id: str
+    entity: str
+    mode: Literal["override", "from_scratch"]
+    owner: str = Field(min_length=1)
+    justification: str = Field(min_length=1)
+
+
 class DraftRequest(BaseModel):
     document: Any
     positions: dict[str, Any] = Field(default_factory=dict)
@@ -88,6 +96,17 @@ def post_document(ws: str, body: NewRequest) -> dict:
     return editor.new_document(repo, analysis, workspace_dir(workspace.id), body.kind,
                                body.id, body.label.strip(), body.domain.strip(),
                                body.owner.strip())
+
+
+@router.post("/variants", status_code=201)
+def post_variant(ws: str, body: NewVariantRequest) -> dict:
+    workspace = workspace_or_404(ws)
+    if workspace.role == "lecteur":
+        raise RepoError("forbidden", "Un lecteur ne crée pas de déclinaison.")
+    repo, analysis, _ = _context(ws)
+    return editor.new_variant(repo, analysis, workspace_dir(workspace.id), body.kpi_id,
+                              body.entity, body.mode, body.owner.strip(),
+                              body.justification.strip())
 
 
 @router.get("/documents/{document_id}")

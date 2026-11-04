@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, type Page } from "@playwright/test";
 import { API, seriousViolations } from "./demo";
-import { isolatedDemo, test } from "./isolation";
+import { git, isolatedDemo, python, test } from "./isolation";
 import { longKpi, type Raw } from "./graphe";
 import type { APIRequestContext } from "@playwright/test";
 
@@ -44,6 +44,44 @@ const COLUMNS: [string, string, string?, string?][] = [
   ["montant_taxes", "decimal"],
   ["avoirs", "decimal"],
 ];
+
+test("[S-0032-01] [S-0032-02] créer une déclinaison depuis la fiche, en surcharge ou avec un graphe indépendant", async ({ page, request }) => {
+  python("import sys,yaml; from pathlib import Path; p=Path(sys.argv[1])/'atlas.yaml'; d=yaml.safe_load(p.read_text()); d['entities'] += ['nordis-it','nordis-pt']; p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))", ws.work);
+  git(ws.work, "add", "atlas.yaml");
+  git(ws.work, "commit", "-qm", "Deux entités pour créer des déclinaisons");
+  git(ws.work, "push", "origin", "main");
+  const synced = await request.post(`${ws.api}/sync`, { data: {} });
+  expect(synced.ok(), await synced.text()).toBe(true);
+
+  await page.goto(`${ws.root}/fiche/revenu-net?tab=declinaisons`);
+  await page.getByRole("link", { name: "Créer une déclinaison" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Nouvelle déclinaison de revenu-net" })).toBeVisible();
+  await page.getByLabel(/^Entité/).selectOption("nordis-it");
+  await page.getByLabel(/^Justification/).fill("Règle italienne différente.");
+  await page.getByRole("button", { name: "Créer et ouvrir l'éditeur" }).click();
+  await expect(page).toHaveURL(/editeur\?from=revenu-net--nordis-it$/);
+  await expect(page.getByRole("heading", { level: 1, name: /revenu-net · nordis-it : v1 · brouillon/ })).toBeVisible();
+  const override = await (await request.get(`${ws.api}/editor/documents/revenu-net--nordis-it`)).json();
+  expect(override.document).toMatchObject({ mode: "override", variant_of: { id: "revenu-net", version: 4 }, overrides: [] });
+
+  await page.goto(`${ws.root}/fiche/revenu-net?tab=declinaisons`);
+  await page.getByRole("link", { name: "Créer une déclinaison" }).click();
+  await page.getByLabel(/^Entité/).selectOption("nordis-pt");
+  await page.getByRole("radio", { name: "Graphe indépendant" }).check();
+  await page.getByLabel(/^Justification/).fill("Système local différent.");
+  await page.getByRole("button", { name: "Créer et ouvrir l'éditeur" }).click();
+  await expect(page).toHaveURL(/editeur\?from=revenu-net--nordis-pt$/);
+  await expect(page.getByRole("heading", { level: 1, name: /revenu-net · nordis-pt : v1 · brouillon/ })).toBeVisible();
+  await palette(page).getByRole("button", { name: "Source", exact: true }).click();
+  await expect(props(page).getByText("n01", { exact: true })).toBeVisible();
+  await expect.poll(async () => {
+    const state = await (await request.get(`${ws.api}/editor/documents/revenu-net--nordis-pt`)).json();
+    return state.draft.document.graph.nodes.length;
+  }).toBe(1);
+  const independent = await (await request.get(`${ws.api}/editor/documents/revenu-net--nordis-pt`)).json();
+  expect(independent.draft.document).toMatchObject({ mode: "from_scratch", graph: { nodes: [{ id: "n01", type: "source" }], output: "n01" } });
+  expect(await seriousViolations(page)).toEqual([]);
+});
 
 test("[S-0013-01] [S-0013-04] [S-0013-09] [S-0013-10] Revenu net reconstruit à la souris : YAML identique, soumission (critères 1, 4, 9, 10)", async ({ page, request }) => {
   test.setTimeout(120_000);

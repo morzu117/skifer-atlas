@@ -68,11 +68,120 @@ function placed(nodes: ReturnType<typeof viewNodes>, positions: Positions | null
 
 export function Editor({ ws, params, heading }: { ws: Workspace; params: Params; heading: RefObject<HTMLHeadingElement> }) {
   const from = params.from ?? "";
+  if (!from && params.variant_of) return <NewVariant key={params.variant_of} ws={ws} kpiId={params.variant_of} heading={heading} />;
   if (!from) return <NewDocument ws={ws} heading={heading} />;
   return (
     <ReactFlowProvider>
       <Session key={from} ws={ws} id={from} heading={heading} />
     </ReactFlowProvider>
+  );
+}
+
+function NewVariant({ ws, kpiId, heading }: { ws: Workspace; kpiId: string; heading: RefObject<HTMLHeadingElement> }) {
+  const [existing, setExisting] = useState<string[] | null>(null);
+  const [entity, setEntity] = useState("");
+  const [mode, setMode] = useState<"override" | "from_scratch">("override");
+  const [owner, setOwner] = useState(ws.account);
+  const [justification, setJustification] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<Explained | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [resume, setResume] = useState<string | null>(null);
+  const ids = { entity: useId(), owner: useId(), justification: useId() };
+
+  useEffect(() => {
+    let alive = true;
+    api.sheet(ws.id, kpiId)
+      .then((sheet) => {
+        if (!alive) return;
+        const taken = sheet.variants.map((variant) => variant.entity);
+        setExisting(taken);
+        setEntity((current) => current && ws.entities.includes(current) && !taken.includes(current)
+          ? current
+          : ws.entities.find((candidate) => !taken.includes(candidate)) ?? "");
+      })
+      .catch((reason) => {
+        if (alive && !(reason instanceof UnreachableError)) setFailure(explain(reason));
+      });
+    return () => { alive = false; };
+  }, [ws.id, ws.entities, kpiId]);
+
+  const available = ws.entities.filter((candidate) => !existing?.includes(candidate));
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const found: Record<string, string> = {};
+    if (!entity || !available.includes(entity)) found.entity = "Choisir une entité sans déclinaison.";
+    if (!owner.trim()) found.owner = "Indiquer le propriétaire.";
+    if (!justification.trim()) found.justification = "Expliquer pourquoi cette déclinaison est nécessaire.";
+    setErrors(found);
+    setFailure(null);
+    setResume(null);
+    if (Object.keys(found).length > 0) return;
+    setBusy(true);
+    try {
+      await api.editorNewVariant(ws.id, { kpi_id: kpiId, entity, mode, owner: owner.trim(), justification: justification.trim() });
+      replace(href.editor(ws.id, { from: `${kpiId}--${entity}` }));
+    } catch (reason) {
+      setBusy(false);
+      if (reason instanceof ApiError && ["document_exists", "invalid_entity", "draft_exists"].includes(reason.code)) {
+        setErrors({ entity: reason.message });
+        if (reason.code === "draft_exists") setResume(`${kpiId}--${entity}`);
+      } else setFailure(explain(reason));
+    }
+  }
+
+  return (
+    <div className="editor-page">
+      <header className="editor-head">
+        <div className="editor-head-start">
+          <a className="editor-back" href={href.document(ws.id, kpiId, { tab: "declinaisons" })}>
+            <Icon name="back" className="icon-sm" />
+            {kpiId}
+          </a>
+        </div>
+      </header>
+      <main className="editor-new">
+        <form className="card form editor-new-card" onSubmit={submit} noValidate>
+          <h1 ref={heading} tabIndex={-1}>Nouvelle déclinaison de {kpiId}</h1>
+          <p className="muted">Le brouillon reste sur ce poste jusqu'à la soumission d'une proposition.</p>
+          {existing === null && !failure ? <p role="status">Chargement des entités…</p> : null}
+          {existing !== null && available.length === 0 ? <p>Aucune entité de cet espace n'est disponible pour une nouvelle déclinaison.</p> : null}
+          <div className="field">
+            <label htmlFor={ids.entity}>Entité<span className="required"> requise</span></label>
+            <Select id={ids.entity} value={entity} aria-invalid={errors.entity ? true : undefined} aria-describedby={errors.entity ? `${ids.entity}-error` : undefined} onChange={(event) => { setEntity(event.target.value); setResume(null); }}>
+              <option value="">Choisir…</option>
+              {available.map((value) => <option key={value} value={value}>{value}</option>)}
+            </Select>
+            {errors.entity && <span id={`${ids.entity}-error`} className="field-error">{errors.entity}</span>}
+            {resume && <a href={href.editor(ws.id, { from: resume })}>Reprendre le brouillon</a>}
+          </div>
+          <fieldset className="prop">
+            <legend className="prop-label">Mode</legend>
+            <span className="radios">
+              <label className="radio"><input type="radio" name="mode" value="override" checked={mode === "override"} onChange={() => setMode("override")} /> Surcharge du canonique</label>
+              <label className="radio"><input type="radio" name="mode" value="from_scratch" checked={mode === "from_scratch"} onChange={() => setMode("from_scratch")} /> Graphe indépendant</label>
+            </span>
+          </fieldset>
+          <p className="muted">{mode === "override" ? "Vous remplacerez les nœuds nécessaires du canonique." : "Vous construirez un graphe à partir d'un canevas vide."}</p>
+          <div className="field">
+            <label htmlFor={ids.owner}>Propriétaire<span className="required"> requis</span></label>
+            <input id={ids.owner} value={owner} aria-invalid={errors.owner ? true : undefined} aria-describedby={errors.owner ? `${ids.owner}-error` : undefined} onChange={(event) => setOwner(event.target.value)} />
+            {errors.owner && <span id={`${ids.owner}-error`} className="field-error">{errors.owner}</span>}
+          </div>
+          <div className="field">
+            <label htmlFor={ids.justification}>Justification<span className="required"> requise</span></label>
+            <textarea id={ids.justification} value={justification} aria-invalid={errors.justification ? true : undefined} aria-describedby={errors.justification ? `${ids.justification}-error` : undefined} onChange={(event) => setJustification(event.target.value)} />
+            {errors.justification && <span id={`${ids.justification}-error`} className="field-error">{errors.justification}</span>}
+          </div>
+          {failure && <Banner tone="bad" title={failure.title}>{failure.text}</Banner>}
+          <div className="actions">
+            <button type="submit" className="btn btn-primary" disabled={busy || existing === null || available.length === 0}>{busy ? "Création…" : "Créer et ouvrir l'éditeur"}</button>
+            <a className="btn btn-neutral" href={href.document(ws.id, kpiId, { tab: "declinaisons" })}>Annuler</a>
+          </div>
+        </form>
+      </main>
+    </div>
   );
 }
 

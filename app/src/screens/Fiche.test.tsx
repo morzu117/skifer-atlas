@@ -154,6 +154,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("fiche", () => {
+  it("propose de créer une déclinaison depuis le KPI aux contributeurs", async () => {
+    sheetServer();
+    fiche(workspace({ role: "contributeur" }));
+    await userEvent.click(await screen.findByRole("link", { name: /Déclinaisons/ }));
+    expect(screen.getByRole("link", { name: "Créer une déclinaison" })).toHaveAttribute(
+      "href", "#/w/groupe-nordis/editeur?variant_of=revenu-net",
+    );
+  });
+
+  it("ne propose pas la création d'une déclinaison aux lecteurs", async () => {
+    sheetServer();
+    fiche(workspace({ role: "lecteur" }));
+    await userEvent.click(await screen.findByRole("link", { name: /Déclinaisons/ }));
+    expect(screen.queryByRole("link", { name: "Créer une déclinaison" })).toBeNull();
+  });
+
   it("en-tête : badges, date de validation, propriétaire, validateurs, synonymes", async () => {
     sheetServer();
     fiche();

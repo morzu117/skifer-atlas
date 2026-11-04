@@ -47,7 +47,7 @@ from .model.resolve import ResolvedGraph, resolve
 from .model.variants import FromScratchVariant, OverrideVariant
 from .repo import versions as repo_versions
 from .repo.git import RepoError
-from .repo.layout import SLUG, document_path, read_governance
+from .repo.layout import SLUG, document_path, read_governance, read_meta, variant_path
 
 # Dialectes de l'état permanent (guide 10.3) : « Compilable Databricks, Snowflake ».
 DIALECTS = ("databricks", "snowflake")
@@ -514,6 +514,48 @@ def new_document(repo: Path, analysis: Analysis, folder: Path, kind: str, docume
         raw["semantics"] = {"calendar": "TODO", "timezone": "TODO"}
     else:
         raw["entity"] = "TODO"
+    save_draft(folder, document_id, {"document": raw, "positions": {}, "highest": 0,
+                                     "base_version": None})
+    return open_document(repo, analysis, folder, document_id)
+
+
+def new_variant(repo: Path, analysis: Analysis, folder: Path, kpi_id: str, entity: str,
+                mode: str, owner: str, justification: str) -> dict:
+    """Une déclinaison v1 liée au canonique courant, en brouillon local."""
+    if not re.fullmatch(SLUG, kpi_id) or not re.fullmatch(SLUG, entity):
+        raise RepoError("invalid_document", "Identifiant de KPI ou d'entité invalide.")
+    if not owner or not justification:
+        raise RepoError("invalid_document", "Propriétaire et justification sont requis.")
+    if mode not in ("override", "from_scratch"):
+        raise RepoError("invalid_document", "Mode de déclinaison inconnu.")
+    entry = analysis.entry(kpi_id)
+    if entry is None or not isinstance(entry.document, KpiDocument):
+        raise RepoError("not_found", f"KPI « {kpi_id} » introuvable.")
+    if entity not in read_meta(repo).entities:
+        raise RepoError("invalid_entity", f"L'entité « {entity} » n'appartient pas à l'espace.")
+    document_id = f"{kpi_id}--{entity}"
+    if (analysis.entry(document_id) is not None
+            or (repo / variant_path(kpi_id, entity)).exists()):
+        raise RepoError("document_exists", f"Une déclinaison de « {kpi_id} » pour « {entity} » "
+                        "existe déjà dans le dépôt.")
+    if _folder(folder, "drafts", document_id).exists():
+        raise RepoError("draft_exists", f"Un brouillon local de « {kpi_id} » pour « {entity} » "
+                        "existe déjà : le reprendre dans l'éditeur.")
+    canonical = entry.document
+    raw: dict = {
+        "schema_version": 1, "kind": "variant",
+        "data_product": {"id": document_id, "version": 1, "owner": owner},
+        "variant_of": {"id": kpi_id, "version": canonical.data_product.version},
+        "entity": entity, "mode": mode, "justification": justification,
+    }
+    if mode == "override":
+        raw["overrides"] = []
+    else:
+        raw["graph"] = {"nodes": []}
+        raw["concepts"] = list(dict.fromkeys(
+            node.concept for node in canonical.graph.nodes
+            if node.type == "source" and node.concept
+        ))
     save_draft(folder, document_id, {"document": raw, "positions": {}, "highest": 0,
                                      "base_version": None})
     return open_document(repo, analysis, folder, document_id)

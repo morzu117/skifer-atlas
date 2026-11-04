@@ -98,6 +98,41 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("éditeur", () => {
+  it.each([
+    ["Surcharge du canonique", "override"],
+    ["Graphe indépendant", "from_scratch"],
+  ] as const)("crée une déclinaison en mode %s puis ouvre son brouillon", async (label, mode) => {
+    window.location.hash = "#/w/groupe-nordis/editeur?variant_of=revenu-net";
+    const { calls } = fakeServer(({ path, method, body }) => {
+      if (path === "/api/workspaces/groupe-nordis/documents/revenu-net/sheet") {
+        return { json: { kind: "kpi", variants: [{ entity: "nordis-fr" }, { entity: "nordis-de" }, { entity: "nordis-es" }] } };
+      }
+      if (path === `${EDITOR}/variants` && method === "POST") {
+        return { status: 201, json: { id: `revenu-net--${(body as { entity: string }).entity}` } };
+      }
+      if (path === `${EDITOR}/documents/revenu-net--nordis-it`) {
+        return { json: opened({ id: "revenu-net--nordis-it", kind: "variant", mode, base_version: null,
+          document: { schema_version: 1, kind: "variant", data_product: { id: "revenu-net--nordis-it", version: 1, owner: "anna.k" },
+            variant_of: { id: "revenu-net", version: 4 }, entity: "nordis-it", mode, justification: "Règle locale." },
+          canonical: structuredClone(DOCUMENT), draft: null }) };
+      }
+      if (path.startsWith("/api/workspaces/groupe-nordis/catalog")) return { json: [] };
+      if (path === `${EDITOR}/check`) return { json: checked((body as { document: { graph?: { nodes: Nodes } } }).document) };
+      return undefined;
+    });
+    render(<Harness ws={workspace({ account: "anna.k", role: "contributeur", entities: ["nordis-fr", "nordis-de", "nordis-es", "nordis-it"] })} />);
+    expect(await screen.findByRole("heading", { level: 1, name: "Nouvelle déclinaison de revenu-net" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Entité/)).toHaveValue("nordis-it");
+    expect(screen.queryByRole("option", { name: "nordis-fr" })).toBeNull();
+    await userEvent.click(screen.getByRole("radio", { name: label }));
+    await userEvent.type(screen.getByLabelText(/^Justification/), "Règle locale.");
+    await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/w/groupe-nordis/editeur?from=revenu-net--nordis-it"));
+    expect(calls.find((call) => call.path === `${EDITOR}/variants` && call.method === "POST")?.body).toEqual({
+      kpi_id: "revenu-net", entity: "nordis-it", mode, owner: "anna.k", justification: "Règle locale.",
+    });
+  });
+
   it("ouvre la copie en v5 ; un filtre sans nulls bloque la soumission et « Aller au nœud » le sélectionne (critère 4)", async () => {
     server();
     editor();
