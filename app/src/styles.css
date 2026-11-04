@@ -327,6 +327,7 @@ h3 { margin: 0; font-size: var(--atlas-text-base); font-weight: 600; }
 /* Onglets (guide 3.8) */
 .tabs { display: flex; gap: var(--atlas-space-1); flex-wrap: wrap; border-bottom: var(--atlas-border) solid var(--atlas-line); }
 .tab {
+  background: none; border: 0; font-family: inherit; cursor: pointer;
   display: inline-flex; align-items: center; gap: var(--atlas-space-2); min-height: var(--atlas-control-h);
   padding: 0 var(--atlas-space-3); margin-bottom: calc(-1 * var(--atlas-border)); font-size: var(--atlas-text-base);
   color: var(--atlas-muted); text-decoration: none; border-bottom: var(--atlas-border-accent) solid transparent;

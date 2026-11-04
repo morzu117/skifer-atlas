@@ -78,7 +78,6 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 
 **Développement** :
 - Route de révision d'une proposition, si l'écran en a besoin (0006).
-- Onglets de la fiche au clavier sous WebKit macOS : Tab seul ne passe pas par les liens (⌥Tab, ou réglage macOS). Deux pistes : des boutons à la place des liens, ou l'option WKWebView qui fait passer Tab par les liens (0026, ADR 0030).
 
 **Hors périmètre, à décider** :
 - Linux : binaire, Secret Service, installateur (0008, 0018, 0019).
@@ -89,6 +88,7 @@ Mise à jour le 31 octobre 2026, après les plans 0019 à 0026. Cette liste regr
 - Rafraîchissement des jetons GitHub à durée limitée (0025).
 
 **Réglé** depuis la mise à jour précédente :
+- Onglets de la fiche sous WebKit macOS : boutons avec tabulation explicite, accessibles avec Tab seul (ADR 0030, complément du 4 novembre 2026).
 - Colonnes `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` d'une source Snowflake : plan 0031, ADR 0036.
 - Test de fumée de l'app trop juste sur le runner macOS Intel de la CI (6 à 15 s pour 10 s) : limite de 20 s sur ce runner seulement, ADR 0023 (#72).
 - Deux `git fetch` concurrents sur un même clone (synchronisation pendant le chargement de l'écran Propositions), vus dans l'e2e S-0006-12 : ADR 0035.
