@@ -14,7 +14,7 @@ Date : 2026-10-30 · Statut : **acceptée** (mise en œuvre du plan 0004)
 
 - **Un brouillon est un document Atlas ordinaire** (concept ou KPI), avec deux champs facultatifs de plus :
   - `status: draft | needs_curation` ;
-  - `extraction: {source_file, line, dialect, sql_sha256, residues}`, la trace de l'origine. Elle n'est admise qu'avec un `status`.
+  - `extraction: {source_file, line, dialect, sql_sha256, residues}`, la trace de l'origine. Elle est obligatoire avec `status: draft` et refusée sans statut.
   
   Un document curé n'a ni l'un ni l'autre.
 - **`TODO` est un littéral réservé.** Il n'est accepté que là où l'extraction ne peut pas savoir :
@@ -40,6 +40,7 @@ Date : 2026-10-30 · Statut : **acceptée** (mise en œuvre du plan 0004)
 
 ## Conséquences
 
-- Un brouillon se charge, se contrôle et se compare (`atlas diff`) avant toute curation. C'est ce qui permet de confronter deux implémentations d'un même KPI dès l'extraction.
+- Un brouillon se charge, se contrôle et se compare (`atlas diff`) avant toute curation. Sa normalisation et son empreinte gardent les `TODO` comme valeurs littérales : elles servent à comparer des extractions, pas à attester qu'un document est curé. C'est ce qui permet de confronter deux implémentations d'un même KPI dès l'extraction.
+- Si plusieurs fichiers donnent le même identifiant de brouillon, `atlas extract` s'arrête avant d'écrire dans `--out` ; il faut renommer l'un des fichiers.
 - La liste des champs qui admettent `TODO` fait partie du schéma (`core/schemas/atlas-document.v1.schema.json`). L'étendre passe par une modification du plan 0001.
 - Une colonne de type `TODO` est de type inconnu pour les contrôles de colonnes. Elle ne déclenche pas `implicit_timezone_conversion` : ce contrôle ne s'applique qu'à une colonne dont on sait qu'elle n'a pas de fuseau.

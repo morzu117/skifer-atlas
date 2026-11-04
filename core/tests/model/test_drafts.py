@@ -1,11 +1,14 @@
 """Brouillons d'extraction (ADR 0006) : statut, littéral TODO, bloc extraction."""
 
 import copy
+import json
 
 import pytest
 from conftest import MINIMAL_NODES, kpi_with
 
 from skifer_atlas.model import validate_data
+from skifer_atlas.model.fingerprint import fingerprint
+from skifer_atlas.model.normalize import normalized_form
 
 EXTRACTION = {
     "source_file": "revenu.sql", "line": 3, "dialect": "databricks",
@@ -70,6 +73,19 @@ def test_extraction_needs_a_status():
     raw = draft()
     del raw["status"]
     assert ("/extraction", "invalid_value", "error") in found(validate_data(raw))
+
+
+def test_draft_needs_an_extraction_block():
+    raw = draft()
+    del raw["extraction"]
+    assert ("/extraction", "invalid_value", "error") in found(validate_data(raw))
+
+
+def test_draft_fingerprint_keeps_todo_as_literal():
+    document = validate_data(draft()).document
+    normalized = normalized_form(document)
+    assert "TODO" in json.dumps(normalized)
+    assert fingerprint(document).startswith("sha256:atlas1:")
 
 
 @pytest.mark.parametrize(("path", "value"), [
