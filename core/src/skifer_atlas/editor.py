@@ -52,6 +52,7 @@ from .repo.layout import SLUG, document_path, read_governance
 # Dialectes de l'état permanent (guide 10.3) : « Compilable Databricks, Snowflake ».
 DIALECTS = ("databricks", "snowflake")
 SEVERITIES = {"error": 0, "warning": 1, "info": 2}
+MAX_DRAFT_BYTES = 2 * 1024 * 1024
 NODE_ADAPTER: TypeAdapter[Any] = TypeAdapter(Node)
 
 
@@ -382,7 +383,7 @@ def parse(text: str) -> dict:
 # --- ouverture -----------------------------------------------------------------------------
 
 def _folder(workspace_folder: Path, kind: str, document_id: str) -> Path:
-    if not all(re.match(SLUG, part) for part in document_id.split("--", 1)):
+    if not all(re.fullmatch(SLUG, part) for part in document_id.split("--", 1)):
         raise RepoError("not_found", f"Document « {document_id} » introuvable.")
     return workspace_folder / ".atlas" / kind / f"{document_id}.json"
 
@@ -465,6 +466,9 @@ def open_document(repo: Path, analysis: Analysis, folder: Path, document_id: str
             raw["data_product"]["version"] = base + 1
         highest = highest_node(repo, document_id, entry.raw, entry.file.path)
     else:
+        if not isinstance(draft, dict) or not isinstance(draft.get("document"), dict):
+            raise RepoError("invalid_document", f"Le brouillon de « {document_id} » est "
+                            "abîmé : supprimer le brouillon et réessayer.")
         raw, base, highest = draft["document"], None, int(draft.get("highest") or 0)
     canonical = None
     if raw.get("kind") == "variant":
@@ -493,7 +497,7 @@ def open_document(repo: Path, analysis: Analysis, folder: Path, document_id: str
 def new_document(repo: Path, analysis: Analysis, folder: Path, kind: str, document_id: str,
                  label: str, domain: str, owner: str) -> dict:
     """Un concept ou un KPI vierge, enregistré aussitôt en brouillon local."""
-    if not re.match(SLUG, document_id):
+    if not re.fullmatch(SLUG, document_id):
         raise RepoError("invalid_document", "Identifiant attendu : minuscules, chiffres et "
                         "tirets (ex. revenu-net).")
     if analysis.entry(document_id) is not None or (repo / document_path(kind, document_id)).exists():
@@ -517,6 +521,8 @@ def new_document(repo: Path, analysis: Analysis, folder: Path, kind: str, docume
 
 def save_draft(folder: Path, document_id: str, draft: dict) -> dict:
     saved = {**draft, "saved_at": datetime.now(UTC).isoformat(timespec="seconds")}
+    if len(json.dumps(saved, ensure_ascii=False).encode("utf-8")) > MAX_DRAFT_BYTES:
+        raise RepoError("invalid_document", "Brouillon trop volumineux (limite : 2 Mio).")
     _write_json(_folder(folder, "drafts", document_id), saved)
     if isinstance(draft.get("positions"), dict):
         _write_json(_folder(folder, "layout", document_id), draft["positions"])

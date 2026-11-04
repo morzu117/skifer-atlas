@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/workspaces/{ws}/editor")
 # ses calendriers ne se relisent que quand le commit courant change.
 _cache: dict[Path, tuple[str, Analysis, dict]] = {}
 _guard = threading.Lock()
+MAX_CACHED_WORKSPACES = 8
 
 
 def _context(ws: str) -> tuple[Path, Analysis, dict]:
@@ -32,6 +33,8 @@ def _context(ws: str) -> tuple[Path, Analysis, dict]:
         cached = _cache.get(repo)
         if cached is None or cached[0] != commit:
             cached = (commit, analyze(repo), editor.calendars_of(repo))
+            if repo not in _cache and len(_cache) >= MAX_CACHED_WORKSPACES:
+                _cache.pop(next(iter(_cache)))
             _cache[repo] = cached
     return repo, cached[1], cached[2]
 
@@ -98,6 +101,8 @@ def get_document(ws: str, document_id: str) -> dict:
 @router.put("/documents/{document_id}/draft")
 def put_draft(ws: str, document_id: str, body: DraftRequest) -> dict:
     workspace = workspace_or_404(ws)
+    if workspace.role == "lecteur":
+        raise RepoError("forbidden", "Un lecteur ne modifie pas de brouillon.")
     return editor.save_draft(workspace_dir(workspace.id), document_id_or_404(document_id),
                              body.model_dump())
 
@@ -105,6 +110,8 @@ def put_draft(ws: str, document_id: str, body: DraftRequest) -> dict:
 @router.delete("/documents/{document_id}/draft", status_code=204)
 def delete_draft(ws: str, document_id: str) -> None:
     workspace = workspace_or_404(ws)
+    if workspace.role == "lecteur":
+        raise RepoError("forbidden", "Un lecteur ne supprime pas de brouillon.")
     editor.delete_draft(workspace_dir(workspace.id), document_id_or_404(document_id))
 
 
