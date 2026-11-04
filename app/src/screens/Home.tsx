@@ -136,13 +136,22 @@ export function Home({ notice, onDismissNotice }: { notice: string | null; onDis
 }
 
 function WorkspaceCard({ ws }: { ws: Workspace }) {
+  const [remoteWaiting, setRemoteWaiting] = useState<number | null>(null);
+  useEffect(() => {
+    if (!ws.git_remote) return;
+    let alive = true;
+    api.proposalsForMe(ws.id)
+      .then((items) => alive && setRemoteWaiting(items.length))
+      .catch(() => alive && setRemoteWaiting(null));
+    return () => { alive = false; };
+  }, [ws.id, ws.git_remote]);
   const meta = [
     ws.sector,
     plural(ws.entities.length, "entité"),
     plural(ws.domains.length, "domaine"),
   ].filter(Boolean);
   const counts = ws.counts;
-  const waiting = counts?.open_proposals;
+  const waiting = ws.git_remote ? remoteWaiting : counts?.open_proposals;
   return (
     <a className="ws-card" href={href.view(ws.id)}>
       <div className="ws-card-top">

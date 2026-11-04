@@ -10,10 +10,15 @@ const home = () => render(<Home notice={null} onDismissNotice={() => {}} />);
 
 describe("accueil des espaces", () => {
   it("affiche une carte par espace, conforme à la maquette (critère 1)", async () => {
-    const server = fakeServer(({ path }) => (path === "/api/workspaces" ? { json: [workspace(), ALTAVIA] } : undefined));
+    const server = fakeServer(({ path }) => {
+      if (path === "/api/workspaces") return { json: [workspace(), ALTAVIA] };
+      if (path.includes("groupe-nordis/proposals?")) return { json: Array.from({ length: 5 }, (_, id) => ({ id })) };
+      if (path.includes("altavia-energie/proposals?")) return { json: [] };
+    });
     home();
     const cards = await screen.findAllByRole("link");
     expect(cards).toHaveLength(2);
+    await waitFor(() => expect(within(cards[0]).getByText("5 propositions en attente")).toBeInTheDocument());
 
     const nordis = within(cards[0]);
     expect(cards[0]).toHaveAttribute("href", "#/w/groupe-nordis/catalogue");
@@ -33,6 +38,7 @@ describe("accueil des espaces", () => {
 
     expect(screen.getByText("julien.h")).toBeInTheDocument();
     expect(server.calls[0].headers.Authorization).toBe("Bearer jeton");
+    expect(server.calls[0].path).toBe("/api/workspaces");
   });
 
   it("n'affiche que les compteurs connus", async () => {
@@ -43,6 +49,20 @@ describe("accueil des espaces", () => {
     expect(card.getByText("3 entités · 4 domaines")).toBeInTheDocument();
     expect(card.getByText("3 KPI")).toBeInTheDocument();
     expect(card.queryByText(/concept|proposition/)).toBeNull();
+  });
+
+  it("affiche les espaces avant la réponse lente du compteur GitHub", async () => {
+    let finish: (value: { json: unknown }) => void = () => {};
+    fakeServer(({ path }) => {
+      if (path === "/api/workspaces") return { json: [workspace({ counts: { kpi: 3, concept: 1, open_proposals: null } })] };
+      if (path.includes("/proposals?")) return new Promise((resolve) => { finish = resolve; });
+    });
+    home();
+    const card = within(await screen.findByRole("link", { name: /Groupe Nordis/ }));
+    expect(card.getByText("3 KPI")).toBeInTheDocument();
+    expect(card.queryByText(/proposition en attente/)).toBeNull();
+    finish({ json: [{ id: 1 }] });
+    expect(await card.findByText("1 proposition en attente")).toBeInTheDocument();
   });
 
   it("affiche la carte vide sans espace (critère 2)", async () => {

@@ -11,6 +11,8 @@ import { assertPortsFree } from "./e2e/ports";
 // avec le processus qui les tient, au lieu d'un serveur qui ne démarre pas.
 if (!process.env.ATLAS_E2E_DATA) assertPortsFree();
 process.env.ATLAS_E2E_DATA ??= mkdtempSync(join(tmpdir(), "atlas-e2e-"));
+// Les scénarios utilisent des dépôts locaux isolés ; le produit les refuse par défaut.
+process.env.ATLAS_ALLOW_LOCAL_GIT = "1";
 const API_PORT = 8799;
 // Comparaisons chiffrées en local dans DuckDB, sans plateforme (plan 0009).
 const COMPARE_DATA = fileURLToPath(new URL("../core/tests/fixtures/compare/revenu-net", import.meta.url));

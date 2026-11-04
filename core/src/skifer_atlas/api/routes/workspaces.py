@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict
 from ...admin import is_space_referent
 from ...dbfile import without_waiting
 from ...index import ensure_index, index_fresh
-from ...proposals import list_proposals
 from ...repo.git import RepoError
 from ...repo.layout import WorkspaceMeta
 from ...repo.sync import create_workspace, join_workspace, sync_workspace
@@ -34,10 +33,8 @@ class JoinRequest(BaseModel):
 
 
 def _counts(ws: Workspace) -> dict:
-    """Compteurs de la carte d'accueil, sans réseau côté Git : l'index du clone, et les
-    propositions qui attendent ma revue d'après le dernier fetch. Un compteur
-    indisponible vaut `None` ; il n'empêche pas la liste, ni ne la retarde : une base
-    occupée par un autre processus ne fait pas attendre (ADR 0032)."""
+    """Compteurs locaux de la carte d'accueil, sans appel à l'hébergeur. Les propositions
+    sont chargées séparément par l'écran. Une base occupée ne bloque pas la liste."""
     found: dict = {"kpi": None, "concept": None, "open_proposals": None}
     try:
         with without_waiting():
@@ -53,24 +50,27 @@ def _counts(ws: Workspace) -> dict:
     if not ws.git_remote:
         found["open_proposals"] = 0  # pas encore de dépôt distant, donc pas de proposition
         return found
-    try:
-        found["open_proposals"] = len(list_proposals(ws.id, for_me=True, fetch=False))
-    except (RepoError, OSError):
-        pass
     return found
 
 
 def _out(ws: Workspace, counts: bool = False) -> dict:
-    found = {**ws.model_dump(), "role_label": ROLE_LABELS[ws.role],
-             "space_referent": is_space_referent(ws)}
+    found = {**ws.model_dump(), "role_label": ROLE_LABELS[ws.role]}
     if counts:
         found["counts"] = _counts(ws)
+    else:
+        found["space_referent"] = is_space_referent(ws)
     return found
 
 
 @router.get("")
 def get_workspaces() -> list[dict]:
     return [_out(ws, counts=True) for ws in list_workspaces()]
+
+
+@router.get("/{ws}")
+def get_workspace_detail(ws: str) -> dict:
+    """Métadonnées et rôle courant d'un espace, sans ses compteurs."""
+    return _out(workspace_or_404(ws))
 
 
 @router.post("", status_code=201)
