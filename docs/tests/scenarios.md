@@ -1349,10 +1349,10 @@ Plan 0026, critère 2 · Test : `app/e2e/parcours.webkit.spec.ts` › `[S-0026-0
 ### S-0026-03 — Lire le graphe, parcourir les onglets, afficher le diff
 Plan 0026, critère 3 · Test : `app/e2e/parcours.webkit.spec.ts` › `[S-0026-03]`
 - **Étant donné** la fiche Revenu net
-- **Quand** je place le focus sur « Définition », appuie deux fois sur ⌥Tab, puis Entrée, choisis De 3 et À 4 et clique « Afficher les écarts »
+- **Quand** je place le focus sur « Définition », appuie deux fois sur Tab, puis Entrée, choisis De 3 et À 4 et clique « Afficher les écarts »
 - **Alors** le graphe compte sept cartes et aucun champ ; le focus passe à Déclinaisons puis Versions
 - **Et** trois écarts s'affichent, et n06 est « ajouté » dans le graphe de la version 4
-- WebKit sous macOS ne parcourt les liens avec Tab que si le réglage est actif : le test utilise ⌥Tab, comme Safari.
+- Les onglets sont des boutons avec tabulation explicite : le test utilise Tab seul sous WebKit macOS.
 
 ### S-0026-04 — Sélectionner, déplacer, supprimer puis annuler au clavier
 Plan 0026, critère 4 · Test : `app/e2e/parcours.webkit.spec.ts` › `[S-0026-04]`
@@ -1415,7 +1415,7 @@ Reste à faire, vérification 3 · Test : `app/e2e/parcours.webkit.spec.ts` › 
 ### S-RAF-04 — Fiche
 Reste à faire, vérification 4 · Test : `app/e2e/parcours.webkit.spec.ts` › `[S-RAF-04]`
 - **Étant donné** la fiche Revenu net sous WebKit
-- **Quand** je parcours ses onglets à ⌥Tab et affiche le diff de v3 à v4
+- **Quand** je parcours ses onglets avec Tab et affiche le diff de v3 à v4
 - **Alors** le graphe en lecture compte sept cartes, et le diff trois écarts (détail en S-0026-03)
 - Limite : vue web sous WebKit, pas la fenêtre Tauri.
 

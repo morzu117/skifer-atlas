@@ -211,7 +211,7 @@ test("[S-0020-01] [S-0020-02] [S-0020-04] Fusion hors Atlas, synchronisation, ta
   expect(git(ws.remote, "rev-parse", "doc/revenu-net/v5^{}")).toBe(merge);
   await page.goto(`${ws.root}/fiche/revenu-net`);
   await expect(page.getByText(/^v5 · validée/)).toBeVisible();
-  await page.getByRole("link", { name: "Versions 5", exact: true }).click();
+  await page.getByRole("button", { name: "Versions 5", exact: true }).click();
   await expect(page.getByRole("table").getByRole("row").nth(1)).toContainText("v5 · courante");
   const tags = git(ws.remote, "tag", "--list");
   await page.goto(`${ws.root}/administration`);

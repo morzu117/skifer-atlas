@@ -64,13 +64,12 @@ test("[S-0026-03] [S-RAF-04] fiche : graphe en lecture, onglets au clavier et di
   await expect(graph.getByRole("textbox")).toHaveCount(0);
   expect(await seriousViolations(page)).toEqual([]);
   const tabs = page.getByRole("navigation", { name: "Onglets de la fiche" });
-  await tabs.getByRole("link", { name: "Définition", exact: true }).focus();
-  // WebKit sous macOS (Safari, WKWebView donc Tauri) ne passe pas par les liens avec Tab
-  // seul, sauf réglage : ⌥Tab les parcourt.
-  await page.keyboard.press("Alt+Tab");
-  await expect(tabs.getByRole("link", { name: /Déclinaisons/ })).toBeFocused();
-  await page.keyboard.press("Alt+Tab");
-  await expect(tabs.getByRole("link", { name: /Versions/ })).toBeFocused();
+  await tabs.getByRole("button", { name: "Définition", exact: true }).focus();
+  // Les commandes restent accessibles avec Tab seul sous WKWebView.
+  await page.keyboard.press("Tab");
+  await expect(tabs.getByRole("button", { name: /Déclinaisons/ })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(tabs.getByRole("button", { name: /Versions/ })).toBeFocused();
   await page.keyboard.press("Enter");
   await page.getByRole("combobox", { name: "De", exact: true }).selectOption("3");
   await page.getByRole("combobox", { name: "À", exact: true }).selectOption("4");

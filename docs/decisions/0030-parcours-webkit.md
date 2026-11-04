@@ -27,3 +27,7 @@ La vue de Tauri sous macOS est WKWebView, donc WebKit. Jusqu'ici, le projet Play
   - le trousseau système (coffre mémoire ici).
 - Dans l'app, un utilisateur au clavier n'atteint les onglets de la fiche qu'avec ⌥Tab, ou s'il a activé la navigation clavier complète dans macOS. C'est à trancher, voir le « Reste à faire » du registre des plans. Deux pistes : des boutons à la place des liens, ou l'option WKWebView qui fait passer Tab par les liens.
 - Tests : `app/e2e/parcours.webkit.spec.ts` (8 scénarios) ; `app/e2e/graphe.ts` partage la chaîne de 200 nœuds avec `graphe-volumineux.spec.ts`.
+
+## Complément du 4 novembre 2026 — Onglets de la fiche
+
+Les onglets de la fiche sont désormais des boutons avec `tabIndex={0}` explicite. Tab et Maj+Tab les parcourent sous WebKit macOS ; Entrée ou Espace active la commande. Le changement de contenu conserve son URL et l'historique du navigateur. Les contraintes ci-dessus concernant les liens de ces onglets sont levées. Le scénario S-0026-03 vérifie désormais Tab seul.

@@ -23,9 +23,9 @@ test("[S-0012-01] [S-0012-02] catalogue → fiche : en-tête, compteurs, graphe 
   await expect(page.getByText("Propriétaire : Claire M. · Validateurs : 2 requis (canonique) · Synonymes : CA net, net revenue")).toBeVisible();
 
   const tabs = page.getByRole("navigation", { name: "Onglets de la fiche" });
-  await expect(tabs.getByRole("link", { name: "Déclinaisons 3" })).toBeVisible();
-  await expect(tabs.getByRole("link", { name: "Versions 4" })).toBeVisible();
-  await expect(tabs.getByRole("link", { name: "Définition" })).toHaveAttribute("aria-current", "page");
+  await expect(tabs.getByRole("button", { name: "Déclinaisons 3" })).toBeVisible();
+  await expect(tabs.getByRole("button", { name: "Versions 4" })).toBeVisible();
+  await expect(tabs.getByRole("button", { name: "Définition" })).toHaveAttribute("aria-current", "page");
 
   for (const id of ["n01", "n02", "n03", "n04", "n05", "n06", "n07"]) await expect(card(page, id)).toBeVisible();
   for (const id of ["n03", "n04"]) {
@@ -57,7 +57,7 @@ test("[S-0012-06] deux chargements donnent la même disposition (critère 6)", a
 
 test("[S-0012-03] versions : diff de v3 à v4, classé et coloré (critère 3)", async ({ page }) => {
   await page.goto(FICHE);
-  await page.getByRole("navigation", { name: "Onglets de la fiche" }).getByRole("link", { name: /Versions/ }).click();
+  await page.getByRole("navigation", { name: "Onglets de la fiche" }).getByRole("button", { name: /Versions/ }).click();
   const table = page.getByRole("table");
   await expect(table.getByRole("row")).toHaveCount(5);
   await expect(table.getByRole("row").nth(1)).toContainText("v4 · courante");
@@ -137,12 +137,12 @@ test("[S-0012-05] « Proposer une modification » ouvre une copie en v5, en brou
 test("[S-0012-07] une fiche de concept masque les onglets propres aux KPI (critère 7)", async ({ page }) => {
   await page.goto("/#/w/groupe-nordis/fiche/commande");
   await expect(page.getByRole("heading", { level: 1, name: "Commande" })).toBeVisible();
-  const tabs = page.getByRole("navigation", { name: "Onglets de la fiche" }).getByRole("link");
+  const tabs = page.getByRole("navigation", { name: "Onglets de la fiche" }).getByRole("button");
   await expect(tabs).toHaveText(["Définition", "Versions1", "Dépendances"]);
   await expect(page.getByText("Clé")).toBeVisible();
   await expect(page.getByRole("link", { name: "Lancer une comparaison" })).toHaveCount(0);
   await page.goto("/#/w/groupe-nordis/fiche/commande?tab=scope"); // onglet absent : Définition
-  await expect(page.getByRole("navigation", { name: "Onglets de la fiche" }).getByRole("link", { name: "Définition" })).toHaveAttribute(
+  await expect(page.getByRole("navigation", { name: "Onglets de la fiche" }).getByRole("button", { name: "Définition" })).toHaveAttribute(
     "aria-current",
     "page",
   );

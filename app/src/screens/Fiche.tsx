@@ -19,7 +19,7 @@ import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
 import { ago, KIND_LABELS, longDate, percent, plural, STATUS_LABELS, tolerance } from "../format";
 import { explain, type Explained } from "../messages";
-import { href, setParams, type Params } from "../router";
+import { href, navigate, setParams, type Params } from "../router";
 
 // Fiche d'un KPI ou d'un concept (guide 10.2, plan 0012). L'onglet ouvert et les versions
 // comparées vivent dans l'adresse : `#/w/<espace>/fiche/<id>?tab=versions&base=3&other=4`.
@@ -130,15 +130,17 @@ export function Fiche({
       <FicheHeader ws={ws} doc={doc} heading={heading} />
       <nav aria-label="Onglets de la fiche" className="tabs">
         {tabs.map((t) => (
-          <a
+          <button
+            type="button"
+            tabIndex={0}
             key={t.id}
             className="tab"
-            href={href.document(ws.id, id, t.id === "definition" ? {} : { tab: t.id })}
+            onClick={() => navigate(href.document(ws.id, id, t.id === "definition" ? {} : { tab: t.id }))}
             aria-current={t.id === tab ? "page" : undefined}
           >
             {t.label}
             {counts[t.id] !== undefined && <span className="tab-count">{counts[t.id]}</span>}
-          </a>
+          </button>
         ))}
       </nav>
       {tab === "definition" && <Definition ws={ws} doc={doc} />}

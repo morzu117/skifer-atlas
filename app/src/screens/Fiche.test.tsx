@@ -157,7 +157,7 @@ describe("fiche", () => {
   it("propose de créer une déclinaison depuis le KPI aux contributeurs", async () => {
     sheetServer();
     fiche(workspace({ role: "contributeur" }));
-    await userEvent.click(await screen.findByRole("link", { name: /Déclinaisons/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Déclinaisons/ }));
     expect(screen.getByRole("link", { name: "Créer une déclinaison" })).toHaveAttribute(
       "href", "#/w/groupe-nordis/editeur?variant_of=revenu-net",
     );
@@ -166,7 +166,7 @@ describe("fiche", () => {
   it("ne propose pas la création d'une déclinaison aux lecteurs", async () => {
     sheetServer();
     fiche(workspace({ role: "lecteur" }));
-    await userEvent.click(await screen.findByRole("link", { name: /Déclinaisons/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Déclinaisons/ }));
     expect(screen.queryByRole("link", { name: "Créer une déclinaison" })).toBeNull();
   });
 
@@ -195,7 +195,7 @@ describe("fiche", () => {
     sheetServer();
     fiche(workspace({ role: "lecteur" }));
     await screen.findByRole("heading", { level: 1, name: "Revenu net" });
-    expect(within(tabs()).getAllByRole("link").map((link) => link.textContent)).toEqual([
+    expect(within(tabs()).getAllByRole("button").map((link) => link.textContent)).toEqual([
       "Définition",
       "Déclinaisons3",
       "Versions4",
@@ -203,7 +203,7 @@ describe("fiche", () => {
       "Implémentations",
       "Scope et comparaisons",
     ]);
-    expect(within(tabs()).getByRole("link", { name: "Définition" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs()).getByRole("button", { name: "Définition" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "Proposer une modification" })).not.toBeInTheDocument();
   });
 
@@ -298,8 +298,8 @@ describe("fiche", () => {
     });
     fiche();
     await screen.findByRole("heading", { level: 1, name: "Commande" });
-    expect(within(tabs()).getAllByRole("link").map((link) => link.textContent)).toEqual(["Définition", "Versions1", "Dépendances"]);
-    expect(within(tabs()).getByRole("link", { name: "Définition" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs()).getAllByRole("button").map((link) => link.textContent)).toEqual(["Définition", "Versions1", "Dépendances"]);
+    expect(within(tabs()).getByRole("button", { name: "Définition" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "Lancer une comparaison" })).not.toBeInTheDocument();
     expect(screen.queryByRole("figure")).not.toBeInTheDocument();
     expect(screen.getByText("commande_id")).toBeInTheDocument();
