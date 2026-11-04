@@ -26,10 +26,10 @@ skifer-atlas-server = "skifer_atlas.server:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "httpx>=0.27",
     "ruff>=0.6",
     "jsonschema>=4.23",
     "hypothesis>=6.100",
+    "httpx2>=2.16.0",
 ]
 build = [
     "pyinstaller>=6.10",
