@@ -438,6 +438,17 @@ describe("mes connexions", () => {
     expect(api.calls.find((c) => c.path === `${API}/access-point-draft/test`)?.body).toEqual({ access_point: expected });
   });
 
+  it.each([true, false])("explique les plateformes absentes (référent : %s)", async (referent) => {
+    server([], (call) => call.path === `${API}/connections/platforms` ? { json: [] } : undefined);
+    render(screenFor(workspace({ role: referent ? "referent" : "contributeur", space_referent: referent })));
+    expect(await screen.findByRole("heading", { name: "Aucune plateforme connectable autorisée" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Nouveau point d'accès" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ajouter un point d'accès" })).toBeNull();
+    const link = screen.queryByRole("link", { name: "Configurer les plateformes" });
+    if (referent) expect(link).toHaveAttribute("href", "#/w/groupe-nordis/administration");
+    else expect(link).toBeNull();
+  });
+
   it("un lecteur ne déclare pas de point d'accès", async () => {
     server();
     render(screenFor(workspace({ role: "lecteur", role_label: "Lecteur" })));

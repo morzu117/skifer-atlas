@@ -350,6 +350,7 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
   const platforms = useLoad(() => api.platforms(ws.id), [ws.id]);
   const panel = useRef<HTMLElement>(null);
   const canDeclare = ws.role !== "lecteur";
+  const canChoosePlatform = platforms.kind === "ready" && platforms.value.some((p) => p.supported);
   const reload = () => setRevision((n) => n + 1);
 
   const openPanel = () => {
@@ -366,7 +367,7 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
           </h1>
           <span className="muted">Espace {ws.name} · vos tokens sont chiffrés sur cette machine, jamais sur un serveur ni dans Git.</span>
         </div>
-        {canDeclare && (
+        {canDeclare && canChoosePlatform && (
           <button type="button" className="btn btn-primary" onClick={openPanel}>
             <Icon name="plus" className="icon-sm" />
             Ajouter un point d'accès
@@ -416,7 +417,16 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
             </div>
           )}
         </div>
-        {canDeclare && (
+        {canDeclare && platforms.kind === "loading" && <p role="status">Chargement des plateformes…</p>}
+        {canDeclare && platforms.kind === "error" && <Banner tone="bad" title={platforms.error.title}>{platforms.error.text}</Banner>}
+        {canDeclare && platforms.kind === "ready" && !canChoosePlatform && (
+          <aside className="card connections-panel" aria-label="Configurer les plateformes">
+            <h2 className="section-label">Aucune plateforme connectable autorisée</h2>
+            <p>Un référent de l'espace doit autoriser Databricks ou Snowflake dans l'administration avant d'ajouter un point d'accès.</p>
+            {ws.space_referent && <a className="btn btn-primary" href={href.view(ws.id, "administration")}>Configurer les plateformes</a>}
+          </aside>
+        )}
+        {canDeclare && canChoosePlatform && (
           <NewAccessPoint
             panelRef={panel}
             ws={ws}
