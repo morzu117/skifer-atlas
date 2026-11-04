@@ -482,6 +482,31 @@ def test_too_many_rows_fail_the_variant_only(db):
     assert statuses[("revenu-net--nordis-de", "variant")] == "skipped"
 
 
+def test_platform_error_does_not_persist_returned_values(db):
+    def failing(plan, compiled, cancel):
+        raise RepoError("query_failed", "la valeur secrète est 12345")
+
+    _, found = compare(EXAMPLE, db, runner=failing)
+    assert found["status"] == "failed"
+    assert found["error"].startswith("query_failed:")
+    assert "12345" not in json.dumps(found, default=str)
+
+
+def test_failed_result_write_marks_comparison_failed(db, monkeypatch):
+    original = store.finish
+
+    def broken(*args, **kwargs):
+        raise duckdb.IOException("écriture impossible")
+
+    monkeypatch.setattr(store, "finish", broken)
+    prepared = prepare_in(EXAMPLE, request(), None, True)
+    job = orchestrate.start(db, None, prepared, LocalRunner(DATA), wait=True)
+    monkeypatch.setattr(store, "finish", original)
+    found = store.get(db, job.number)
+    assert found["status"] == "failed"
+    assert found["error"].startswith("internal_error:")
+
+
 def test_cancel_leaves_cancelled_and_nothing_extracted(db):
     """Critère 10."""
     started = threading.Event()

@@ -161,6 +161,20 @@ def finish(db: Path, number: int, status: str, error: str | None, runs: list[dic
             connection.close()
 
 
+def fail(db: Path, number: int) -> None:
+    """Dernier recours si l'écriture transactionnelle du résultat échoue."""
+    with _lock:
+        connection = connect(db)
+        try:
+            connection.execute(
+                "UPDATE results.comparisons SET status = 'failed', "
+                "error = 'internal_error: Résultat non enregistré.', finished_at = ? "
+                "WHERE id = ? AND status = 'running'", [now(), number],
+            )
+        finally:
+            connection.close()
+
+
 def _comparison(row: dict) -> dict:
     row["scope"] = json.loads(row.pop("scope_json"))
     row.pop("schema_version", None)
@@ -218,11 +232,19 @@ def history(db: Path, kpi_id: str | None = None, limit: int = 50) -> list[dict]:
         found = [_comparison(row) for row in _records(connection.execute(
             f"SELECT * FROM results.comparisons {condition} ORDER BY id DESC LIMIT ?",
             [*parameters, limit]))]
+        by_id = {comparison["id"]: comparison for comparison in found}
         for comparison in found:
-            comparison["results"] = _records(connection.execute(
-                "SELECT variant_id, entity, validation_pct, max_gap_pct, divergent_node "
-                "FROM results.summaries WHERE comparison_id = ? ORDER BY entity",
-                [comparison["id"]]))
+            comparison["results"] = []
+        if by_id:
+            placeholders = ", ".join("?" for _ in by_id)
+            summaries = _records(connection.execute(
+                "SELECT comparison_id, variant_id, entity, validation_pct, max_gap_pct, "
+                "divergent_node FROM results.summaries WHERE comparison_id IN "
+                f"({placeholders}) ORDER BY comparison_id DESC, entity",
+                list(by_id),
+            ))
+            for summary in summaries:
+                by_id[summary.pop("comparison_id")]["results"].append(summary)
     finally:
         connection.close()
     return found

@@ -46,6 +46,8 @@ Conservation : les tables d'extraction temporaires (`staging_*`) sont supprimée
 ### API et CLI
 `POST /api/workspaces/{ws}/comparisons` (`{kpi_id, variants[], scope_id | scope, tolerance?}`) → `{id}` ; `GET …/comparisons/{id}` (progression, puis résultats) ; `GET …/comparisons?kpi=&limit=` (historique) ; `GET …/comparisons/matrix?domain=` (dernière comparaison par KPI × déclinaison, pour la synthèse 10.5 et la colonne Convergence du catalogue). CLI `atlas compare <ws> <kpi> --variants … --scope …` ; avec `--duckdb-data`, tout tourne en local sur des jeux de test.
 
+En cas d'échec, `comparisons.error` donne la première erreur ; chaque exécution en échec garde son statut et son code d'erreur dans `comparison_runs`. Les erreurs de réconciliation restent signalées au niveau de la comparaison. Les messages bruts des moteurs ne sont pas conservés, car ils peuvent contenir des valeurs de données.
+
 ## Critères d'acceptation
 1. Sur données de test DuckDB (canonique et déclinaison DE avec un filtre élargi), le résultat reproduit les valeurs de la maquette 10.5 : 94 % de validation, écart maximal 6,1 %, nœud divergent n02 (filtre statut).
 2. Tolérance KPI 1,5 % contre globale 1 % : la valeur KPI s'applique.
