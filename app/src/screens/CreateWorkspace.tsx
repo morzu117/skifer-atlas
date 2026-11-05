@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { api, ApiError, type Workspace } from "../api";
-import { AttachRemote } from "../components/AttachRemote";
+import { AttachRemote, canReset } from "../components/AttachRemote";
 import { Banner } from "../components/Banner";
 import { Drawer } from "../components/Drawer";
 import { Field } from "../components/Field";
@@ -8,7 +8,7 @@ import { Icon } from "../components/Icon";
 import { slugify, WORKSPACE_ID } from "../format";
 import { explain, type Explained } from "../messages";
 
-type Errors = { name?: string; id?: string; form?: Explained; remote?: Explained };
+type Errors = { name?: string; id?: string; form?: Explained; remote?: Explained & { code?: string } };
 
 // Formulaire non maquetté (guide 7) : nom, identifiant dérivé et modifiable, secteur,
 // entités, dépôt distant facultatif. Le créateur devient référent de l'espace.
@@ -46,7 +46,7 @@ export function CreateWorkspace({ onClose, onCreated }: { onClose: () => void; o
           await api.setRemote(workspace.id, remote.trim());
         } catch (error) {
           setCreated(workspace);
-          setErrors({ remote: explain(error) });
+          setErrors({ remote: { ...explain(error), code: error instanceof ApiError ? error.code : undefined } });
           return;
         }
       }
@@ -76,9 +76,16 @@ export function CreateWorkspace({ onClose, onCreated }: { onClose: () => void; o
               </button>
             }
           >
-            {errors.remote.title} : {errors.remote.text} Réessayez ci-dessous, ou rattachez-le plus tard depuis l'administration.
+            {/* Un refus qui se réinitialise est détaillé, avec son bouton, dans le groupe ci-dessous. */}
+            {canReset(errors.remote.code) ? "" : `${errors.remote.title} : ${errors.remote.text} `}Réessayez ci-dessous, ou rattachez-le plus tard depuis l'administration.
           </Banner>
-          <AttachRemote ws={created} initialUrl={remote.trim()} onAttached={onCreated} />
+          <AttachRemote
+            ws={created}
+            initialUrl={remote.trim()}
+            initialError={canReset(errors.remote.code) ? errors.remote : undefined}
+            onAttached={onCreated}
+            onReset={() => setErrors({ remote: { title: "Dépôt distant non rattaché", text: "Le rattachement a été réinitialisé." } })}
+          />
         </div>
       </Drawer>
     );

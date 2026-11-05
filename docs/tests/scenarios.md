@@ -53,8 +53,9 @@
 | 0030 | 4 | 3 | 0 | 1 | 0 |
 | 0032 | 2 | 2 | 0 | 0 | 0 |
 | 0033 | 9 | 8 | 0 | 1 | 0 |
+| 0034 | 10 | 6 | 3 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **243** | **181** | **5** | **57** | **0** |
+| **Total** | **253** | **187** | **8** | **58** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1391,6 +1392,89 @@ Plan 0033, critère 8 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-08]`
 - **Alors** après le rattachement, le brouillon est abandonné, l'avertissement « Vos modifications non enregistrées n'ont pas été reprises : le compte <login> figurait déjà dans le brouillon. Refaites-les à partir de la gouvernance du dépôt. » s'affiche, et le créateur est référent sous le login GitHub, sans rien à enregistrer
 - Limite : le compte du créateur réécrit dans le brouillon, la valeur des validateurs et la base relue envoyée à l'enregistrement sont vérifiés en Vitest, comme la suspension ci-dessus : `app/src/screens/Rattachement.test.tsx` › `[S-0033-08]` (cinq tests). Les refus `workspace_dirty` (gouvernance modifiée dans le clone, y compris quand elle retire le compte local) et `wrong_branch` (autre branche extraite), hors écran, sont des tests core : `core/tests/repo/test_set_remote.py::test_another_checked_out_branch_is_refused_before_any_remote_write`. Le refus `workspace_dirty` (gouvernance modifiée dans le clone, hors écran) est un test core : `core/tests/repo/test_set_remote.py::test_unsaved_changes_to_the_governance_are_refused_before_any_remote_write`.
 
+**Plan 0034**
+
+Les scénarios passent par le groupe « Rattacher un dépôt distant » de l'Administration, dont la bannière d'erreur propose « Réinitialiser le rattachement ». Les états résiduels d'un rattachement interrompu sont fabriqués avec git dans le clone de l'espace, sur le serveur principal (compte anna.k, dépôts nus locaux). Les scénarios 1 à 4 et 8 partagent deux tests e2e dans `app/e2e/reinitialisation.spec.ts`, le scénario 10 (espace rouvert) a le sien ; les scénarios 5 à 7 n'ont que des tests Vitest (`app/src/screens/Reinitialisation.test.tsx`), qui rendent aussi les scénarios 1 à 4.
+
+### S-0034-01 — Seuls les trois refus d'un reste local proposent la réinitialisation
+Plan 0034, critère 1 · Test : `app/e2e/reinitialisation.spec.ts` › `[S-0034-01]`
+- **Étant donné** un espace sans dépôt distant dont le clone garde un `origin` d'une autre adresse, avec deux adresses d'envoi
+- **Quand** je rattache un autre dépôt vide
+- **Alors** l'alerte dit « Adresse origin différente », sans jeton, et propose le bouton « Réinitialiser le rattachement » ; axe-core ne relève aucune violation sérieuse ou critique
+- **Étant donné** une publication d'Atlas déjà fusionnée en local (second test)
+- **Alors** l'alerte « Rattachement interrompu » propose aussi le bouton
+- Limite : les trois codes (`origin_conflict`, `remote_partial`, `attach_incomplete`) proposent le bouton, et aucun autre refus ne le propose (dépôt non vide, droits, adresse, jeton, `workspace_dirty`, `wrong_branch`) : cas rendus en Vitest, `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-01]`.
+
+### S-0034-02 — Une confirmation explicite, et rien n'est envoyé avant
+Plan 0034, critère 2 · Test : `app/e2e/reinitialisation.spec.ts` › `[S-0034-02]`
+- **Étant donné** l'alerte de S-0034-01
+- **Quand** je clique « Réinitialiser le rattachement »
+- **Alors** une confirmation « Réinitialiser le rattachement ? » (`alertdialog`) dit que seule la copie locale est réinitialisée, que le dépôt distant n'est pas modifié et qu'il faudra peut-être le vider avant de le réutiliser ; le focus est sur « Annuler » et Tab mène à « Confirmer la réinitialisation »
+- **Quand** j'appuie sur Échap, puis rouvre la confirmation et clique « Annuler »
+- **Alors** la confirmation se ferme, le focus revient au bouton d'origine, aucune requête `…/remote/reset` n'est partie et le clone a toujours son `origin`
+- Limite : le rendu de la confirmation (rôle, description, focus) est aussi vérifié en Vitest : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-02]`.
+
+### S-0034-03 — Confirmée, l'espace redevient neuf et le dépôt distant n'a pas bougé
+Plan 0034, critère 3 · Test : `app/e2e/reinitialisation.spec.ts` › `[S-0034-03]`
+- **Étant donné** la confirmation ouverte de S-0034-02
+- **Quand** je clique « Confirmer la réinitialisation »
+- **Alors** « Rattachement réinitialisé. Seule la copie locale a changé : le dépôt distant n'a pas été modifié. » s'affiche, la confirmation et l'alerte disparaissent, le champ d'adresse est vide et focalisé, la région « Dépôt Git de l'espace » dit « Pas encore de dépôt distant » ; axe-core ne relève aucune violation sérieuse ou critique
+- **Et** le clone n'a plus de remote ni de section `remote.origin`, son `HEAD` n'a pas bougé, les références des trois dépôts nus sont identiques avant et après, et l'API rend `git_remote` vide, `account: anna.k`, `role: referent`
+- Limite : « rien à faire » (second appel, clone déjà neuf) est un succès dit comme tel, rendu en Vitest (`app/src/screens/Reinitialisation.test.tsx` › `[S-0034-03]`) ; l'idempotence et l'absence de réseau sont des tests core (`core/tests/repo/test_reset_remote.py`).
+
+### S-0034-04 — Un commit d'identité déjà fusionné est défait, le créateur reste référent
+Plan 0034, critère 4 · Test : `app/e2e/reinitialisation.spec.ts` › `[S-0034-04]`
+- **Étant donné** une publication d'Atlas sous le login « claire-m » fusionnée en local (la gouvernance locale désigne claire-m, le registre garde anna.k), le rattachement ayant échoué ensuite
+- **Quand** je rattache ce dépôt, lis « Rattachement interrompu », puis réinitialise
+- **Alors** la gouvernance est relue : le tableau « Utilisateurs et rôles » montre anna.k Référent, claire-m n'y figure plus, la barre latérale dit « Référent d'annuaire »
+- **Et** un commit « Identité du créateur : claire-m redevient anna.k » ramène l'arbre d'avant l'identité (historique non réécrit), le clone est propre, sans `origin` ni référence distante ; la publication reste intacte sur le dépôt distant ; l'API rend `role: referent`, `space_referent: true`
+- Limite : le commit de retour (commits de l'utilisateur au-dessus), les modifications d'autres fichiers conservées, le commit retrouvé au-delà de 200 commits de gouvernance, le refus `identity_not_found` (commit non reconnu, autre référent) et la reprise après un essai interrompu sont des tests core (`core/tests/repo/test_reset_remote.py`), avec la provenance (un renommage manuel sous un autre message n'est pas défait) et l'index des autres fichiers conservé ; l'écran relit la gouvernance (toujours, même pour « rien à faire »), garde le brouillon sans renommage d'identité et ne le jette, avec la bannière « Modifications non reprises », que si le compte local y figure déjà ou si la gouvernance lue a changé : Vitest, `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-04]`.
+
+### S-0034-05 — Un refus de la réinitialisation s'explique dans la confirmation
+Plan 0034, critère 5 · Test : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-05]`
+- **Étant donné** une confirmation ouverte et un serveur qui refuse (`workspace_dirty` d'abord, puis `remote_exists` et `reset_incomplete` dans deux cas à part)
+- **Quand** je confirme
+- **Alors** « La réinitialisation n'a pas abouti » et le message du serveur (ou sa traduction, sans sortie de git ni secret) s'affichent dans la confirmation, qui reste ouverte ; la bannière d'origine et son bouton restent ; un nouvel essai réussi la ferme
+- Limite : pas de test e2e, parce que les refus qui se fabriquent depuis l'écran sont les mêmes états que ceux de S-0033 ; les gardes avant écriture (gouvernance modifiée ou dans l'index, conflit, `MERGE_HEAD`, autre branche, `HEAD` détachée) et le refus d'un espace rattaché sont des tests core : `core/tests/repo/test_reset_remote.py`. Le refus d'un espace rattaché est aussi vérifié par S-0034-08.
+
+### S-0034-06 — Le formulaire est gelé pendant la réinitialisation
+Plan 0034, critère 6 · Test : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-06]`
+- **Étant donné** l'Administration avec une confirmation ouverte
+- **Quand** je confirme et que la requête est en cours
+- **Alors** « Réinitialisation de la copie locale… » s'affiche, « Confirmer la réinitialisation », « Annuler » et les cases sont désactivés jusqu'à la fin de la requête
+- **Étant donné** un membre en cours de modification
+- **Alors** « Réinitialiser le rattachement » est désactivé
+- Limite : pas de test e2e, car il faudrait ralentir le serveur pour tenir la requête ouverte ; le verrou du clone (attente d'un rattachement en cours) est un test core (`core/tests/repo/test_reset_remote.py`).
+
+### S-0034-07 — Le panneau de création propose aussi la réinitialisation
+Plan 0034, critère 7 · Test : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-07]`
+- **Étant donné** le panneau « Créer un espace » après un refus de rattachement `origin_conflict`
+- **Alors** le refus est détaillé une fois, dans le groupe, avec son bouton ; Échap ferme la confirmation sans fermer le panneau
+- **Quand** je confirme
+- **Alors** le champ d'adresse est vide et le panneau dit « Dépôt distant non rattaché » avec « Le rattachement a été réinitialisé. »
+- Limite : pas de test e2e, parce qu'à la création aucun état de clone résiduel ne se fabrique depuis l'écran ; le panneau est rendu contre un faux serveur.
+
+### S-0034-08 — Juste après, un autre dépôt vide se rattache ; un espace rattaché n'est pas réinitialisable
+Plan 0034, critère 8 · Test : `app/e2e/reinitialisation.spec.ts` › `[S-0034-08]`
+- **Étant donné** l'espace réinitialisé de S-0034-03
+- **Quand** je rattache un autre dépôt vide
+- **Alors** la région affiche « Dépôt rattaché : l'espace est publié sur <adresse>, sous le compte anna.k. », le dépôt n'a que le commit « Création de l'espace … », et le premier dépôt, abandonné, est intact
+- **Quand** j'appelle la route de réinitialisation sur cet espace rattaché
+- **Alors** la réponse est 409 `remote_exists` et le clone garde son `origin`
+- Le second test fait de même après le scénario S-0034-04 : le dépôt reçoit le commit d'avant l'identité et le créateur reste référent.
+
+### S-0034-10 — Un espace à moitié rattaché rouvert se répare depuis la coque, sans l'Administration
+Plan 0034, critère 10 · Test : `app/e2e/reinitialisation.spec.ts` › `[S-0034-10]`
+- **Étant donné** une publication d'Atlas sous le login « claire-m » fusionnée en local (la gouvernance locale désigne claire-m, le registre garde anna.k) : l'API rend `attachment: "interrupted"`, `space_referent: false`, et l'Administration répond 403
+- **Quand** je rouvre l'espace (retour à l'accueil, puis catalogue)
+- **Alors** la bannière « Le rattachement de cet espace à un dépôt a été interrompu. » s'affiche ; la navigation n'a pas « Administration » ni le lien « Reprendre le rattachement » ; axe-core ne relève aucune violation sérieuse ou critique
+- **Quand** je place le focus sur « Réinitialiser le rattachement » et appuie sur Entrée
+- **Alors** la confirmation s'ouvre avec le focus sur « Annuler » ; Échap la ferme et rend le focus au bouton
+- **Quand** je rouvre la confirmation et clique « Confirmer la réinitialisation »
+- **Alors** « Rattachement réinitialisé. Seule la copie locale a changé : le dépôt distant n'a pas été modifié. » s'affiche, la bannière disparaît, la barre latérale dit « Référent d'annuaire » et le lien « Administration » est de retour
+- **Et** l'API rend `attachment: null`, `space_referent: true`, l'Administration répond 200, le clone n'a plus de remote, son arbre est celui d'avant l'identité et le dépôt distant est intact ; après rechargement, la bannière ne revient pas
+- Limite : la bannière pour un lecteur, le lien « Reprendre le rattachement » réservé au référent et l'absence de bannière sans reste sont rendus en Vitest (`app/src/screens/Reinitialisation.test.tsx` › `[S-0034-10]`). L'indicateur dans chacun de ses états (origin résiduel, identité fusionnée, espace rattaché, gouvernance inexpliquée, clone tenu par une opération) et la route de réinitialisation sans rôle de référent sont des tests core (`core/tests/repo/test_reset_remote.py`).
+
 ## Hors ligne
 
 **Plan 0019**
@@ -1583,6 +1667,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0031-02 | La branche instant Snowflake ne dépend pas du fuseau de session, heure doublée et autre décalage compris | Exécution sous plusieurs fuseaux de session : l'écran ne fait que montrer le SQL | `core/tests/compile/test_ecarts.py::test_a_snowflake_instant_is_read_without_the_session_zone` |
 | S-0031-03 | Les trois dialectes rendent les mêmes jours locaux ; aucun SQL Snowflake ne contient `AS TIMESTAMP)` | Exécution DuckDB et SQL de référence, sans écran | `core/tests/compile/test_ecarts.py::test_the_paris_day_does_not_depend_on_the_session_zone`, `::test_no_timestamp_cast_depends_on_the_session`, `::test_no_reference_sql_casts_to_a_session_timestamp` |
 | S-0033-09 | Avec un compte GitHub réel, un dépôt vide créé sans README reçoit l'espace ; le créateur y reste référent | Compte GitHub réel : le faux GitHub reproduit la forme documentée de `/user` et de `/repos/…`, pas les droits réels (`permissions`), le SSO d'organisation ni les règles de branche | `core/tests/repo/test_set_remote.py` ; `app/e2e/rattachement.spec.ts` › `[S-0033-04]` |
+| S-0034-09 | Avec un compte GitHub réel, la réinitialisation laisse la publication partielle sur le dépôt, qui se vide ou se supprime sur l'hébergeur avant de le réutiliser | Compte GitHub réel : ce que garde l'hébergeur après une publication partielle (branche, historique) et la façon de le vider ne se voient qu'avec un compte réel | `core/tests/repo/test_reset_remote.py` (références du dépôt distant identiques avant et après) ; `app/e2e/reinitialisation.spec.ts` › `[S-0034-03]` |
 | S-RAF-01 | Installation sur un poste vierge de chaque OS, puis accueil → catalogue → fiche | Fenêtre native Tauri, installateurs signés, postes vierges ; WebKit ne teste que les vues | `.github/workflows/release.yml` ; `core/tests/test_sidecar.py` ; `core/tests/test_release.py` |
 | S-RAF-09 | Keyring et connecteurs figés sous Windows | Poste Windows réel ; l'e2e utilise un coffre en mémoire | `core/tests/test_sidecar.py` ; `core/tests/connections/test_connections.py` ; `core/tests/connections/test_snowflake.py` |
 | S-RAF-10 | Extraction d'un vrai script de production anonymisé | Revue produit : le script est à fournir et valider par son propriétaire | `core/tests/extract/test_extract.py` (corpus synthétique) |

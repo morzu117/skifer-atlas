@@ -3,6 +3,7 @@ import { api, ApiError, UnreachableError, type Workspace } from "../api";
 import { Banner } from "../components/Banner";
 import { Brand } from "../components/Brand";
 import { Icon, type IconName } from "../components/Icon";
+import { InterruptedAttachment } from "../components/InterruptedAttachment";
 import { initials } from "../format";
 import { explain, type Explained } from "../messages";
 import { href, navigate, type NavView, type Params, type View } from "../router";
@@ -43,10 +44,13 @@ export function WorkspaceShell({
 }) {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [waiting, setWaiting] = useState(0);
+  // Message de la réinitialisation faite depuis la bannière, qui disparaît avec elle.
+  const [resetNotice, setResetNotice] = useState("");
 
   useEffect(() => {
     let alive = true;
     setLoad({ kind: "loading" });
+    setResetNotice("");
     api
       .workspace(wsId)
       .then((ws) => {
@@ -97,6 +101,25 @@ export function WorkspaceShell({
     if (ws) heading.current?.focus();
   }, [ws, view, doc]);
 
+  // Le rattachement interrompu se voit de tout écran et pour tout rôle ; l'espace relu par le serveur
+  // remplace l'ancien (plus de bannière, rôle remis).
+  const interrupted = (
+    <>
+      {ws && (
+        <InterruptedAttachment
+          ws={ws}
+          adminLink={view !== "administration"}
+          onReset={(next, message) => (setLoad({ kind: "ready", ws: next }), setResetNotice(message))}
+        />
+      )}
+      {resetNotice && ws?.attachment !== "interrupted" && (
+        <Banner tone="info" title="Réinitialisation terminée">
+          {resetNotice}
+        </Banner>
+      )}
+    </>
+  );
+
   const items = NAV.filter((item) => item.view !== "administration" || referent);
   // La fiche et l'éditeur, hors navigation, restent sous l'élément Catalogue.
   const active = view === "fiche" || view === "editeur" ? "catalogue" : view;
@@ -115,6 +138,7 @@ export function WorkspaceShell({
             {load.error.text}
           </Banner>
         )}
+        {interrupted}
         {ws && <Editor ws={ws} params={params} heading={heading} />}
       </div>
     );
@@ -177,6 +201,7 @@ export function WorkspaceShell({
             {load.error.text}
           </Banner>
         )}
+        {interrupted}
         {ws && view === "catalogue" && <Catalogue ws={ws} params={params} heading={heading} />}
         {ws && view === "fiche" && doc && <Fiche ws={ws} id={doc} params={params} heading={heading} />}
         {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} />}
