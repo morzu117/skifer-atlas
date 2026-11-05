@@ -1,8 +1,12 @@
 """Créer, rejoindre et synchroniser l'espace (plans 0005 et 0006).
 
 Le registre local (`workspaces.yaml`) n'est modifié qu'une fois le dépôt en place : une
-opération qui échoue ne laisse ni espace fantôme ni clone à moitié écrit. Le rôle de
-l'utilisateur se lit dans `governance.yaml`, pour son compte sur l'hébergeur.
+opération qui échoue ne laisse ni espace fantôme ni clone à moitié écrit. Exception,
+`set_remote` : il publie avant de modifier le clone, car Git n'a pas de transaction sur un
+dépôt distant. Une étape qui échoue après la publication laisse le dépôt publié, `origin`
+configuré et l'espace encore local (`attach_incomplete`) ; un nouvel essai termine alors le
+rattachement sans rien republier (ADR 0037). Le rôle de l'utilisateur se lit dans
+`governance.yaml`, pour son compte sur l'hébergeur.
 """
 
 from __future__ import annotations
@@ -28,7 +32,15 @@ from ..governance.model import (
 )
 from ..paths import data_dir
 from ..workspaces import Workspace, add_workspace, get_workspace, repo_dir, update_workspace
-from .git import RepoError, check_remote_url, clone_lock, head, run_git
+from .git import (
+    RepoError,
+    check_remote_url,
+    clone_lock,
+    head,
+    mask_remote_url,
+    normalize_remote_url,
+    run_git,
+)
 from .layout import GOVERNANCE_FILE, META_FILE, WorkspaceMeta, read_governance, read_meta
 from .versions import missing_tags
 
@@ -210,9 +222,23 @@ def _has_commit(repo: Path, commit: str) -> bool:
     return True
 
 
-def _identity_commit(repo: Path, commit: str, old_account: str,
-                     known_repo: Path) -> tuple[str, str] | None:
-    """Reconnaît un renommage exact, sans déduire l'identité du message de commit."""
+def _blob_id(repo: Path, text: str) -> str:
+    """Identifiant d'objet que Git donnerait à ce texte, sans rien écrire dans le dépôt."""
+    with tempfile.TemporaryDirectory(prefix="atlas-hash-") as folder:
+        source = Path(folder) / "blob"
+        source.write_bytes(text.encode("utf-8"))
+        return run_git(["hash-object", "--no-filters", str(source)], repo).strip()
+
+
+def _identity_commit(repo: Path, commit: str, old_account: str, known_repo: Path,
+                     preferred: str | None = None,
+                     token: str | None = None) -> tuple[str, str] | None:
+    """Reconnaît un renommage exact, sans déduire l'identité du message de commit.
+
+    Le contenu publié se compare par identifiant d'objet à celui que donnerait le
+    renommage vers le compte attendu (`preferred`) : aucun blob n'est lu, ce qui laisse
+    l'inspection se faire sur un fetch filtré (`blob:limit`). Un autre compte publié
+    demande de lire le fichier ; s'il a été omis par le filtre, Git le récupère seul."""
     parents = run_git(["rev-list", "--parents", "-n", "1", commit], repo).split()
     if len(parents) != 2:
         return None
@@ -225,8 +251,15 @@ def _identity_commit(repo: Path, commit: str, old_account: str,
         return None
     try:
         before = Governance.model_validate(yaml.safe_load(run_git(
-            ["show", f"{parent}:{GOVERNANCE_FILE}"], repo)))
-        content = run_git(["show", f"{commit}:{GOVERNANCE_FILE}"], repo)
+            ["show", f"{parent}:{GOVERNANCE_FILE}"], known_repo)))
+        listing = run_git(["ls-tree", commit, "--", GOVERNANCE_FILE], repo).split()
+        if len(listing) < 3 or listing[1] != "blob":
+            return None
+        if preferred:
+            renamed = rename_account(before, old_account, preferred)
+            if renamed is not before and _blob_id(known_repo, dump_governance(renamed)) == listing[2]:
+                return parent, preferred
+        content = run_git(["cat-file", "blob", listing[2]], repo, token=token, encoding="utf-8")
         after = Governance.model_validate(yaml.safe_load(content))
     except (RepoError, ValueError, ValidationError, yaml.YAMLError):
         return None
@@ -235,6 +268,31 @@ def _identity_commit(repo: Path, commit: str, old_account: str,
         if renamed is not before and dump_governance(renamed) == content:
             return parent, member.account
     return None
+
+
+def _fetch_tip(staging: Path, remote_url: str, branch: str, token: str | None) -> None:
+    """Récupère la pointe de la branche et son parent dans un dépôt temporaire, sans leurs
+    gros fichiers (`blob:limit=1k`) : sur un gros dépôt étranger, le téléchargement complet
+    pouvait dépasser le délai et masquer `remote_not_empty` par `host_unreachable`. Un
+    serveur qui ne prend pas en charge le filtre l'ignore avec un avertissement et envoie
+    tout. Le dépôt temporaire a un `origin` nommé : Git refuse un filtre quand l'adresse
+    seule, un chemin local par exemple, sert de nom au dépôt « promisor »."""
+    run_git(["init", "--bare", "--quiet"], staging)
+    run_git(["remote", "add", "origin", "--", remote_url], staging)
+    fetch = ["fetch", "--quiet", "--depth=2", "--no-tags"]
+    try:
+        run_git([*fetch, "--filter=blob:limit=1k", "origin", f"refs/heads/{branch}"], staging,
+                token=token)
+        return
+    except RepoError as error:
+        explained = _explain_git(error)
+        # Repli : un refus du filtre lui-même. Après un délai dépassé, on n'attend pas deux fois.
+        if explained.code != "host_unreachable" or error.code == "git_timeout":
+            raise explained from None
+    try:
+        run_git([*fetch, "origin", f"refs/heads/{branch}"], staging, token=token)
+    except RepoError as error:
+        raise _explain_git(error) from None
 
 
 def _require_empty(remote_url: str, token: str | None, repo: Path, branch: str,
@@ -247,36 +305,36 @@ def _require_empty(remote_url: str, token: str | None, repo: Path, branch: str,
     if len(refs) == 1 and len(refs[0]) == 2 and refs[0][1] == f"refs/heads/{branch}":
         remote = refs[0][0]
         if _has_commit(repo, remote):
-            identity = _identity_commit(repo, remote, old_account, repo)
+            identity = _identity_commit(repo, remote, old_account, repo, account, token)
         else:
-            # Limiter le téléchargement : seul le commit et son parent sont nécessaires.
             with tempfile.TemporaryDirectory(prefix="atlas-attach-") as folder:
                 staging = Path(folder)
-                run_git(["init", "--bare", "--quiet"], staging)
-                try:
-                    run_git(["fetch", "--quiet", "--depth=2", "--no-tags", "--", remote_url,
-                             f"refs/heads/{branch}"], staging, token=token)
-                except RepoError as error:
-                    raise _explain_git(error) from None
+                _fetch_tip(staging, remote_url, branch, token)
                 fetched = run_git(["rev-parse", "FETCH_HEAD"], staging).strip()
                 if fetched != remote:
                     raise RepoError("remote_partial", "La branche distante a changé pendant la "
                                     "vérification : réessayer le rattachement.")
-                identity = _identity_commit(staging, remote, old_account, repo)
+                identity = _identity_commit(staging, remote, old_account, repo, account, token)
         if identity:
             parent, published_account = identity
-            if _is_ancestor(repo, parent, local):
-                if published_account != account:
-                    raise RepoError("remote_partial", "L'espace a été publié sous le compte "
-                                    f"« {published_account} » : reconnectez-vous à GitHub "
-                                    f"avec {published_account}, puis réessayez.")
-                if parent == local:
-                    return remote, "identity"
-                if remote != local and not _is_ancestor(repo, remote, local):
-                    raise RepoError(
-                        "remote_partial", "Le clone a évolué depuis la publication partielle. "
-                        "Récupérez-la avec « git fetch origin », puis rebasez vos commits "
-                        "locaux dessus ou annulez-les, avant de réessayer.")
+            if not _is_ancestor(repo, parent, local):
+                raise RepoError(
+                    "remote_partial", "Clone divergé : la publication partielle repose sur un "
+                    "commit qui n'est plus dans la branche locale (après un « git commit "
+                    "--amend » ou un « git reset »). Rétablissez la branche locale sur ce "
+                    "commit, ou récupérez la publication avec « git fetch origin » et "
+                    "rebasez vos commits dessus, avant de réessayer.")
+            if published_account != account:
+                raise RepoError("remote_partial", "L'espace a été publié sous le compte "
+                                f"« {published_account} » : reconnectez-vous à GitHub "
+                                f"avec {published_account}, puis réessayez.")
+            if parent == local:
+                return remote, "identity"
+            if remote != local and not _is_ancestor(repo, remote, local):
+                raise RepoError(
+                    "remote_partial", "Le clone a évolué depuis la publication partielle. "
+                    "Récupérez-la avec « git fetch origin », puis rebasez vos commits "
+                    "locaux dessus ou annulez-les, avant de réessayer.")
         if remote == local:
             return remote, "same"
         if _is_ancestor(repo, remote, local):
@@ -343,6 +401,36 @@ def _require_clean_governance(repo: Path) -> None:
                         "annuler, puis rattacher le dépôt.")
 
 
+def _require_compatible_origin(repo: Path, remote_url: str) -> bool:
+    """Vrai si `origin` existe déjà avec l'adresse demandée (à une écriture équivalente
+    près : `.git` ou `/` final, casse de l'hôte), faux s'il n'existe pas. Toute autre
+    configuration lève `origin_conflict`, avec l'adresse trouvée, sans identifiant.
+    Contrôle local : il précède tout appel à l'hébergeur et à `ls-remote`."""
+    if "origin" not in run_git(["remote"], repo).splitlines():
+        return False
+    # Les URL configurées se lisent littéralement, avant les règles insteadOf.
+    config = run_git(["config", "--list"], repo).splitlines()
+    configured = [line.partition("=")[2] for line in config
+                  if line.startswith("remote.origin.url=")]
+    push_urls = [line.partition("=")[2] for line in config
+                 if line.startswith("remote.origin.pushurl=")]
+    if (len(configured) == 1 and not push_urls
+            and normalize_remote_url(configured[0]) == normalize_remote_url(remote_url)):
+        return True
+    if not configured:
+        found = "origin n'a aucune adresse"
+    elif len(configured) == 1:
+        found = f"origin pointe sur {mask_remote_url(configured[0])}"
+    else:
+        found = "origin a plusieurs adresses : " + ", ".join(map(mask_remote_url, configured))
+    if push_urls:
+        found += " et une adresse d'envoi distincte (pushurl) : " + ", ".join(
+            map(mask_remote_url, push_urls))
+    raise RepoError("origin_conflict", f"Le clone de l'espace a déjà un « origin » qui diffère "
+                    f"de l'adresse demandée ({mask_remote_url(remote_url)}) : {found}. "
+                    "Corrigez-le, ou rattachez l'espace à l'adresse qu'il porte.")
+
+
 def _attach(workspace: Workspace, repo: Path, remote_url: str) -> Workspace:
     from ..githost import host_for  # import tardif : githost dépend de repo
     from ..githost.github import GitHubHost, github_token
@@ -353,6 +441,7 @@ def _attach(workspace: Workspace, repo: Path, remote_url: str) -> Workspace:
     _require_no_operation_in_progress(repo)
     _require_clean_governance(repo)
     host = host_for(remote_url, branch, workspace.id)  # `unsupported_host` avant tout
+    has_origin = _require_compatible_origin(repo, remote_url)  # local : avant tout appel réseau
     if isinstance(host, GitHubHost) and not github_token(workspace.id):
         raise RepoError("host_auth_failed", "Aucun jeton GitHub pour cet espace : se "
                         "connecter à GitHub avant de rattacher le dépôt.")
@@ -363,17 +452,6 @@ def _attach(workspace: Workspace, repo: Path, remote_url: str) -> Workspace:
     renamed = (rename_account(governance, workspace.account, account) if governance
                else governance)
     expected = dump_governance(renamed) if renamed is not governance else None
-    remotes = run_git(["remote"], repo).splitlines()
-    has_origin = "origin" in remotes
-    if has_origin:
-        # On compare les URL configurées littéralement, avant les règles insteadOf.
-        config = run_git(["config", "--list"], repo).splitlines()
-        configured = [line.partition("=")[2] for line in config
-                      if line.startswith("remote.origin.url=")]
-        push_urls = [line for line in config if line.startswith("remote.origin.pushurl=")]
-        if configured != [remote_url] or push_urls:
-            raise RepoError("origin_conflict", "Le clone possède déjà une configuration origin "
-                            "différente : la corriger avant de rattacher le dépôt.")
     published, state = _require_empty(remote_url, token, repo, branch, workspace.account, account)
     local = run_git(["rev-parse", f"refs/heads/{branch}"], repo).strip()
     commit = published if state == "identity" else local
@@ -406,22 +484,39 @@ def _attach(workspace: Workspace, repo: Path, remote_url: str) -> Workspace:
                 if not has_origin:
                     run_git(["remote", "remove", "origin"], repo)
                 raise explained from None
-    if state == "identity":
-        run_git(["fetch", "--quiet", "--no-tags", "origin",
-                 f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], repo,
-                error_code="fetch_failed", token=token)
-        fetched = run_git(["rev-parse", f"refs/remotes/origin/{branch}"], repo).strip()
-        if fetched != commit:
-            raise RepoError("remote_partial", "La branche distante a changé pendant le "
-                            "rattachement : réessayer.")
-    else:
-        run_git(["update-ref", f"refs/remotes/origin/{branch}", commit], repo)
-    run_git(["merge", "--quiet", "--ff-only", commit], repo)
-    run_git(["branch", f"--set-upstream-to=origin/{branch}", branch], repo)
-    updated = workspace.model_copy(update={
-        "git_remote": remote_url, "account": account,
-        **_profile(read_governance(repo), account)})
-    update_workspace(updated)
+    # La publication est faite : tout échec d'ici à la fin laisse le dépôt publié et l'espace
+    # local, et un nouvel essai termine le rattachement. L'erreur de git n'est jamais rendue.
+    step = "récupération de la branche publiée"
+    try:
+        if state == "identity":
+            run_git(["fetch", "--quiet", "--no-tags", "origin",
+                     f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], repo,
+                    error_code="fetch_failed", token=token)
+            fetched = run_git(["rev-parse", f"refs/remotes/origin/{branch}"], repo).strip()
+            if fetched != commit:
+                raise RepoError("remote_partial", "La branche distante a changé pendant le "
+                                "rattachement : réessayer.")
+        else:
+            run_git(["update-ref", f"refs/remotes/origin/{branch}", commit], repo)
+        step = "avance de la branche locale"
+        run_git(["merge", "--quiet", "--ff-only", commit], repo)
+        step = "branche suivie"
+        run_git(["branch", f"--set-upstream-to=origin/{branch}", branch], repo)
+        step = "lecture de la gouvernance"
+        profile = _profile(read_governance(repo), account)
+        step = "enregistrement de l'espace"
+        updated = workspace.model_copy(update={
+            "git_remote": remote_url, "account": account, **profile})
+        update_workspace(updated)
+    except (RepoError, OSError, ValueError, yaml.YAMLError) as error:
+        if isinstance(error, RepoError) and error.code == "remote_partial":
+            raise
+        logger.warning("Rattachement inachevé après la publication (%s, %s).", step,
+                       getattr(error, "code", type(error).__name__))
+        raise RepoError(
+            "attach_incomplete", "Le dépôt est publié, mais l'espace n'a pas pu finir de s'y "
+            f"rattacher sur ce poste (étape : {step}). Un nouvel essai termine le "
+            "rattachement, sans refaire la publication.") from error
     return updated
 
 

@@ -38,6 +38,7 @@ ERROR_STATUS = {
     "remote_exists": 409,
     "origin_conflict": 409,
     "remote_partial": 409,
+    "attach_incomplete": 409,  # publié, à terminer : un nouvel essai suffit
     "remote_not_empty": 409,
     "workspace_dirty": 409,
     "wrong_branch": 409,
