@@ -1335,7 +1335,7 @@ Plan 0033, critère 2 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-02]`
 - **Quand** je tente de rattacher chacun
 - **Alors** une alerte nomme la cause (« Adresse de dépôt invalide », « Dépôt introuvable », « Ce dépôt n'est pas vide », « Pas de droit d'écriture sur ce dépôt ») ; le bouton reste actif, la région indique toujours « Pas encore de dépôt distant », et aucune alerte ne contient de jeton
 - **Et** le clone n'a pas de remote et son `HEAD` n'a pas bougé ; le dépôt plein garde sa branche, les dépôts en lecture seule et archivé n'ont aucune référence ; l'API rend toujours `git_remote` vide
-- Limite : chaque code est testé en Vitest (`app/src/screens/Rattachement.test.tsx` › `[S-0033-02]`) et par `core/tests/repo/test_set_remote.py` ; un push refusé par un hook ou une règle de branche réelle n'est exercé que par le core.
+- Limite : chaque code est testé en Vitest (`app/src/screens/Rattachement.test.tsx` › `[S-0033-02]`) et par `core/tests/repo/test_set_remote.py` ; un push refusé par un hook ou une règle de branche réelle n'est exercé que par le core. Les codes `origin_conflict` (adresse trouvée, identifiant masqué) et `attach_incomplete` (dépôt publié, un nouvel essai termine) sont rendus en Vitest, dont le second essai ; les étapes qui échouent après le push, l'équivalence des écritures d'`origin` et l'absence d'appel réseau avant `origin_conflict` sont des tests core (`core/tests/repo/test_set_remote.py`).
 
 ### S-0033-03 — Une adresse GitHub demande d'abord la connexion
 Plan 0033, critère 3 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-03]`

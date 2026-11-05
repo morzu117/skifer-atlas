@@ -255,7 +255,8 @@ describe("Administration d'un espace sans dépôt distant", () => {
     ["remote_not_found", 422, "Dépôt introuvable", /le compte GitHub connecté doit y avoir accès/],
     ["remote_not_writable", 422, "Pas de droit d'écriture sur ce dépôt", /lecture seule ou dépôt archivé/],
     ["remote_partial", 409, "Rattachement interrompu", /reconnectez-vous à GitHub avec claire-m/],
-    ["origin_conflict", 409, "Adresse origin différente", /configuration origin différente/],
+    ["origin_conflict", 409, "Adresse origin différente", /origin pointe sur https:\/\/\*\*\*@example\.org\/o\/r\.git/],
+    ["attach_incomplete", 409, "Dépôt publié, rattachement à terminer", /Rattachez de nouveau avec la même adresse : le nouvel essai termine le rattachement/],
     ["remote_exists", 409, "Espace déjà rattaché", /rien n'a été modifié/],
     ["invalid_remote", 422, "Adresse de dépôt invalide", /HTTPS, SSH/],
     ["credentials_in_url", 422, "Adresse avec identifiants", /Retirez l'identifiant/],
@@ -263,8 +264,12 @@ describe("Administration d'un espace sans dépôt distant", () => {
     ["push_failed", 502, "L'envoi vers le dépôt a échoué", /l'espace reste local/],
     ["host_unreachable", 502, "Dépôt injoignable", /la connexion/],
   ])("[S-0033-02] %s : l'erreur dit pourquoi et le formulaire reste utilisable", async (code, status, title, text) => {
-    server(() => code === "remote_partial"
-      ? { status, json: { detail: { code, message: "Publié sous claire-m : reconnectez-vous à GitHub avec claire-m." } } }
+    const messages: Record<string, string> = {
+      remote_partial: "Publié sous claire-m : reconnectez-vous à GitHub avec claire-m.",
+      origin_conflict: "Le clone de l'espace a déjà un « origin » qui diffère : origin pointe sur https://***@example.org/o/r.git.",
+    };
+    server(() => code in messages
+      ? { status, json: { detail: { code, message: messages[code] } } }
       : failure(status, code));
     render(<Screen />);
     const form = await attachment();
@@ -334,5 +339,30 @@ describe("rattacher à GitHub (plan 0033)", () => {
     await userEvent.type(form.getByLabelText(/^Adresse du dépôt vide/), "/depots/x.git");
     await form.findByRole("button", { name: "Rattacher le dépôt" });
     expect(fake.calls.some((c) => c.path === `${API}/github`)).toBe(false);
+  });
+});
+
+describe("rattachement à terminer après la publication (plan 0033, #143)", () => {
+  it("[S-0033-02] attach_incomplete dit que le dépôt est publié, sans la sortie de git, et un nouvel essai termine", async () => {
+    let attempts = 0;
+    const fake = server(() => {
+      attempts += 1;
+      return attempts === 1
+        ? { status: 409, json: { detail: { code: "attach_incomplete", message: "Le dépôt est publié (étape : avance de la branche locale). fatal: jeton gho_SECRET" } } }
+        : { json: { ...local, git_remote: "/depots/perrault.git", account: "anna.k" } };
+    });
+    render(<Screen />);
+    const form = await attachment();
+    await userEvent.type(form.getByLabelText(/^Adresse du dépôt vide/), "/depots/perrault.git");
+    await userEvent.click(form.getByRole("button", { name: "Rattacher le dépôt" }));
+    const alert = await form.findByRole("alert");
+    expect(alert).toHaveTextContent("Dépôt publié, rattachement à terminer");
+    expect(alert).toHaveTextContent("Le dépôt a bien reçu l'espace");
+    expect(alert).not.toHaveTextContent(/fatal|gho_SECRET/);
+    expect(form.getByRole("button", { name: "Rattacher le dépôt" })).toBeEnabled();
+
+    await userEvent.click(form.getByRole("button", { name: "Rattacher le dépôt" }));
+    expect(await within(await repository()).findByText(/Dépôt rattaché : l'espace est publié sur \/depots\/perrault\.git/)).toBeInTheDocument();
+    expect(fake.calls.filter((c) => c.path === `${API}/remote`)).toHaveLength(2);
   });
 });

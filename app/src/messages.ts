@@ -76,6 +76,10 @@ const KNOWN: Record<string, Explained> = {
     title: "Adresse origin différente",
     text: "Le clone possède déjà une configuration origin différente. Corrigez-la avant de réessayer.",
   },
+  attach_incomplete: {
+    title: "Dépôt publié, rattachement à terminer",
+    text: "Le dépôt a bien reçu l'espace, mais le rattachement n'a pas pu s'achever sur ce poste. Rattachez de nouveau avec la même adresse : le nouvel essai termine le rattachement, sans rien republier.",
+  },
   remote_exists: {
     title: "Espace déjà rattaché",
     text: "Cet espace a déjà un dépôt distant : rien n'a été modifié.",
@@ -95,8 +99,10 @@ export function explain(error: unknown): Explained {
     return { title: "Serveur local injoignable", text: "Réessayez dans un instant." };
   }
   if (error instanceof ApiError) {
-    if (error.code === "remote_partial") {
-      return { title: KNOWN.remote_partial.title, text: error.message };
+    // Messages du serveur, en français et sans sortie de git : ils disent quel compte,
+    // ou quelle adresse origin (identifiant masqué), est en cause.
+    if (error.code === "remote_partial" || error.code === "origin_conflict") {
+      return { title: KNOWN[error.code].title, text: error.message };
     }
     return KNOWN[error.code] ?? { title: "L'opération a échoué", text: error.message };
   }

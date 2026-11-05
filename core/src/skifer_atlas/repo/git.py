@@ -135,6 +135,58 @@ def check_remote_url(url: str) -> None:
     raise RepoError("invalid_remote", "Adresse de dépôt invalide : utiliser HTTPS ou SSH.")
 
 
+_SCP_FORM = re.compile(r"(?:(?P<user>[^@/:]+)@)?(?P<host>[^@/:]+):(?P<path>.+)")
+
+
+def _scp(url: str) -> re.Match[str] | None:
+    """Syntaxe scp (`git@hôte:chemin`). Une lettre seule avant « : » est un lecteur Windows."""
+    found = _SCP_FORM.fullmatch(url)
+    return found if found and (found["user"] or len(found["host"]) > 1) else None
+
+
+def normalize_remote_url(url: str) -> str:
+    """Forme de comparaison de deux adresses de dépôt : `.git` et `/` finaux, casse du
+    schéma et de l'hôte sont sans effet. Le chemin garde sa casse, et un chemin local garde
+    son `.git` (`dépôt` et `dépôt.git` peuvent être deux dossiers). L'identifiant éventuel
+    est conservé : une adresse qui en porte un n'est jamais celle d'une adresse sans."""
+    url = url.strip()
+    if "://" in url:
+        scheme, _, rest = url.partition("://")
+        authority, slash, path = rest.partition("/")
+        userinfo, at, host = authority.rpartition("@")
+        path = path.rstrip("/")
+        if scheme.lower() in ("https", "http", "ssh"):
+            path = path.removesuffix(".git").rstrip("/")
+        return f"{scheme.lower()}://{userinfo}{at}{host.lower()}{slash}{path}"
+    scp = _scp(url)
+    if scp:
+        user = f"{scp['user']}@" if scp["user"] else ""
+        path = scp["path"].rstrip("/").removesuffix(".git").rstrip("/")
+        return f"{user}{scp['host'].lower()}:{path}"
+    return url.rstrip("/") or url
+
+
+def mask_remote_url(url: str) -> str:
+    """L'adresse prête à être montrée, sans rien de secret : l'identifiant (un jeton mis à la
+    main dans `origin`, par exemple) devient `***`, comme la query string et le fragment
+    (`?token=…`), remplacés par `?***` et `#***`. Seul `git`, l'utilisateur SSH habituel,
+    reste. Toute adresse configurée montrée à l'utilisateur passe par cette fonction."""
+    def hide(user: str) -> str:
+        return user if user == "git" else "***"
+
+    base = re.split(r"[?#]", url, maxsplit=1)[0]
+    suffix = ("?***" if "?" in url.split("#", 1)[0] else "") + ("#***" if "#" in url else "")
+    if "://" in base:
+        scheme, _, rest = base.partition("://")
+        authority, slash, path = rest.partition("/")
+        userinfo, at, host = authority.rpartition("@")
+        return f"{scheme}://{hide(userinfo) + at if at else ''}{host}{slash}{path}{suffix}"
+    scp = _scp(base)
+    if scp and scp["user"]:
+        return f"{hide(scp['user'])}@{scp['host']}:{scp['path']}{suffix}"
+    return base + suffix
+
+
 def head(repo: Path) -> str:
     return run_git(["rev-parse", "HEAD"], repo).strip()
 

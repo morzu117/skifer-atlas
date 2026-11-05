@@ -8,6 +8,7 @@ l'API (`/user`, `/repos/…`) et `url.<dépôts>.insteadOf` redirige les adresse
 import json
 import os
 import subprocess
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -22,6 +23,7 @@ from skifer_atlas.governance.model import (
     Governance,
     Member,
     MemberRole,
+    dump_governance,
     initial_governance,
     rename_account,
     role_of,
@@ -29,7 +31,8 @@ from skifer_atlas.governance.model import (
 from skifer_atlas.proposals.common import open_context
 from skifer_atlas.repo import RepoError
 from skifer_atlas.repo import sync as repo_sync
-from skifer_atlas.repo.layout import WorkspaceMeta
+from skifer_atlas.repo.git import mask_remote_url, normalize_remote_url
+from skifer_atlas.repo.layout import WorkspaceMeta, read_governance
 from skifer_atlas.repo.sync import create_workspace, set_remote
 from skifer_atlas.vault import GITHUB_ENTRY, Credential, Vault
 from skifer_atlas.vault.keyring_vault import _memory
@@ -563,8 +566,9 @@ def test_retry_after_registry_failure_finishes_attachment(atlas_env, request, tm
         def fail_update(workspace):
             raise OSError("écriture simulée")
         patch.setattr(repo_sync, "update_workspace", fail_update)
-        with pytest.raises(OSError):
+        with pytest.raises(RepoError) as interrupted:
             set_remote(META.id, url)
+    assert interrupted.value.code == "attach_incomplete"
     assert not get_workspace(META.id).git_remote
     repo = repo_dir(META.id)
     published = git(bare, "rev-parse", "main").strip()
@@ -888,8 +892,9 @@ def test_account_change_after_registry_failure_is_partial(identity_host, tmp_pat
             raise OSError("écriture simulée")
 
         patch.setattr(repo_sync, "update_workspace", fail_update)
-        with pytest.raises(OSError):
+        with pytest.raises(RepoError) as interrupted:
             set_remote(META.id, str(bare))
+    assert interrupted.value.code == "attach_incomplete"
     with monkeypatch.context() as patch:
         patch.setattr(identity_host, "current_account", lambda self: "autre")
         with pytest.raises(RepoError, match="nouveau") as error:
@@ -916,8 +921,8 @@ def test_foreign_history_is_inspected_shallowly(atlas_env, tmp_path, monkeypatch
             if args[0] == "fetch":
                 staging = a[0]
                 observed.append((args, git(staging, "rev-list", "--count", "FETCH_HEAD").strip()))
-                with pytest.raises(subprocess.CalledProcessError):
-                    git(staging, "cat-file", "-e", f"{oldest}^{{commit}}")
+                # Pas de `cat-file -e` : sur un dépôt « promisor », il irait chercher le commit.
+                assert oldest not in git(staging, "rev-list", "FETCH_HEAD").split()
             return result
 
         patch.setattr(repo_sync, "run_git", observe)
@@ -1027,7 +1032,11 @@ def test_differently_cased_remote_does_not_conflict(atlas_env, tmp_path):
     assert set_remote(META.id, str(bare)).git_remote == str(bare)
 
 
-def test_ahead_push_rejected_when_remote_advances_removes_origin(atlas_env, tmp_path, monkeypatch):
+@pytest.mark.parametrize("had_origin", [False, True])
+def test_ahead_push_rejected_when_remote_advances_removes_origin(atlas_env, tmp_path, monkeypatch,
+                                                                 had_origin):
+    """Push non rapide : jamais forcé. La branche du dépôt nu reste le commit concurrent ;
+    `origin` n'est retiré que s'il a été ajouté par ce rattachement."""
     create_workspace(META)
     bare = bare_repository(tmp_path)
     repo = repo_dir(META.id)
@@ -1036,20 +1045,26 @@ def test_ahead_push_rejected_when_remote_advances_removes_origin(atlas_env, tmp_
     git(tmp_path, "clone", "--quiet", str(bare), str(work))
     (repo / "notes.md").write_text("local\n", encoding="utf-8")
     commit_all(repo, "suite locale")
+    if had_origin:
+        git(repo, "remote", "add", "origin", str(bare))
     original = repo_sync._require_empty
+    concurrent = []
     with monkeypatch.context() as patch:
         def advance(*args):
             result = original(*args)
             (work / "notes.md").write_text("distant\n", encoding="utf-8")
             commit_all(work, "suite distante")
             git(work, "push", "--quiet", str(bare), "main")
+            concurrent.append(git(work, "rev-parse", "HEAD").strip())
             return result
 
         patch.setattr(repo_sync, "_require_empty", advance)
         with pytest.raises(RepoError) as error:
             set_remote(META.id, str(bare))
     assert error.value.code == "remote_not_empty"
-    assert not git(repo, "remote").strip()
+    assert git(bare, "rev-parse", "main").strip() == concurrent[0]  # pas de push forcé
+    assert git(bare, "log", "--format=%s", "main").splitlines()[0] == "suite distante"
+    assert git(repo, "remote").split() == (["origin"] if had_origin else [])
     assert not get_workspace(META.id).git_remote
 
 
@@ -1071,3 +1086,468 @@ def test_known_commit_is_inspected_without_fetch(atlas_env, tmp_path, monkeypatc
         patch.setattr(repo_sync, "run_git", no_fetch)
         attached = set_remote(META.id, str(bare))
     assert attached.git_remote == str(bare)
+
+
+# --- suivi de #143 : clone divergé, fetch filtré, origin, erreurs après publication --------
+
+def publish_identity_elsewhere(tmp_path, bare, *, large=False, allow_filter=False):
+    """Le commit d'identité (« ancien » devient « nouveau ») est publié par un autre clone :
+    celui de l'espace ne l'a pas. Avec `large`, `governance.yaml` dépasse 1 Ko, le seuil du
+    filtre `blob:limit=1k`. Rend le commit publié."""
+    repo = repo_dir(META.id)
+    if allow_filter:
+        git(bare, "config", "uploadpack.allowFilter", "true")
+    if large:
+        governance = read_governance(repo)
+        members = [Member(account=f"membre-{i:02d}", name=f"Membre numéro {i:02d}",
+                          roles=[MemberRole(role="lecteur")]) for i in range(20)]
+        governance = governance.model_copy(update={"members": [*governance.members, *members]})
+        (repo / "governance.yaml").write_text(dump_governance(governance), encoding="utf-8")
+        commit_all(repo, "gouvernance élargie")
+        assert len((repo / "governance.yaml").read_bytes()) > 1024
+    work = tmp_path / "autre-clone"
+    git(tmp_path, "clone", "--quiet", str(repo), str(work))
+    renamed = rename_account(read_governance(work), "ancien", "nouveau")
+    (work / "governance.yaml").write_text(dump_governance(renamed), encoding="utf-8")
+    commit_all(work, "identité publiée ailleurs")
+    git(work, "push", "--quiet", str(bare), "main")
+    return git(bare, "rev-parse", "main").strip()
+
+
+def observe_fetches(patch):
+    """Les `fetch` de l'inspection : arguments, objets absents du dépôt temporaire, et
+    existence du dossier temporaire pendant le fetch."""
+    original = repo_sync.run_git
+    seen = []
+
+    def observe(args, *a, **kw):
+        result = original(args, *a, **kw)
+        if args[0] == "fetch" and a and "atlas-attach-" in str(a[0]):
+            missing = [line[1:] for line in git(a[0], "rev-list", "--objects", "--missing=print",
+                                                 "FETCH_HEAD").splitlines()
+                       if line.startswith("?")]
+            seen.append({"args": args, "missing": missing, "folder": a[0].exists()})
+        return result
+
+    patch.setattr(repo_sync, "run_git", observe)
+    return seen
+
+
+# Clone divergé (issue #143, case 1)
+
+@pytest.mark.parametrize("divergence", ["amend", "reset"])
+def test_identity_published_then_clone_rewritten_is_a_diverged_partial(
+        identity_host, tmp_path, monkeypatch, divergence):
+    """Un `commit --amend` ou un `reset` local, après une publication interrompue, retire le
+    parent du commit d'identité de la branche : `remote_partial` « clone divergé », et non
+    `remote_not_empty`, qui ferait croire à un dépôt étranger."""
+    repo = repo_dir(META.id)
+    if divergence == "reset":
+        (repo / "notes.md").write_text("suite locale\n", encoding="utf-8")
+        commit_all(repo, "suite locale")
+    bare = bare_repository(tmp_path)
+    interrupted_identity(bare, monkeypatch)
+    if divergence == "amend":
+        git(repo, "commit", "--quiet", "--amend", "-m", "message réécrit")
+    else:
+        git(repo, "reset", "--quiet", "--hard", "HEAD~1")
+    before = workspace_state()
+    remote_before = git(bare, "for-each-ref")
+    with pytest.raises(RepoError) as error:
+        set_remote(META.id, str(bare))
+    assert error.value.code == "remote_partial"
+    assert "Clone divergé" in error.value.message
+    assert workspace_state() == before and git(bare, "for-each-ref") == remote_before
+    client = TestClient(create_app(token="secret"), headers=AUTH)
+    answer = client.post(f"/api/workspaces/{META.id}/remote", json={"remote_url": str(bare)})
+    assert (answer.status_code, answer.json()["detail"]["code"]) == (409, "remote_partial")
+
+
+def test_a_clone_diverged_after_an_unknown_identity_publication_is_partial(
+        identity_host, tmp_path):
+    """Même cas quand le commit d'identité vient d'un autre clone (fetch d'inspection)."""
+    bare = bare_repository(tmp_path)
+    repo = repo_dir(META.id)
+    publish_identity_elsewhere(tmp_path, bare)
+    git(repo, "commit", "--quiet", "--amend", "-m", "message réécrit")
+    with pytest.raises(RepoError) as error:
+        set_remote(META.id, str(bare))
+    assert (error.value.code, "Clone divergé" in error.value.message) == ("remote_partial", True)
+
+
+# Fetch d'inspection filtré (issue #143, case 2)
+
+@pytest.mark.parametrize("allow_filter", [True, False])
+def test_foreign_snapshot_is_fetched_without_big_blobs(atlas_env, tmp_path, monkeypatch,
+                                                       allow_filter):
+    """`--filter=blob:limit=1k` : le gros fichier n'est pas téléchargé quand le serveur
+    accepte le filtre ; sinon Git l'ignore avec un avertissement et l'inspection aboutit."""
+    create_workspace(META)
+    bare = bare_repository(tmp_path)
+    if allow_filter:
+        git(bare, "config", "uploadpack.allowFilter", "true")
+    work = tmp_path / "etranger"
+    seed(bare, work)
+    (work / "gros.bin").write_text("x" * 5000, encoding="utf-8")
+    commit_all(work, "gros fichier")
+    git(work, "push", "--quiet", str(bare), "main")
+    big = git(work, "rev-parse", "HEAD:gros.bin").strip()
+    before = workspace_state()
+    with monkeypatch.context() as patch:
+        seen = observe_fetches(patch)
+        with pytest.raises(RepoError) as error:
+            set_remote(META.id, str(bare))
+    assert error.value.code == "remote_not_empty"
+    assert len(seen) == 1 and "--filter=blob:limit=1k" in seen[0]["args"]
+    assert seen[0]["missing"] == ([big] if allow_filter else [])
+    assert workspace_state() == before
+
+
+@pytest.mark.parametrize("allow_filter", [True, False])
+@pytest.mark.parametrize("large", [False, True])
+def test_identity_is_recognised_whatever_the_size_of_the_governance(
+        identity_host, tmp_path, monkeypatch, allow_filter, large):
+    """Le contenu se compare par identifiant d'objet : un `governance.yaml` de plus de 1 Ko,
+    omis par le filtre, n'empêche pas de reconnaître le commit d'identité."""
+    bare = bare_repository(tmp_path)
+    published = publish_identity_elsewhere(tmp_path, bare, large=large, allow_filter=allow_filter)
+    repo = repo_dir(META.id)
+    blob = git(bare, "rev-parse", "main:governance.yaml").strip()
+    with monkeypatch.context() as patch:
+        seen = observe_fetches(patch)
+        attached = set_remote(META.id, str(bare))
+    assert (attached.account, attached.role) == ("nouveau", "referent")
+    assert git(repo, "rev-parse", "main").strip() == published
+    assert "--filter=blob:limit=1k" in seen[0]["args"]
+    assert (blob in seen[0]["missing"]) == (large and allow_filter)  # omis, jamais lu
+    assert git(repo, "rev-parse", "--is-shallow-repository").strip() == "false"
+
+
+@pytest.mark.parametrize("allow_filter", [True, False])
+def test_another_published_account_with_a_large_governance_is_still_explained(
+        identity_host, tmp_path, monkeypatch, allow_filter):
+    """Le compte publié n'est pas le compte courant : il faut lire le fichier. Omis par le
+    filtre, il est récupéré seul ; l'erreur dit le compte publié."""
+    bare = bare_repository(tmp_path)
+    publish_identity_elsewhere(tmp_path, bare, large=True, allow_filter=allow_filter)
+    with monkeypatch.context() as patch:
+        patch.setattr(identity_host, "current_account", lambda self: "autre")
+        with pytest.raises(RepoError, match="nouveau") as error:
+            set_remote(META.id, str(bare))
+    assert error.value.code == "remote_partial"
+
+
+def test_a_server_that_fails_on_the_filter_gets_a_second_unfiltered_fetch(
+        atlas_env, tmp_path, monkeypatch):
+    create_workspace(META)
+    bare = bare_repository(tmp_path)
+    seed(bare, tmp_path / "etranger")
+    original = repo_sync.run_git
+    fetches = []
+    with monkeypatch.context() as patch:
+        def refuse_filter(args, *a, **kw):
+            if args[0] == "fetch":
+                fetches.append(args)
+                if any(arg.startswith("--filter") for arg in args):
+                    raise RepoError("git_failed", "échec", output="fatal: filter not supported")
+            return original(args, *a, **kw)
+
+        patch.setattr(repo_sync, "run_git", refuse_filter)
+        with pytest.raises(RepoError) as error:
+            set_remote(META.id, str(bare))
+    assert error.value.code == "remote_not_empty"
+    assert [any(arg.startswith("--filter") for arg in args) for args in fetches] == [True, False]
+
+
+def test_a_timeout_on_the_filtered_fetch_is_not_retried(atlas_env, tmp_path, monkeypatch):
+    create_workspace(META)
+    bare = bare_repository(tmp_path)
+    seed(bare, tmp_path / "etranger")
+    original = repo_sync.run_git
+    fetches = []
+    with monkeypatch.context() as patch:
+        def slow(args, *a, **kw):
+            if args[0] == "fetch":
+                fetches.append(args)
+                raise RepoError("git_timeout", "délai dépassé")
+            return original(args, *a, **kw)
+
+        patch.setattr(repo_sync, "run_git", slow)
+        with pytest.raises(RepoError) as error:
+            set_remote(META.id, str(bare))
+    assert error.value.code == "host_unreachable" and len(fetches) == 1
+
+
+# Dépôt temporaire (issue #143, case 3)
+
+@pytest.mark.parametrize("outcome", ["refus", "fetch en échec", "branche changée", "succès"])
+def test_the_inspection_folder_is_always_removed(identity_host, tmp_path, monkeypatch, outcome):
+    scratch = tmp_path / "temporaire"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+    bare = bare_repository(tmp_path)
+    if outcome == "succès":
+        publish_identity_elsewhere(tmp_path, bare)
+    else:
+        seed(bare, tmp_path / "etranger")
+    original = repo_sync.run_git
+    folders = []
+    with monkeypatch.context() as patch:
+        def intercept(args, *a, **kw):
+            if args[0] == "fetch" and a and "atlas-attach-" in str(a[0]):
+                folders.append(a[0].exists())
+                if outcome == "fetch en échec":
+                    raise RepoError("git_failed", "échec", output="Authentication failed")
+            result = original(args, *a, **kw)
+            if outcome == "branche changée" and args == ["rev-parse", "FETCH_HEAD"]:
+                return "0" * 40 + "\n"
+            return result
+
+        patch.setattr(repo_sync, "run_git", intercept)
+        if outcome == "succès":
+            assert set_remote(META.id, str(bare)).role == "referent"
+        else:
+            with pytest.raises(RepoError) as error:
+                set_remote(META.id, str(bare))
+            assert error.value.code == {"refus": "remote_not_empty",
+                                        "fetch en échec": "host_auth_failed",
+                                        "branche changée": "remote_partial"}[outcome]
+    assert folders == [True]  # le dossier existait pendant le fetch
+    assert list(scratch.iterdir()) == []  # et il a disparu, y compris sur erreur
+
+
+# Origin préexistant (issue #143, cases 3 et 4)
+
+def test_a_matching_origin_survives_a_refused_push(atlas_env, tmp_path):
+    create_workspace(META)
+    bare = bare_repository(tmp_path)
+    hook = bare / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'refus de test' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    repo = repo_dir(META.id)
+    git(repo, "remote", "add", "origin", str(bare))
+    before = workspace_state()
+    with pytest.raises(RepoError) as error:
+        set_remote(META.id, str(bare))
+    assert error.value.code == "push_failed"
+    assert git(repo, "remote").split() == ["origin"]
+    assert git(repo, "config", "--get-all", "remote.origin.url").split() == [str(bare)]
+    assert workspace_state() == before
+    assert not git(bare, "for-each-ref").strip()
+
+
+@pytest.mark.parametrize("variant", ["slash", "sans .git", "slash après .git"])
+def test_equivalent_origin_spellings_do_not_conflict(github, variant):
+    create_workspace(META)
+    url, bare = github["repository"]("equivalent")
+    origin = {"slash": url + "/", "sans .git": url.removesuffix(".git"),
+              "slash après .git": url + "/"}[variant]
+    repo = repo_dir(META.id)
+    git(repo, "remote", "add", "origin", origin)
+    attached = set_remote(META.id, url)
+    assert (attached.git_remote, attached.role) == (url, "referent")
+    assert git(repo, "config", "--get-all", "remote.origin.url").split() == [origin]
+    assert git(bare, "rev-parse", "main").strip() == git(repo, "rev-parse", "main").strip()
+
+
+def test_a_local_origin_with_a_trailing_slash_does_not_conflict(atlas_env, tmp_path):
+    create_workspace(META)
+    bare = bare_repository(tmp_path)
+    git(repo_dir(META.id), "remote", "add", "origin", f"{bare}/")
+    assert set_remote(META.id, str(bare)).git_remote == str(bare)
+
+
+@pytest.mark.parametrize(("left", "right"), [
+    ("https://github.com/nordis/x.git", "https://GitHub.COM/nordis/x"),
+    ("https://github.com/nordis/x.git/", "https://github.com/nordis/x"),
+    ("HTTPS://github.com/nordis/x", "https://github.com/nordis/x.git"),
+    ("git@github.com:nordis/x.git", "git@GitHub.com:nordis/x/"),
+    ("ssh://git@github.com/nordis/x.git", "ssh://git@GITHUB.com/nordis/x"),
+    ("/depots/x.git/", "/depots/x.git"),
+])
+def test_equivalent_remote_urls_normalize_alike(left, right):
+    assert normalize_remote_url(left) == normalize_remote_url(right)
+
+
+@pytest.mark.parametrize(("left", "right"), [
+    ("https://github.com/nordis/x", "https://github.com/nordis/y"),
+    ("https://github.com/nordis/x", "https://github.com/Nordis/x"),  # le chemin garde sa casse
+    ("https://github.com/nordis/x", "https://jeton@github.com/nordis/x"),  # avec identifiant
+    ("https://github.com/nordis/x", "ssh://git@github.com/nordis/x"),
+    ("/depots/x", "/depots/x.git"),  # deux dossiers possibles
+])
+def test_different_remote_urls_stay_different(left, right):
+    assert normalize_remote_url(left) != normalize_remote_url(right)
+
+
+@pytest.mark.parametrize(("url", "shown"), [
+    ("https://ghp_abc:xyz@github.com/o/r.git", "https://***@github.com/o/r.git"),
+    ("https://ghp_abc@github.com/o/r", "https://***@github.com/o/r"),
+    ("https://example.com/r.git?token=SECRET", "https://example.com/r.git?***"),
+    ("https://example.com/r.git#SECRET", "https://example.com/r.git#***"),
+    ("https://example.com/r.git?token=SECRET#SECRET2", "https://example.com/r.git?***#***"),
+    ("https://u:p@example.com/r.git?a=b#c", "https://***@example.com/r.git?***#***"),
+    ("ssh://git@github.com/o/r", "ssh://git@github.com/o/r"),
+    ("ssh://git@github.com/o/r?k=SECRET", "ssh://git@github.com/o/r?***"),
+    ("git@github.com:o/r", "git@github.com:o/r"),
+    ("git@github.com:o/r.git?k=SECRET", "git@github.com:o/r.git?***"),
+    ("jeton@github.com:o/r", "***@github.com:o/r"),
+    ("/depots/x.git", "/depots/x.git"),
+    ("/depots/x.git/", "/depots/x.git/"),
+    ("/depots/x.git?k=SECRET", "/depots/x.git?***"),
+])
+def test_a_url_is_shown_without_userinfo_query_or_fragment(url, shown):
+    assert mask_remote_url(url) == shown
+    assert "SECRET" not in mask_remote_url(url)
+
+
+def test_origin_conflict_happens_before_any_network_call(github, monkeypatch):
+    """Ni API de l'hébergeur, ni `ls-remote`, `fetch` ou `push` avant le refus."""
+    create_workspace(META)
+    url, bare = github["repository"]("conflit")
+    repo = repo_dir(META.id)
+    git(repo, "remote", "add", "origin", "https://github.com/nordis/autre.git")
+    before = workspace_state()
+    original = repo_sync.run_git
+    git_calls = []
+    with monkeypatch.context() as patch:
+        def spy(args, *a, **kw):
+            git_calls.append(args[0])
+            return original(args, *a, **kw)
+
+        patch.setattr(repo_sync, "run_git", spy)
+        with pytest.raises(RepoError) as error:
+            set_remote(META.id, url)
+    assert error.value.code == "origin_conflict"
+    assert "https://github.com/nordis/autre.git" in error.value.message  # l'origin trouvé
+    assert not {"ls-remote", "fetch", "push", "clone"} & set(git_calls)
+    assert github["calls"] == []  # pas même l'API de l'hébergeur
+    assert workspace_state() == before and not git(bare, "for-each-ref").strip()
+
+
+@pytest.mark.parametrize("origin", [
+    "https://ghp_SECRET123:motdepasse456@example.org/o/r.git",
+    "https://ghp_SECRET123@example.org/o/r.git",
+    "https://example.org/o/r.git?token=ghp_SECRET123",
+    "https://example.org/o/r.git#ghp_SECRET123",
+    "https://example.org/o/r.git?token=ghp_SECRET123#motdepasse456",
+])
+@pytest.mark.parametrize("place", ["url", "pushurl"])
+def test_origin_conflict_never_shows_a_secret_of_the_configured_url(atlas_env, tmp_path, origin,
+                                                                    place):
+    """Identifiant, query string ou fragment d'un `origin` (ou d'un `pushurl`) mis à la main :
+    la réponse montre l'adresse, rien de secret."""
+    create_workspace(META)
+    bare = bare_repository(tmp_path)
+    repo = repo_dir(META.id)
+    git(repo, "remote", "add", "origin", str(bare))
+    if place == "url":
+        git(repo, "config", "remote.origin.url", origin)
+    else:
+        git(repo, "config", "remote.origin.pushurl", origin)
+    client = TestClient(create_app(token="secret"), headers=AUTH)
+    answer = client.post(f"/api/workspaces/{META.id}/remote", json={"remote_url": str(bare)})
+    assert (answer.status_code, answer.json()["detail"]["code"]) == (409, "origin_conflict")
+    assert "SECRET123" not in answer.text and "motdepasse456" not in answer.text
+    assert "example.org/o/r.git" in answer.json()["detail"]["message"]
+
+
+# Étapes après la publication (issue #143, case 5)
+
+SECRET = "gho_SECRET-de-git"
+
+
+def failing_step(step):
+    """Un `run_git` (ou une autre fonction) qui échoue à l'étape demandée, avec une sortie
+    de git qui contient un secret, une seule fois."""
+    original = repo_sync.run_git
+    done = []
+
+    def run(args, *a, **kw):
+        if args[0] == step and not done:
+            done.append(True)
+            raise RepoError("fetch_failed" if step == "fetch" else "git_failed", "échec simulé",
+                            output=f"fatal: https://x-access-token:{SECRET}@github.com/")
+        return original(args, *a, **kw)
+
+    return run
+
+
+@pytest.mark.parametrize("step", ["merge", "fetch", "branch", "read_governance", "update_workspace"])
+def test_a_failure_after_publication_is_attach_incomplete_then_a_retry_finishes(
+        identity_host, tmp_path, monkeypatch, step):
+    bare = bare_repository(tmp_path)
+    repo = repo_dir(META.id)
+    original = repo_sync.run_git
+    if step == "fetch":
+        interrupted_identity(bare, monkeypatch, "merge")  # le fetch ne sert qu'à la reprise
+    with monkeypatch.context() as patch:
+        if step in ("merge", "fetch", "branch"):
+            patch.setattr(repo_sync, "run_git", failing_step(step))
+        elif step == "read_governance":
+            reads = []
+            real = repo_sync.read_governance
+
+            def fail_second_read(root):
+                reads.append(root)
+                if len(reads) == 2:  # la première lecture précède le push
+                    raise ValueError(f"gouvernance illisible {SECRET}")
+                return real(root)
+
+            patch.setattr(repo_sync, "read_governance", fail_second_read)
+        else:
+            def fail_update(workspace):
+                raise OSError(f"écriture simulée {SECRET}")
+
+            patch.setattr(repo_sync, "update_workspace", fail_update)
+        with pytest.raises(RepoError) as error:
+            set_remote(META.id, str(bare))
+    assert error.value.code == "attach_incomplete"
+    assert "publié" in error.value.message and "nouvel essai" in error.value.message
+    assert SECRET not in error.value.message and "fatal" not in error.value.message
+    assert not get_workspace(META.id).git_remote
+    assert git(repo, "remote").split() == ["origin"]
+    published = git(bare, "rev-parse", "main").strip()
+    with monkeypatch.context() as patch:
+        def no_push(args, *a, **kw):
+            assert args[0] != "push"
+            return original(args, *a, **kw)
+
+        patch.setattr(repo_sync, "run_git", no_push)
+        attached = set_remote(META.id, str(bare))
+    assert (attached.git_remote, attached.account, attached.role) == (str(bare), "nouveau", "referent")
+    assert git(repo, "rev-parse", "main").strip() == published
+    assert git(repo, "rev-parse", "--abbrev-ref", "main@{upstream}").strip() == "origin/main"
+
+
+def test_a_failure_after_publication_is_reported_by_the_route_without_git_output(
+        atlas_env, tmp_path, monkeypatch):
+    create_workspace(META)
+    bare = bare_repository(tmp_path)
+    client = TestClient(create_app(token="secret"), headers=AUTH)
+    with monkeypatch.context() as patch:
+        patch.setattr(repo_sync, "run_git", failing_step("merge"))
+        answer = client.post(f"/api/workspaces/{META.id}/remote", json={"remote_url": str(bare)})
+    assert (answer.status_code, answer.json()["detail"]["code"]) == (409, "attach_incomplete")
+    assert SECRET not in answer.text and "fatal" not in answer.text
+    assert "publié" in answer.json()["detail"]["message"]
+    retried = client.post(f"/api/workspaces/{META.id}/remote", json={"remote_url": str(bare)})
+    assert retried.status_code == 200 and retried.json()["git_remote"] == str(bare)
+
+
+def test_a_branch_changed_during_the_attachment_stays_partial_not_incomplete(
+        identity_host, tmp_path, monkeypatch):
+    bare = bare_repository(tmp_path)
+    interrupted_identity(bare, monkeypatch, "merge")
+    original = repo_sync.run_git
+    with monkeypatch.context() as patch:
+        def moved(args, *a, **kw):
+            result = original(args, *a, **kw)
+            if args == ["rev-parse", "refs/remotes/origin/main"]:
+                return "0" * 40 + "\n"
+            return result
+
+        patch.setattr(repo_sync, "run_git", moved)
+        with pytest.raises(RepoError) as error:
+            set_remote(META.id, str(bare))
+    assert error.value.code == "remote_partial" and "rattachement" in error.value.message
