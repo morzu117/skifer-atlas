@@ -183,6 +183,11 @@ _DENIED = ("permission to", "denied to", "returned error: 403", "protected branc
 _STALE = ("non-fast-forward", "fetch first", "[rejected]")
 
 
+# Ajouté aux refus qu'une réinitialisation du rattachement (plan 0034) peut lever.
+_RESET_HINT = (" Vous pouvez aussi réinitialiser le rattachement : seule la copie locale "
+               "change, le dépôt distant n'est pas modifié.")
+
+
 def _explain_git(error: RepoError, push: bool = False) -> RepoError:
     """Le `RepoError` d'une commande git sur le dépôt distant, avec un code qui dit
     pourquoi (plan 0033). La sortie de git ne remonte jamais à l'API."""
@@ -228,6 +233,14 @@ def _blob_id(repo: Path, text: str) -> str:
         source = Path(folder) / "blob"
         source.write_bytes(text.encode("utf-8"))
         return run_git(["hash-object", "--no-filters", str(source)], repo).strip()
+
+
+def _identity_message(local: str, published: str) -> str:
+    """Message du commit d'identité du créateur : sa signature, que la réinitialisation exige
+    (plan 0034) pour ne défaire que les commits créés par `_attach`."""
+    return (f"Identité du créateur : {local} devient {published}\n\n"
+            f"« {local} » était l'identité locale du créateur de l'espace ; "
+            f"l'hébergeur l'authentifie sous « {published} ». Ses rôles sont conservés.")
 
 
 def _identity_commit(repo: Path, commit: str, old_account: str, known_repo: Path,
@@ -323,18 +336,18 @@ def _require_empty(remote_url: str, token: str | None, repo: Path, branch: str,
                     "commit qui n'est plus dans la branche locale (après un « git commit "
                     "--amend » ou un « git reset »). Rétablissez la branche locale sur ce "
                     "commit, ou récupérez la publication avec « git fetch origin » et "
-                    "rebasez vos commits dessus, avant de réessayer.")
+                    "rebasez vos commits dessus, avant de réessayer." + _RESET_HINT)
             if published_account != account:
                 raise RepoError("remote_partial", "L'espace a été publié sous le compte "
                                 f"« {published_account} » : reconnectez-vous à GitHub "
-                                f"avec {published_account}, puis réessayez.")
+                                f"avec {published_account}, puis réessayez." + _RESET_HINT)
             if parent == local:
                 return remote, "identity"
             if remote != local and not _is_ancestor(repo, remote, local):
                 raise RepoError(
                     "remote_partial", "Le clone a évolué depuis la publication partielle. "
                     "Récupérez-la avec « git fetch origin », puis rebasez vos commits "
-                    "locaux dessus ou annulez-les, avant de réessayer.")
+                    "locaux dessus ou annulez-les, avant de réessayer." + _RESET_HINT)
         if remote == local:
             return remote, "same"
         if _is_ancestor(repo, remote, local):
@@ -360,9 +373,11 @@ def set_remote(workspace_id: str, remote_url: str) -> Workspace:
         return _attach(workspace, repo, remote_url)
 
 
-def _require_main_checked_out(repo: Path, branch: str) -> None:
+def _require_main_checked_out(repo: Path, branch: str,
+                              then: str = "rattacher le dépôt") -> None:
     """Atlas ne change jamais de branche dans le clone ; après un `git checkout` à la main,
-    l'avance rapide qui suit le push ferait avancer une autre branche que la principale."""
+    l'avance rapide qui suit le push ferait avancer une autre branche que la principale.
+    `then` complète le message : ce qu'il faut faire une fois la branche rétablie."""
     try:
         current = run_git(["symbolic-ref", "-q", "HEAD"], repo).strip()
     except RepoError:
@@ -370,14 +385,14 @@ def _require_main_checked_out(repo: Path, branch: str) -> None:
     if current != f"refs/heads/{branch}":
         shown = current.removeprefix("refs/heads/") or "aucune (HEAD détachée)"
         raise RepoError("wrong_branch", f"La branche « {shown} » est extraite dans le clone de "
-                        f"l'espace : revenir sur « {branch} », puis rattacher le dépôt.")
+                        f"l'espace : revenir sur « {branch} », puis {then}.")
 
 
 # Fichiers que git pose dans son dossier pendant une opération inachevée.
 _OPERATIONS = ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply")
 
 
-def _require_no_operation_in_progress(repo: Path) -> None:
+def _require_no_operation_in_progress(repo: Path, then: str = "rattacher le dépôt") -> None:
     """Ni conflit non résolu ni fusion, cherry-pick, revert ou rebase en cours : l'avance
     rapide qui suit le push échouerait, après la publication."""
     unmerged = run_git(["ls-files", "-u"], repo).strip()
@@ -386,10 +401,10 @@ def _require_no_operation_in_progress(repo: Path) -> None:
     if unmerged or running:
         raise RepoError("workspace_dirty", "Une fusion (ou une opération git) est en cours "
                         "dans le clone de l'espace, ou un conflit n'y est pas résolu : la "
-                        "terminer ou l'abandonner, puis rattacher le dépôt.")
+                        f"terminer ou l'abandonner, puis {then}.")
 
 
-def _require_clean_governance(repo: Path) -> None:
+def _require_clean_governance(repo: Path, then: str = "rattacher le dépôt") -> None:
     """`governance.yaml` n'a aucun changement local, enregistré dans l'index ou non. Toujours
     vérifié, qu'il y ait un compte à réécrire ou non : l'avance rapide qui suit le push
     réécrit ce fichier et échouerait, après la publication, sur un fichier modifié ; et la
@@ -398,7 +413,7 @@ def _require_clean_governance(repo: Path) -> None:
     if run_git(["status", "--porcelain", "--", GOVERNANCE_FILE], repo).strip():
         raise RepoError("workspace_dirty", f"« {GOVERNANCE_FILE} » a des modifications non "
                         "enregistrées dans le clone de l'espace : les enregistrer ou les "
-                        "annuler, puis rattacher le dépôt.")
+                        f"annuler, puis {then}.")
 
 
 def _require_compatible_origin(repo: Path, remote_url: str) -> bool:
@@ -428,7 +443,9 @@ def _require_compatible_origin(repo: Path, remote_url: str) -> bool:
             map(mask_remote_url, push_urls))
     raise RepoError("origin_conflict", f"Le clone de l'espace a déjà un « origin » qui diffère "
                     f"de l'adresse demandée ({mask_remote_url(remote_url)}) : {found}. "
-                    "Corrigez-le, ou rattachez l'espace à l'adresse qu'il porte.")
+                    "Corrigez-le, rattachez l'espace à l'adresse qu'il porte, ou réinitialisez le "
+                    "rattachement : seule la copie locale change, le dépôt distant n'est "
+                    "pas modifié.")
 
 
 def _attach(workspace: Workspace, repo: Path, remote_url: str) -> Workspace:
@@ -459,9 +476,7 @@ def _attach(workspace: Workspace, repo: Path, remote_url: str) -> Workspace:
     if expected is not None and state != "identity":
         commit = commit_files(
             repo, local, {GOVERNANCE_FILE: expected},
-            f"Identité du créateur : {workspace.account} devient {account}\n\n"
-            f"« {workspace.account} » était l'identité locale du créateur de l'espace ; "
-            f"l'hébergeur l'authentifie sous « {account} ». Ses rôles sont conservés.")
+            _identity_message(workspace.account, account))
         needs_push = True
     if not has_origin:
         run_git(["remote", "add", "origin", "--", remote_url], repo)

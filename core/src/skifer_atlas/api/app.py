@@ -39,6 +39,8 @@ ERROR_STATUS = {
     "origin_conflict": 409,
     "remote_partial": 409,
     "attach_incomplete": 409,  # publié, à terminer : un nouvel essai suffit
+    "reset_incomplete": 409,  # réinitialisation interrompue : un nouvel essai la reprend
+    "identity_not_found": 409,  # la gouvernance n'a plus le créateur, sans commit d'identité qui l'explique
     "remote_not_empty": 409,
     "workspace_dirty": 409,
     "wrong_branch": 409,

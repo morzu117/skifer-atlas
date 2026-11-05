@@ -112,6 +112,21 @@ def clone_lock(repo: Path) -> Iterator[None]:
         yield
 
 
+@contextmanager
+def clone_lock_if_free(repo: Path) -> Iterator[bool]:
+    """Comme `clone_lock`, sans attendre : rend `False` quand une autre opération tient déjà le
+    clone. Sert aux lectures d'état qui ne doivent ni bloquer ni voir un état à mi-chemin."""
+    with _clone_locks_guard:
+        lock = _clone_locks.setdefault(Path(repo).resolve(), threading.RLock())
+    if not lock.acquire(blocking=False):
+        yield False
+        return
+    try:
+        yield True
+    finally:
+        lock.release()
+
+
 def check_remote_url(url: str) -> None:
     """N'admet que HTTPS et SSH ; un chemin local exige le mode de test explicite."""
     if not url or any(char.isspace() for char in url) or url.startswith("-"):

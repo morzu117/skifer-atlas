@@ -11,6 +11,7 @@ from ...dbfile import without_waiting
 from ...index import ensure_index, index_fresh
 from ...repo.git import RepoError
 from ...repo.layout import WorkspaceMeta
+from ...repo.reset_remote import attachment_state, reset_remote
 from ...repo.sync import create_workspace, join_workspace, set_remote, sync_workspace
 from ...workspaces import (
     ROLE_LABELS,
@@ -65,6 +66,8 @@ def _out(ws: Workspace, counts: bool = False) -> dict:
         found["counts"] = _counts(ws)
     else:
         found["space_referent"] = is_space_referent(ws)
+        # `interrupted` : un rattachement a laissé des restes que « Réinitialiser » défait (plan 0034).
+        found["attachment"] = attachment_state(ws)
     return found
 
 
@@ -94,6 +97,21 @@ def post_remote(ws: str, body: RemoteRequest) -> dict:
     """Rattache l'espace à un dépôt distant vide et y pousse (plan 0033, ADR 0037). Le compte
     et le rôle rendus sont ceux de l'hébergeur : le créateur y garde son rôle de référent."""
     return _out(set_remote(workspace_or_404(ws).id, body.remote_url))
+
+
+@router.post("/{ws}/remote/reset")
+def post_remote_reset(ws: str) -> dict:
+    """Remet le clone d'un espace encore local dans l'état d'un espace neuf (plan 0034, ADR
+    0038) : `origin`, références distantes, suivi de branche et commit d'identité fusionné.
+    Le dépôt distant n'est jamais contacté. Un espace rattaché est refusé (`remote_exists`) ;
+    sans rien à faire, la réponse est un succès (`reset.status` vaut `nothing_to_do`)."""
+    result = reset_remote(workspace_or_404(ws).id)
+    # Relu : le rôle suit la gouvernance remise au compte local (le créateur redevient référent).
+    return {**_out(workspace_or_404(ws)), "reset": {
+        "status": result.status,
+        "identity_reverted": result.reverted_account is not None,
+        "reverted_account": result.reverted_account,
+    }}
 
 
 @router.post("/{ws}/sync")

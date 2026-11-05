@@ -22,7 +22,17 @@ export type Workspace = {
   /** Référent de l'espace (sans restriction de domaine) : seul à voir l'administration. */
   space_referent?: boolean;
   synced_at?: string;
+  /** « interrupted » : un rattachement a laissé des restes dans la copie locale (plan 0034). */
+  attachment?: "interrupted" | null;
   counts?: Counts;
+};
+
+/** Réponse de la réinitialisation du rattachement (plan 0034) : l'espace, resté local. */
+export type RemoteReset = {
+  status: "reset" | "nothing_to_do";
+  /** Le commit d'identité du créateur a été défait : la gouvernance locale a changé. */
+  identity_reverted: boolean;
+  reverted_account: string | null;
 };
 
 export type NewWorkspace = { id: string; name: string; sector: string; entities: string[] };
@@ -645,6 +655,7 @@ export const api = {
   pollGitHub: (flow: string) => request<GitHubPoll>(`/api/github/device/${encodeURIComponent(flow)}`, post({})),
   setRemote: (id: string, remoteUrl: string) =>
     request<Workspace>(`${ws(id)}/remote`, post({ remote_url: remoteUrl })),
+  resetRemote: (id: string) => request<Workspace & { reset: RemoteReset }>(`${ws(id)}/remote/reset`, post({})),
   proposalsForMe: (id: string) =>
     request<{ id: number }[]>(`${ws(id)}/proposals?status=open&for_me=true`),
   catalog: (id: string, filters: CatalogFilters) => {

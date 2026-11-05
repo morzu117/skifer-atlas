@@ -78,7 +78,15 @@ const KNOWN: Record<string, Explained> = {
   },
   attach_incomplete: {
     title: "Dépôt publié, rattachement à terminer",
-    text: "Le dépôt a bien reçu l'espace, mais le rattachement n'a pas pu s'achever sur ce poste. Rattachez de nouveau avec la même adresse : le nouvel essai termine le rattachement, sans rien republier.",
+    text: "Le dépôt a bien reçu l'espace, mais le rattachement n'a pas pu s'achever sur ce poste. Rattachez de nouveau avec la même adresse : le nouvel essai termine le rattachement, sans rien republier. Vous pouvez aussi réinitialiser le rattachement pour repartir de zéro.",
+  },
+  reset_incomplete: {
+    title: "Réinitialisation interrompue",
+    text: "Aucun commit n'est perdu et le dépôt distant n'a pas été modifié. Relancez la réinitialisation : elle reprend là où elle s'est arrêtée.",
+  },
+  identity_not_found: {
+    title: "Gouvernance à corriger d'abord",
+    text: "La gouvernance ne contient plus le compte du créateur et aucun commit d'identité d'Atlas ne l'explique. Rien n'a été modifié : remettez le compte du créateur dans governance.yaml, enregistrez, puis réinitialisez.",
   },
   remote_exists: {
     title: "Espace déjà rattaché",

@@ -9,6 +9,7 @@ import {
   type GovernanceDomain,
   type GovernanceMember,
   type Levels,
+  type RemoteReset,
   type Role,
   type Workspace,
 } from "../api";
@@ -114,11 +115,22 @@ export function Administration({
   // gouvernance relue, perdrait ce qu'on y écrirait entre-temps.
   const [reloading, setReloading] = useState(false);
   // Le rechargement qui suit un rattachement a échoué : l'ancien état reste gelé, avec « Réessayer ».
-  // Compte GitHub déjà présent dans le brouillon : celui-ci n'a pas été repris (voir `Settings`).
+  // Raison pour laquelle le brouillon n'a pas été repris (voir `Settings`) : le compte déjà
+  // présent dans le brouillon, ou une gouvernance qui a changé depuis sa saisie.
   const [discarded, setDiscarded] = useState<string | null>(null);
   const [reloadError, setReloadError] = useState<Explained | null>(null);
+  // Réinitialisation du rattachement (plan 0034) : son message survit au remontage du formulaire,
+  // et la relecture qui suit un commit d'identité défait n'est pas celle d'un rattachement.
+  const [resetNotice, setResetNotice] = useState("");
+  const [reloadAfterReset, setReloadAfterReset] = useState(false);
   // Gardé ici : la fusion relit les paramètres, ce qui remonte le formulaire.
   const [saved, setSaved] = useState<AdminSaved | null>(null);
+
+  // Un brouillon gardé à travers une relecture qui n'a pas remonté le formulaire (empreinte
+  // inchangée) n'a pas été consommé : il ne doit pas ressortir à un remontage ultérieur.
+  useEffect(() => {
+    if (!reloading && carried) setCarried(null);
+  }, [reloading, carried]);
 
   useEffect(() => {
     let alive = true;
@@ -167,7 +179,7 @@ export function Administration({
       )}
       {load.kind === "ready" && discarded && (
         <Banner tone="warn" title="Modifications non reprises">
-          Vos modifications non enregistrées n'ont pas été reprises : le compte {discarded} figurait déjà dans le brouillon. Refaites-les à partir de la gouvernance du dépôt.
+          Vos modifications non enregistrées n'ont pas été reprises : {discarded}. Refaites-les à partir de la gouvernance du dépôt.
         </Banner>
       )}
       {load.kind === "ready" && reloadError && (
@@ -184,7 +196,7 @@ export function Administration({
             </button>
           }
         >
-          Le dépôt est rattaché, mais les paramètres n'ont pas pu être relus. {reloadError.text}
+          {reloadAfterReset ? "Le rattachement est réinitialisé" : "Le dépôt est rattaché"}, mais les paramètres n'ont pas pu être relus. {reloadError.text}
         </Banner>
       )}
       {load.kind === "ready" && (
@@ -198,8 +210,24 @@ export function Administration({
           carried={carried}
           reloading={reloading}
           onCarried={() => setCarried(null)}
+          resetNotice={resetNotice}
+          onReset={(message, pending, next) => {
+            onWorkspaceChange?.(next); // la coque relit l'espace : plus de bannière, rôle remis
+            // Toujours relue, y compris quand il n'y avait « rien à faire » : un essai interrompu
+            // après le retour du compte du créateur ne le dit plus, et l'écran garderait l'ancien
+            // compte publié. Les modifications non enregistrées suivent, le compte du créateur
+            // remis comme au serveur, sauf collision ou gouvernance changée (voir `Settings`).
+            setResetNotice(message);
+            setDiscarded(pending.discarded);
+            setCarried(pending.carried);
+            setReloadAfterReset(true);
+            setReloading(true);
+            setRevision((n) => n + 1);
+          }}
           onAttached={(next, pending, conflict) => {
-            setDiscarded(conflict ? next.account : null);
+            setDiscarded(conflict ? `le compte ${next.account} figurait déjà dans le brouillon` : null);
+            setResetNotice("");
+            setReloadAfterReset(false);
             setCarried(pending && { ...pending, governance: renameAccount(pending.governance, ws.account, next.account) });
             setAttached(`Dépôt rattaché : l'espace est publié sur ${next.git_remote}, sous le compte ${next.account}.`);
             setReloading(true);
@@ -223,8 +251,10 @@ function Settings({
   attached,
   carried,
   reloading,
+  resetNotice,
   onCarried,
   onAttached,
+  onReset,
   onReload,
 }: {
   ws: Workspace;
@@ -235,7 +265,9 @@ function Settings({
   carried: Carried | null;
   reloading: boolean;
   onCarried: () => void;
+  resetNotice: string;
   onAttached: (next: Workspace, pending: Carried | null, conflict: boolean) => void;
+  onReset: (message: string, pending: { carried: Carried | null; discarded: string | null }, next: Workspace) => void;
   onReload: () => void;
 }) {
   const [draft, setDraft] = useState<Governance>(carried?.governance ?? initial.governance);
@@ -435,6 +467,28 @@ function Settings({
                 repository={repository}
                 attached={attached}
                 onPending={setAttaching}
+                resetNotice={resetNotice}
+                onReset={(result, message, next) => {
+                  // La gouvernance est relue ; le brouillon la suit, jamais en silence :
+                  // - le serveur a remis le compte local : il remplace le compte publié dans le brouillon ;
+                  // - rien à renommer (origin retiré seul, « rien à faire ») : le brouillon est gardé tel quel ;
+                  // - rien n'est repris, avec la bannière, dans deux cas seulement : le compte local figure
+                  //   déjà dans le brouillon (ajouté à la main : fusionner deux membres ferait perdre ses
+                  //   rôles au créateur), ou l'écran avait lu une gouvernance sans lui sans qu'on sache quel
+                  //   compte publié remettre (essai précédent interrompu après le retour du compte).
+                  const absent = !initial.governance.members.some((m) => m.account === ws.account);
+                  const conflict = dirty && absent && draft.members.some((m) => m.account === ws.account);
+                  const unknown = dirty && absent && !result.identity_reverted;
+                  const reason = conflict
+                    ? `le compte ${ws.account} figurait déjà dans le brouillon`
+                    : unknown ? "la gouvernance du dépôt a changé depuis leur saisie" : null;
+                  onReset(message, {
+                    discarded: reason,
+                    carried: dirty && !reason
+                      ? { governance: result.identity_reverted ? renameAccount(draft, result.reverted_account ?? "", ws.account) : draft, levels }
+                      : null,
+                  }, next);
+                }}
                 blocked={editing !== null ? "Validez ou annulez la modification en cours avant de rattacher le dépôt." : undefined}
                 onAttached={(next) => {
                   // Le serveur renomme le créateur, sauf si le login GitHub est déjà membre. S'il ne l'était
@@ -908,8 +962,10 @@ function Repository({
   repository,
   attached,
   blocked,
+  resetNotice,
   onPending,
   onAttached,
+  onReset,
   codeOwners,
   onSynced,
 }: {
@@ -917,8 +973,10 @@ function Repository({
   repository: AdminState["repository"];
   attached: string | null;
   blocked?: string;
+  resetNotice?: string;
   onPending?: (pending: boolean) => void;
   onAttached: (next: Workspace) => void;
+  onReset: (result: RemoteReset, message: string, workspace: Workspace) => void;
   codeOwners: boolean;
   onSynced: (next: AdminState["repository"]) => void;
 }) {
@@ -966,7 +1024,7 @@ function Repository({
           </dd>
         </div>
       </dl>
-      {!repository.url && <AttachRemote ws={ws} blocked={blocked} onPending={onPending} onAttached={onAttached} />}
+      {!repository.url && <AttachRemote ws={ws} blocked={blocked} initialNotice={resetNotice} onPending={onPending} onAttached={onAttached} onReset={onReset} />}
       {attached && (
         <span className="tone-ok admin-message" role="status">
           {attached}
