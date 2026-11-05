@@ -68,6 +68,14 @@ const KNOWN: Record<string, Explained> = {
     title: "Pas de droit d'écriture sur ce dépôt",
     text: "Le compte connecté ne peut pas y pousser (lecture seule ou dépôt archivé). Demandez un accès en écriture ou choisissez un autre dépôt.",
   },
+  remote_partial: {
+    title: "Rattachement interrompu",
+    text: "La publication partielle doit être résolue avant de réessayer.",
+  },
+  origin_conflict: {
+    title: "Adresse origin différente",
+    text: "Le clone possède déjà une configuration origin différente. Corrigez-la avant de réessayer.",
+  },
   remote_exists: {
     title: "Espace déjà rattaché",
     text: "Cet espace a déjà un dépôt distant : rien n'a été modifié.",
@@ -87,6 +95,9 @@ export function explain(error: unknown): Explained {
     return { title: "Serveur local injoignable", text: "Réessayez dans un instant." };
   }
   if (error instanceof ApiError) {
+    if (error.code === "remote_partial") {
+      return { title: KNOWN.remote_partial.title, text: error.message };
+    }
     return KNOWN[error.code] ?? { title: "L'opération a échoué", text: error.message };
   }
   return { title: "L'opération a échoué", text: String(error) };
