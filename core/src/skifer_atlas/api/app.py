@@ -36,6 +36,8 @@ ERROR_STATUS = {
     "forbidden": 403,
     "workspace_exists": 409,
     "remote_exists": 409,
+    "origin_conflict": 409,
+    "remote_partial": 409,
     "remote_not_empty": 409,
     "workspace_dirty": 409,
     "wrong_branch": 409,

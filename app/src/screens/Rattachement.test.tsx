@@ -254,6 +254,8 @@ describe("Administration d'un espace sans dépôt distant", () => {
     ["remote_not_empty", 409, "Ce dépôt n'est pas vide", /Atlas ne rattache qu'un dépôt vierge/],
     ["remote_not_found", 422, "Dépôt introuvable", /le compte GitHub connecté doit y avoir accès/],
     ["remote_not_writable", 422, "Pas de droit d'écriture sur ce dépôt", /lecture seule ou dépôt archivé/],
+    ["remote_partial", 409, "Rattachement interrompu", /reconnectez-vous à GitHub avec claire-m/],
+    ["origin_conflict", 409, "Adresse origin différente", /configuration origin différente/],
     ["remote_exists", 409, "Espace déjà rattaché", /rien n'a été modifié/],
     ["invalid_remote", 422, "Adresse de dépôt invalide", /HTTPS, SSH/],
     ["credentials_in_url", 422, "Adresse avec identifiants", /Retirez l'identifiant/],
@@ -261,7 +263,9 @@ describe("Administration d'un espace sans dépôt distant", () => {
     ["push_failed", 502, "L'envoi vers le dépôt a échoué", /l'espace reste local/],
     ["host_unreachable", 502, "Dépôt injoignable", /la connexion/],
   ])("[S-0033-02] %s : l'erreur dit pourquoi et le formulaire reste utilisable", async (code, status, title, text) => {
-    server(() => failure(status, code));
+    server(() => code === "remote_partial"
+      ? { status, json: { detail: { code, message: "Publié sous claire-m : reconnectez-vous à GitHub avec claire-m." } } }
+      : failure(status, code));
     render(<Screen />);
     const form = await attachment();
     await userEvent.type(form.getByLabelText(/^Adresse du dépôt vide/), "/depots/x.git");
