@@ -33,6 +33,15 @@ test("[S-0010-02] [S-0010-09] [S-0010-10] registre vide : carte vide, polices lo
   expect(await seriousViolations(page)).toEqual([]);
 });
 
+test("[S-0010-11] une adresse mal encodée ouvre l'accueil, sans écran blanc", async ({ page }) => {
+  const failures: string[] = [];
+  page.on("pageerror", (error) => failures.push(error.message));
+  await page.goto("/#/w/%E0%A4%A/catalogue");
+  await expect(page.getByText("Aucun espace pour l'instant")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vos espaces de travail" })).toBeVisible();
+  expect(failures).toEqual([]);
+});
+
 test("[S-0005-01] [S-0010-03] [S-0010-06] créer un espace l'ouvre, un identifiant pris donne l'erreur sous le champ (critères 3, 6)", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Créer un espace" }).click();

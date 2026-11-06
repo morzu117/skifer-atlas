@@ -3,6 +3,8 @@
 // port par défaut du serveur, sans token (serveur lancé avec ATLAS_DEV_NO_TOKEN=1).
 // Toute requête passe par ici : c'est ici que le token est ajouté.
 
+import { isTauri } from "./tauri";
+
 export type ServerInfo = { baseUrl: string; token: string };
 
 export type Role = "referent" | "validateur" | "contributeur" | "lecteur";
@@ -572,6 +574,9 @@ export class ApiError extends Error {
 /** Le serveur local ne répond pas (arrêté, en cours de démarrage). */
 export class UnreachableError extends Error {}
 
+/** Sous Tauri, l'application n'a pas donné l'adresse et le token du serveur local. */
+export class ServerInfoError extends UnreachableError {}
+
 const DEFAULT_BASE_URL = import.meta.env.VITE_ATLAS_API ?? "http://127.0.0.1:8765";
 
 let info: ServerInfo | null = null;
@@ -583,15 +588,36 @@ export function onUnreachable(listener: () => void): () => void {
   return () => unreachableListeners.delete(listener);
 }
 
+/** Essais de `get_server_info` sous Tauri, et attente entre deux (réservé aux tests). */
+export const SERVER_INFO_RETRY = { attempts: 3, delayMs: 150 };
+
+/**
+ * Adresse et token du serveur local. Sous Tauri, ils viennent de l'application : sans eux,
+ * toute requête serait refusée (401), alors on réessaie, puis on échoue sans rien retenir,
+ * pour que « Réessayer » interroge de nouveau. Le repli sans token (serveur de développement
+ * ou de test, lancé en mode dev) n'existe que hors Tauri.
+ */
 export async function serverInfo(): Promise<ServerInfo> {
   if (info) return info;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    info = await invoke<ServerInfo>("get_server_info");
-  } catch {
+  if (!isTauri()) {
     info = { baseUrl: DEFAULT_BASE_URL, token: "" };
+    return info;
   }
-  return info;
+  const { attempts, delayMs } = SERVER_INFO_RETRY;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const found = await invoke<ServerInfo>("get_server_info");
+      if (found?.baseUrl && found.token) {
+        info = found;
+        return info;
+      }
+    } catch {
+      // réessayer
+    }
+    if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  throw new ServerInfoError("L'application n'a pas fourni l'adresse et le token du serveur local.");
 }
 
 /** Réservé aux tests : oublier le serveur choisi. */
@@ -620,7 +646,14 @@ async function errorOf(res: Response): Promise<ApiError> {
 }
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const { baseUrl, token } = await serverInfo();
+  let server: ServerInfo;
+  try {
+    server = await serverInfo();
+  } catch (error) {
+    unreachableListeners.forEach((listener) => listener());
+    throw error;
+  }
+  const { baseUrl, token } = server;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   let res: Response;

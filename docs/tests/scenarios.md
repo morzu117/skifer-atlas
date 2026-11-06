@@ -31,7 +31,7 @@
 | 0007 | 9 | 4 | 0 | 5 | 0 |
 | 0008 | 9 | 5 | 0 | 4 | 0 |
 | 0009 | 10 | 5 | 1 | 4 | 0 |
-| 0010 | 10 | 9 | 0 | 1 | 0 |
+| 0010 | 12 | 10 | 1 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 7 | 7 | 0 | 0 | 0 |
 | 0013 | 22 | 18 | 4 | 0 | 0 |
@@ -40,7 +40,7 @@
 | 0016 | 6 | 6 | 0 | 0 | 0 |
 | 0017 | 8 | 8 | 0 | 0 | 0 |
 | 0018 | 6 | 1 | 0 | 5 | 0 |
-| 0019 | 6 | 1 | 0 | 5 | 0 |
+| 0019 | 9 | 1 | 0 | 8 | 0 |
 | 0020 | 4 | 4 | 0 | 0 | 0 |
 | 0021 | 7 | 5 | 0 | 2 | 0 |
 | 0022 | 6 | 6 | 0 | 0 | 0 |
@@ -55,7 +55,7 @@
 | 0033 | 9 | 8 | 0 | 1 | 0 |
 | 0034 | 10 | 6 | 3 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **267** | **197** | **12** | **58** | **0** |
+| **Total** | **272** | **198** | **13** | **61** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -142,6 +142,21 @@ Plan 0010, critère 10 · Test : `app/e2e/accueil.spec.ts` › `[S-0010-10]` (de
 - **Quand** je tabule jusqu'à la carte Groupe Nordis et appuie sur Entrée, puis remonte par Maj+Tab jusqu'à « Propositions », Entrée, puis jusqu'au sélecteur d'espace, Entrée
 - **Alors** le focus passe au titre « Catalogue », à « Connexions », à « Propositions », au titre « Propositions », au sélecteur, puis au titre « Vos espaces de travail »
 - **Et** axe-core ne relève aucune violation sérieuse ou critique sur l'accueil vide, le dialogue de création, le catalogue de l'espace créé et l'accueil à deux cartes
+
+### S-0010-11 — Une adresse mal encodée ouvre l'accueil
+Plan 0010, suivi de la revue globale (#151) · Test : `app/e2e/accueil.spec.ts` › `[S-0010-11]`
+- **Étant donné** le registre vide du serveur de l'accueil
+- **Quand** j'ouvre `#/w/%E0%A4%A/catalogue`, une séquence `%` invalide
+- **Alors** l'accueil s'affiche (« Vos espaces de travail », « Aucun espace pour l'instant »), sans écran blanc ni erreur de page
+- Limite : l'analyse de plusieurs adresses invalides (espace, fiche, `%` isolé) est rendue sans navigateur par `app/src/format.test.ts` › `[S-0010-11]`.
+
+### S-0010-12 — Sous Tauri, l'échec de `get_server_info` ne laisse pas de repli sans token
+Plan 0010, suivi de la revue globale (#151) · Test : `app/src/api.test.ts` › `[S-0010-12]` (Vitest seulement)
+- **Étant donné** la fenêtre Tauri simulée (`window.__TAURI_INTERNALS__`) et une commande `get_server_info` qui échoue
+- **Quand** une requête demande l'adresse du serveur
+- **Alors** `invoke` est réessayé, puis l'erreur « L'application n'a pas fourni l'adresse et le token du serveur local » est levée et la coque est prévenue (bandeau « Serveur local injoignable »), sans qu'aucune requête parte sans token
+- **Et** rien n'est retenu : l'essai suivant (« Réessayer ») interroge de nouveau l'application et réussit ; hors Tauri, le repli sans token reste en place
+- Limite : le bandeau est rendu par S-0010-05 ; ici la coque est seulement prévenue. Le vrai `invoke` n'existe que dans la fenêtre Tauri.
 
 **Plan 0025**
 
@@ -1795,6 +1810,9 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0019-03 | L'app release démarre en moins de 10 s et ne laisse aucun serveur après fermeture | Fenêtre native Tauri, mesure sur machine de référence | `core/tests/test_sidecar.py::test_frozen_binary_stops_when_the_app_disappears` ; `core/tests/test_release.py::test_server_stops_when_its_parent_disappears` (le temps de démarrage reste une mesure manuelle) |
 | S-0019-05 | Taille rapportée, sous le seuil | Artefacts de release | `.github/workflows/release.yml` |
 | S-0019-06 | Versions de l'app, du sidecar et de `skifer_atlas.__version__` identiques | Sources de release | `core/tests/test_release.py::test_one_version_for_app_sidecar_and_package` |
+| S-0019-07 | La sonde de démarrage n'accepte que le serveur qui prouve connaître le token (HMAC d'un nonce) ; un serveur qui répond 200 à tout est refusé ; un processus arrêté fait échouer vite | Fenêtre native Tauri : la sonde tourne dans la coque Rust, avant l'ouverture de la fenêtre | `app/src-tauri/src/lib.rs` (`cargo test` : vecteurs RFC 4231, vecteur partagé avec le serveur, faux serveurs locaux) ; `core/tests/test_api.py::test_alive_proves_the_token_without_revealing_it`, `::test_alive_proof_matches_the_vector_checked_by_the_shell`, `::test_alive_refuses_a_missing_or_malformed_nonce` ; `scripts/smoke-app.sh` (CI de release) |
+| S-0019-08 | `/docs`, `/redoc`, `/openapi.json` répondent 404 ; `/health` exige le token | Logique serveur sans écran : l'interface n'appelle ni l'un ni l'autre sans token (`/health` avec token est exercé par tous les démarrages, S-0010-05) | `core/tests/test_api.py::test_documentation_routes_are_closed`, `::test_documentation_is_served_in_explicit_dev_mode_only`, `::test_health_needs_the_token_and_shows_the_version_only_with_it` ; `core/tests/test_sidecar.py::test_frozen_binary_smoke` |
+| S-0019-09 | La CSP de la fenêtre n'autorise que l'application, le serveur local (`127.0.0.1`) et le canal de Tauri | Fenêtre native Tauri : Vite en développement n'envoie aucune CSP, seule la vraie fenêtre l'applique (vérifiée aussi par `vite preview` avec la même CSP en en-tête, voir l'ADR 0041) | `app/src/csp.test.ts` › `[S-0019-09]` |
 | S-0021-01 | Division par zéro : `NULL` en DuckDB ; division entière et modulo par zéro aussi | Exécution DuckDB, absente du panneau SQL | `core/tests/compile/test_ecarts.py::test_division_by_zero_is_null_on_duckdb`, `::test_integer_division_and_modulo_keep_their_type` |
 | S-0021-07 | Les tests existants restent verts ; les SQL de référence changent délibérément | CI et revue de code | `core/tests/compile/test_compile.py` ; `core/tests/compile/test_ecarts.py` (suite complète en CI) |
 | S-0028-03 | Une autre erreur d'ouverture de la base (dossier absent) remonte sans attente | Logique serveur sans écran : aucune action de l'app ne mène à un dossier de base absent | `core/tests/test_dbfile.py::test_other_io_errors_are_not_retried` |

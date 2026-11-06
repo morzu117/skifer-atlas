@@ -29,6 +29,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from skifer_atlas import __version__
+from skifer_atlas.api.app import alive_proof
 
 sys.path.insert(0, str(Path(__file__).parent / "connections"))
 from fake_snowflake import FakeSnowflake
@@ -163,8 +164,15 @@ def test_frozen_binary_smoke(folders):
         print(f"\nDémarrage du binaire : {process.startup_seconds:.1f} s ; "
               f"taille : {binary().stat().st_size / 1024 / 1024:.1f} Mo")
         assert binary().stat().st_size < ALERT_BYTES, "seuil d'alerte de 200 Mo dépassé"
-        status, health = call(port, "GET", "/health", token=None)
+        assert call(port, "GET", "/health", token=None)[0] == 401
+        status, health = call(port, "GET", "/health")
         assert (status, health) == (200, {"status": "ok", "version": __version__})
+        # La sonde du shell : une preuve dérivée du token, sans qu'il circule.
+        nonce = "0123456789abcdef0123456789abcdef"
+        status, alive = call(port, "GET", f"/alive?nonce={nonce}", token=None)
+        assert status == 200 and alive == {"proof": alive_proof(TOKEN, nonce)}
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            assert call(port, "GET", path, token=None)[0] == 404
         assert call(port, "GET", "/api/workspaces", token=None)[0] == 401
         assert call(port, "GET", "/api/_selftest", token=None)[0] == 401
         status, found = call(port, "GET", "/api/_selftest")

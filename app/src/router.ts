@@ -15,7 +15,13 @@ export type Route =
 
 export function parse(hash: string): Route {
   const [path, search = ""] = hash.replace(/^#\/?/, "").split("?", 2);
-  const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
+  let parts: string[];
+  try {
+    parts = path.split("/").filter(Boolean).map(decodeURIComponent);
+  } catch {
+    // Séquence % invalide (adresse collée, tronquée) : l'accueil, plutôt qu'un écran blanc.
+    return { name: "home" };
+  }
   if (parts[0] !== "w" || !parts[1]) return { name: "home" };
   const params = Object.fromEntries(new URLSearchParams(search));
   const ws = parts[1];
