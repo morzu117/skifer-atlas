@@ -452,6 +452,7 @@ export type EditorDraft = {
   highest: number;
   base_version: number | null;
   saved_at: string;
+  yaml_text?: string | null;
 };
 
 export type EditorDocument = {
@@ -685,11 +686,15 @@ export const api = {
     request<CheckResult>(`${ws(id)}/editor/check`, post({ document, node_id: nodeId })),
   editorParse: (id: string, text: string) =>
     request<{ document: Record<string, unknown> | null; issues: Issue[] }>(`${ws(id)}/editor/parse`, post({ text })),
-  saveDraft: (id: string, documentId: string, draft: Omit<EditorDraft, "saved_at">) =>
-    request<{ saved_at: string }>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}/draft`, {
+  saveDraft: (id: string, documentId: string, draft: Omit<EditorDraft, "saved_at">, keepalive = false) => {
+    const body = JSON.stringify(draft);
+    return request<{ saved_at: string }>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}/draft`, {
       method: "PUT",
-      body: JSON.stringify(draft),
-    }),
+      // Garder une marge sous le quota navigateur de 64 Kio, mesurée en octets UTF-8.
+      keepalive: keepalive && new TextEncoder().encode(body).byteLength < 60 * 1024,
+      body,
+    });
+  },
   deleteDraft: (id: string, documentId: string) =>
     request<null>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}/draft`, { method: "DELETE" }),
   preview: (id: string, document: unknown) => request<ProposalPreview>(`${ws(id)}/editor/preview`, post({ document })),

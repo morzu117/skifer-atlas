@@ -223,7 +223,11 @@ test("[S-0013-03] [S-0013-06] [S-0013-08] édition d'une version : cycle refusé
   await editor.click();
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.insertText("\nlabel: [ouvert");
-  await page.getByRole("button", { name: "Revenir au canevas" }).click();
+  // Après l'analyse en échec, le bouton est `aria-disabled` : état stable atteint. Le clic reste utile pour
+  // expliquer le blocage, d'où `force` (Playwright refuse sinon). Qu'il ne soit pas désactivé pendant la
+  // frappe est vérifié par Vitest (S-0013-22), déterministe là où l'e2e courrait contre les 300 ms.
+  await expect(page.getByRole("button", { name: "Revenir au canevas" })).toHaveAttribute("aria-disabled", "true");
+  await page.getByRole("button", { name: "Revenir au canevas" }).click({ force: true });
   await expect(page.getByRole("alert")).toContainText("YAML illisible");
   await expect(editor).toBeVisible();
 
@@ -236,9 +240,11 @@ test("[S-0013-03] [S-0013-06] [S-0013-08] édition d'une version : cycle refusé
   await page.getByRole("button", { name: "Revenir au canevas" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Revenu net (YAML) : v5 · brouillon" })).toBeVisible();
   await expect(page.getByText(/Enregistré .* \(local\)/)).toBeVisible();
-  const draft = (await (await request.get(`${EDITOR}/documents/revenu-net`)).json()).draft.document;
-  const back = await (await request.post(`${EDITOR}/check`, { data: { document: draft, node_id: null } })).json();
-  expect(back.yaml).toBe(edited);
+  // Le texte saisi en YAML a déjà été enregistré (yaml_text) : on attend le document issu du retour au canevas.
+  await expect.poll(async () => {
+    const draft = (await (await request.get(`${EDITOR}/documents/revenu-net`)).json()).draft.document;
+    return (await (await request.post(`${EDITOR}/check`, { data: { document: draft, node_id: null } })).json()).yaml;
+  }).toBe(edited);
 
   // L'aller-retour s'annule comme une opération.
   await page.getByRole("button", { name: "Annuler" }).click();
@@ -368,7 +374,9 @@ test("[S-0001-10] Une ancre ou un alias YAML empêche le retour au canevas", asy
     await yaml.click();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.insertText("base: &b {a: 1}\nother: *b\n");
-    await page.getByRole("button", { name: "Revenir au canevas" }).click();
+    // Analyse en échec : la cause est affichée et le bouton `aria-disabled` explique son blocage au clic (d'où `force`).
+    await expect(bottom(page).getByText(/^Les ancres YAML \(&\) ne sont pas admises \(ligne 1, colonne 7\)$/)).toBeVisible();
+    await page.getByRole("button", { name: "Revenir au canevas" }).click({ force: true });
     // L'avis reste générique ; la cause (ancre refusée, avec sa position) est dans les problèmes.
     await expect(page.getByRole("alert")).toHaveText("YAML illisible : corriger l'erreur signalée pour revenir au canevas.");
     await expect(bottom(page).getByText(/^Les ancres YAML \(&\) ne sont pas admises \(ligne 1, colonne 7\)$/)).toBeVisible();
@@ -376,5 +384,322 @@ test("[S-0001-10] Une ancre ou un alias YAML empêche le retour au canevas", asy
   } finally {
     await page.goto("/");
     await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+// --- Suivi de la revue globale (#150), critères 12 à 16 du plan 0013 ---------------------------
+
+const CHECK = "**/editor/check";
+const unavailable = { status: 503, json: { detail: { code: "check_down", message: "Validation indisponible." } } };
+const submitButton = (page: Page) => page.getByRole("button", { name: "Soumettre la proposition" });
+const description = (page: Page) => props(page).getByLabel("Description");
+const draftOf = async (request: APIRequestContext, id: string) =>
+  (await (await request.get(`${EDITOR}/documents/${id}`)).json()).draft as { document: Raw; yaml_text?: string | null } | null;
+
+/** Retient les réponses de `editor/check` jusqu'à l'appel de la fonction rendue. */
+async function holdChecks(page: Page) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(CHECK, async (route) => {
+    await released;
+    await route.continue().catch(() => undefined);
+  });
+  return release;
+}
+
+test("[S-0013-12] Après une modification, la soumission attend la validation de ce document ; la proposition en reprend le YAML", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  const mark = "derniere-modification-e2e";
+  try {
+    await page.goto(`${ws.root}/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    await expect(submitButton(page)).not.toHaveAttribute("aria-disabled", "true");
+
+    // Clic aussitôt après la modification, sans attendre la requête. Les réponses sont retenues : la validation
+    // ne peut pas finir avant le clic, même sur un poste lent. Selon que la temporisation de 300 ms est écoulée,
+    // le message dit « lancée » ou « en cours » (la phrase exacte « lancée » est vérifiée par Vitest) ; jamais « échoué ».
+    const releaseFirst = await holdChecks(page);
+    await field(page, "Description", "modification-immediate");
+    await submitButton(page).click({ force: true });
+    await expect(page.getByRole("alert")).toContainText(/Validation (lancée|en cours) : réessayer dans un instant\./);
+    await expect(page.getByRole("alert")).not.toContainText("échoué");
+    await expect(page.getByRole("dialog", { name: "Soumettre la proposition" })).toHaveCount(0);
+    releaseFirst();
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    await expect(submitButton(page)).not.toHaveAttribute("aria-disabled", "true");
+    await page.unroute(CHECK); // état propre pour l'étape suivante
+
+    // La validation du document modifié est en route : l'ancienne ne suffit plus.
+    const release = await holdChecks(page);
+    const started = page.waitForRequest((r) => r.method() === "POST" && r.url() === `${ws.api}/editor/check`);
+    await field(page, "Description", mark);
+    await started; // la validation de ce document est en vol
+    await expect(submitButton(page)).toHaveAttribute("aria-disabled", "true");
+    await submitButton(page).click({ force: true });
+    await expect(page.getByRole("alert")).toContainText("Validation en cours : réessayer dans un instant.");
+    await expect(page.getByRole("dialog", { name: "Soumettre la proposition" })).toHaveCount(0);
+
+    release();
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    await expect(submitButton(page)).not.toHaveAttribute("aria-disabled", "true");
+    await submitButton(page).click();
+    const dialog = page.getByRole("dialog", { name: "Soumettre la proposition" });
+    await dialog.getByLabel(/Justification/).fill("Dernière modification incluse.");
+    const posted = page.waitForRequest((r) => r.method() === "POST" && r.url() === `${ws.api}/proposals`);
+    await dialog.getByRole("button", { name: "Soumettre" }).click();
+    const body = JSON.parse((await posted).postData()!) as { document_yaml: string };
+    expect(body.document_yaml).toContain(mark);
+    await expect(page.getByRole("heading", { name: /Proposition n° \d+ créée/ })).toBeVisible();
+    const proposals = (await (await request.get(`${ws.api}/proposals`)).json()) as { document_id: string }[];
+    expect(proposals.map((p) => p.document_id)).toContain(id);
+    expect(await seriousViolations(page)).toEqual([]);
+  } finally {
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-13] Une validation indisponible s'affiche, bloque la soumission, garde le brouillon et se relance au clic", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  const mark = "modification-sans-validation";
+  try {
+    await page.goto(`${ws.root}/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+
+    let checks = 0;
+    let hold: Promise<void> | null = null;
+    await page.route(CHECK, async (route) => {
+      checks++;
+      if (hold) await hold;
+      await route.fulfill(unavailable).catch(() => undefined);
+    });
+    await field(page, "Description", mark);
+    await expect(page.getByRole("alert")).toContainText("L'opération a échoué : Validation indisponible.");
+    await expect(submitButton(page)).toHaveAttribute("aria-disabled", "true");
+    expect(await seriousViolations(page)).toEqual([]);
+    await expect.poll(async () => ((await draftOf(request, id))?.document.data_product as Raw | undefined)?.description).toBe(mark);
+
+    // Un clic relance la validation, sans nouvelle modification, et l'annonce ; la requête est en vol.
+    const failed = checks;
+    let release!: () => void;
+    hold = new Promise<void>((resolve) => { release = resolve; });
+    await submitButton(page).click({ force: true });
+    await expect(page.getByRole("alert")).toContainText("La validation a échoué : nouvelle tentative lancée.");
+    await expect(page.getByRole("alert")).not.toContainText("Validation en cours");
+    await expect.poll(() => checks).toBe(failed + 1);
+    await expect(page.getByRole("dialog", { name: "Soumettre la proposition" })).toHaveCount(0);
+    release();
+    await expect(page.getByRole("alert")).toContainText("L'opération a échoué : Validation indisponible.");
+
+    // La validation revient : un clic de plus suffit, le document n'a pas changé.
+    hold = null;
+    await page.unroute(CHECK);
+    await submitButton(page).click({ force: true });
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    await expect(submitButton(page)).not.toHaveAttribute("aria-disabled", "true");
+    await submitButton(page).click();
+    await expect(page.getByRole("dialog", { name: "Soumettre la proposition" })).toBeVisible();
+  } finally {
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-14] Quitter l'éditeur juste après une modification, ou depuis la vue YAML, ne perd rien", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  const mark = "modification-avant-depart";
+  try {
+    await page.goto(`${ws.root}/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+
+    // Départ immédiat, avant le délai d'enregistrement.
+    await field(page, "Description", mark);
+    await page.getByRole("link", { name: "Catalogue" }).click();
+    await expect(page).toHaveURL(/\/catalogue$/);
+    await expect.poll(async () => ((await draftOf(request, id))?.document.data_product as Raw | undefined)?.description).toBe(mark);
+    await page.goBack();
+    await expect(description(page)).toHaveValue(mark);
+    expect(await seriousViolations(page)).toEqual([]);
+
+    // Départ depuis la vue YAML, avec un texte inachevé.
+    await page.getByRole("button", { name: "Éditer en YAML" }).click();
+    const yaml = page.getByRole("textbox", { name: "YAML de Revenu net" });
+    await yaml.click();
+    await page.keyboard.press("ControlOrMeta+Home"); // en tête : l'éditeur ne rend que les lignes visibles
+    await page.keyboard.insertText("label: [ouvert\n");
+    await page.getByRole("link", { name: "Catalogue" }).click();
+    await expect(page).toHaveURL(/\/catalogue$/);
+    await expect.poll(async () => (await draftOf(request, id))?.yaml_text).toContain("label: [ouvert");
+    await page.goBack();
+    await expect(page.getByRole("textbox", { name: "YAML de Revenu net" })).toContainText("label: [ouvert");
+  } finally {
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-15] « Repartir de la vN » demande confirmation, au clavier ; un échec de suppression garde la session", async ({ page, request }) => {
+  const label = "Revenu net (brouillon repris)";
+  const opened = await (await request.get(`${EDITOR}/documents/revenu-net`)).json() as { document: Raw; base_version: number; highest: number };
+  const version = opened.base_version;
+  expect((await request.put(`${EDITOR}/documents/revenu-net/draft`, {
+    data: { document: { ...opened.document, label }, positions: {}, highest: opened.highest, base_version: version },
+  })).ok()).toBe(true);
+  const restart = page.getByRole("button", { name: `Repartir de la v${version}` });
+  const confirmation = page.getByRole("alertdialog", { name: `Repartir de la v${version} ?` });
+  const title = (text: string) => page.getByRole("heading", { level: 1, name: `${text} : v${version + 1} · brouillon` });
+  try {
+    await page.goto(`${ws.root}/editeur?from=revenu-net`);
+    await expect(title(label)).toBeVisible();
+    await expect(page.getByText("Brouillon local repris")).toBeVisible();
+
+    // Le focus arrive sur « Annuler » ; Échap ferme sans rien supprimer.
+    await restart.click();
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation.getByRole("button", { name: "Annuler" })).toBeFocused();
+    expect(await seriousViolations(page)).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(confirmation).toHaveCount(0);
+    await expect(restart).toBeFocused();
+    expect((await draftOf(request, "revenu-net"))?.document.label).toBe(label);
+
+    // « Annuler » conserve aussi le brouillon.
+    await restart.click();
+    await confirmation.getByRole("button", { name: "Annuler" }).click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(restart).toBeFocused();
+    await expect(title(label)).toBeVisible();
+    expect((await draftOf(request, "revenu-net"))?.document.label).toBe(label);
+
+    // Une suppression qui échoue affiche l'erreur et garde la session.
+    await page.route("**/editor/documents/revenu-net/draft", (route) =>
+      route.request().method() === "DELETE"
+        ? route.fulfill({ status: 500, json: { detail: { code: "delete_failed", message: "Suppression impossible." } } })
+        : route.continue());
+    await restart.click();
+    await confirmation.getByRole("button", { name: "Supprimer le brouillon" }).click();
+    await expect(page.getByRole("alert")).toContainText("L'opération a échoué : Suppression impossible.");
+    await expect(confirmation).toHaveCount(0);
+    await expect(title(label)).toBeVisible();
+    await expect(restart).toBeVisible();
+    expect((await draftOf(request, "revenu-net"))?.document.label).toBe(label);
+    await page.unroute("**/editor/documents/revenu-net/draft");
+
+    // Confirmer supprime le brouillon et revient à la version courante ; l'édition est gelée tant que la suppression dure.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/editor/documents/revenu-net/draft", async (route) => {
+      if (route.request().method() !== "DELETE") return route.continue();
+      await held;
+      await route.continue().catch(() => undefined);
+    });
+    await restart.click();
+    await confirmation.getByRole("button", { name: "Supprimer le brouillon" }).click();
+    await expect(page.getByText("Reprise en cours : l'édition est suspendue.")).toBeVisible();
+    await expect(page.locator('[aria-busy="true"]')).toBeVisible();
+    await expect(confirmation.getByRole("button", { name: "Annuler" })).toBeDisabled();
+    await expect(confirmation.getByRole("button", { name: "Supprimer le brouillon" })).toBeDisabled();
+    await expect(submitButton(page)).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Éditer en YAML" })).toBeDisabled();
+    release();
+    await expect(title("Revenu net")).toBeVisible();
+    await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+    await expect(page.getByText("Reprise en cours")).toHaveCount(0);
+    await expect(restart).toHaveCount(0);
+    await expect.poll(() => draftOf(request, "revenu-net")).toBeNull();
+  } finally {
+    await request.delete(`${EDITOR}/documents/revenu-net/draft`);
+  }
+});
+
+test("[S-0013-16] Une erreur à l'entrée ou à la sortie de la vue YAML s'affiche et laisse l'éditeur utilisable", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  const enter = page.getByRole("button", { name: "Éditer en YAML" });
+  const leave = page.getByRole("button", { name: "Revenir au canevas" });
+  try {
+    await page.goto(`${ws.root}/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+
+    // Entrée : la validation est indisponible, l'éditeur reste sur le canevas.
+    await page.route(CHECK, (route) => route.fulfill(unavailable));
+    await enter.click();
+    await expect(page.getByRole("alert")).toContainText("L'opération a échoué : Validation indisponible.");
+    await expect(enter).toBeVisible();
+    await page.unroute(CHECK);
+
+    // Sortie : le serveur ne répond pas à l'analyse ; le texte reste, et le retour fonctionne ensuite.
+    await enter.click();
+    const yaml = page.getByRole("textbox", { name: "YAML de Revenu net" });
+    await expect(yaml).toContainText("schema_version: 1");
+    await page.route("**/editor/parse", (route) => route.abort("connectionrefused"));
+    await leave.click();
+    await expect(page.getByRole("alert").filter({ hasText: "Réessayez dans un instant." })).toBeVisible();
+    await expect(yaml).toBeVisible();
+    await page.unroute("**/editor/parse");
+    await leave.click();
+    await expect(enter).toBeVisible();
+    await expect(page.getByText(/schéma 1 · 7 nœuds/)).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  } finally {
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-14] pagehide enregistre aussitôt la modification en attente", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  const mark = "modification-au-pagehide";
+  const puts: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "PUT" && r.url().endsWith(`/editor/documents/${id}/draft`)) puts.push(r.postData() ?? "");
+  });
+  try {
+    await page.goto(`${ws.root}/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    await field(page, "Description", mark);
+    expect(puts).toHaveLength(0); // le délai d'enregistrement n'est pas écoulé
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect.poll(() => puts.some((body) => body.includes(mark))).toBe(true);
+    await expect.poll(async () => ((await draftOf(request, id))?.document.data_product as Raw | undefined)?.description).toBe(mark);
+  } finally {
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-18] Un brouillon YAML illisible s'ouvre en vue YAML ; « Repartir » revient à la version sans réparer le texte", async ({ page, request }) => {
+  const unreadable = "label: [ouvert";
+  const opened = await (await request.get(`${EDITOR}/documents/revenu-net`)).json() as { document: Raw; base_version: number; highest: number };
+  const version = opened.base_version;
+  expect((await request.put(`${EDITOR}/documents/revenu-net/draft`, {
+    data: { document: opened.document, positions: {}, highest: opened.highest, base_version: version, yaml_text: unreadable },
+  })).ok()).toBe(true);
+  const restart = page.getByRole("button", { name: `Repartir de la v${version}` });
+  const confirmation = page.getByRole("alertdialog", { name: `Repartir de la v${version} ?` });
+  const yaml = page.getByRole("textbox", { name: "YAML de Revenu net" });
+  try {
+    await page.goto(`${ws.root}/editeur?from=revenu-net`);
+    await expect(yaml).toContainText(unreadable);
+    await expect(page.getByText("Brouillon local repris")).toBeVisible();
+    await expect(restart).toBeVisible();
+
+    await restart.click();
+    await expect(confirmation.getByRole("button", { name: "Annuler" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(confirmation).toHaveCount(0);
+    await expect(restart).toBeFocused();
+    await expect(yaml).toContainText(unreadable);
+
+    await restart.click();
+    await confirmation.getByRole("button", { name: "Annuler" }).click();
+    await expect(restart).toBeFocused();
+    expect((await draftOf(request, "revenu-net"))?.yaml_text).toBe(unreadable);
+
+    await restart.click();
+    await confirmation.getByRole("button", { name: "Supprimer le brouillon" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: `Revenu net : v${version + 1} · brouillon` })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Graphe" })).toBeVisible();
+    await expect(yaml).toHaveCount(0);
+    await expect(restart).toHaveCount(0);
+    await expect.poll(() => draftOf(request, "revenu-net")).toBeNull();
+    await expect(page.getByRole("button", { name: "Éditer en YAML" })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  } finally {
+    await request.delete(`${EDITOR}/documents/revenu-net/draft`);
   }
 });

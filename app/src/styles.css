@@ -506,13 +506,15 @@ h3 { margin: 0; font-size: var(--atlas-text-base); font-weight: 600; }
 .palette-swatch { width: var(--atlas-swatch); height: var(--atlas-swatch); border-radius: var(--atlas-border-accent); flex: none; }
 .palette-hint { padding: var(--atlas-space-2) var(--atlas-space-4); font-size: var(--atlas-text-sm); color: var(--atlas-muted); }
 .editor-center { flex: 999 1 var(--atlas-table-basis); min-width: 0; display: flex; flex-direction: column; }
-.editor-center > .banner { margin: var(--atlas-space-2) var(--atlas-space-3) 0; }
+.editor-center > .banner, .editor-center > .confirmation,
+.editor-yaml > .banner, .editor-yaml > .confirmation { margin: var(--atlas-space-2) var(--atlas-space-3) 0; }
 .editor-notice {
   display: flex; align-items: center; gap: var(--atlas-space-2); margin: var(--atlas-space-2) var(--atlas-space-3) 0;
   padding: var(--atlas-space-2) var(--atlas-space-3); border: var(--atlas-border) solid var(--atlas-warn); border-radius: var(--atlas-radius-md);
   background: var(--atlas-warn-bg); color: var(--atlas-ink);
 }
 .editor-notice .icon-sm { color: var(--atlas-warn); }
+.editor-notice:empty { margin: 0; padding: 0; border: 0; }
 .editor-notice .icon-button { margin-left: auto; }
 .editor-hint { padding: var(--atlas-space-1) var(--atlas-space-3); font-size: var(--atlas-text-sm); color: var(--atlas-muted); }
 
@@ -821,14 +823,14 @@ textarea.prop-input { resize: vertical; }
 .connections-github-repo { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .attach-remote { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-3); }
 .attach-remote .field { align-self: stretch; }
-.attach-reset {
+.confirmation {
   display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-3); align-self: stretch;
   padding: var(--atlas-space-3) var(--atlas-space-4); background: var(--atlas-panel);
   border: var(--atlas-border) solid var(--atlas-bad); border-radius: var(--atlas-radius-lg);
 }
-.attach-reset h3 { margin: 0; font-size: var(--atlas-text-base); }
-.attach-reset p { margin: 0; font-size: var(--atlas-text-md); }
-.attach-reset-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--atlas-space-2); }
+.confirmation h3 { margin: 0; font-size: var(--atlas-text-base); }
+.confirmation p { margin: 0; font-size: var(--atlas-text-md); }
+.confirmation-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--atlas-space-2); }
 .attach-remote-github { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-2); font-size: var(--atlas-text-md); }
 .github-device { display: flex; flex-direction: column; align-items: flex-start; gap: var(--atlas-space-2); }
 .github-device p { margin: 0; }

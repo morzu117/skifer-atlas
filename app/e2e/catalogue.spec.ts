@@ -135,3 +135,47 @@ test("[S-0011-07] « Jamais comparé », puis mis à jour après une comparaison
   );
   expect(await seriousViolations(page)).toEqual([]);
 });
+
+test("[S-0013-17] Catalogue en échec au premier chargement : état sobre si injoignable, bandeau et « Réessayer » sinon", async ({ page }) => {
+  const catalog = /\/api\/workspaces\/groupe-nordis\/catalog/; // le catalogue et ses facettes
+  const retries = page.getByRole("button", { name: "Réessayer" });
+  const domain = page.getByRole("combobox", { name: "Domaine" });
+
+  // Serveur injoignable : la page reste sobre, seule la coque propose de réessayer.
+  await page.route(catalog, (route) => route.abort("connectionrefused"));
+  await page.goto(CATALOGUE);
+  await expect(page.getByText("Catalogue indisponible.")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+  await expect(retries).toHaveCount(1);
+  await expect(page.getByRole("alert").getByRole("button", { name: "Réessayer" })).toBeVisible();
+  await expect(table(page)).toHaveAttribute("aria-busy", "false");
+  await expect(page.getByText("Chargement du catalogue…")).toHaveCount(0);
+  expect(await seriousViolations(page)).toEqual([]);
+
+  await page.unroute(catalog);
+  await retries.click();
+  await expect(table(page).getByRole("row")).toHaveCount(8); // en-tête compris
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByText("Catalogue indisponible.")).toHaveCount(0);
+  await expect(page.getByText("Chargement du catalogue…")).toHaveCount(0);
+  await expect(table(page)).toHaveAttribute("aria-busy", "false");
+
+  // Autre erreur : le bandeau de la page propose « Réessayer » et recharge aussi les facettes.
+  await page.route(catalog, (route) => route.fulfill({ status: 500, json: { detail: { code: "index_failed", message: "Index illisible." } } }));
+  await page.reload();
+  const banner = page.getByRole("main").getByRole("alert");
+  await expect(banner).toContainText("Index illisible.");
+  await expect(banner.getByRole("button", { name: "Réessayer" })).toBeVisible();
+  await expect(page.getByText("Catalogue indisponible.")).toHaveCount(0);
+  await expect(table(page)).toHaveAttribute("aria-busy", "false");
+  await expect(page.getByText("Chargement du catalogue…")).toHaveCount(0);
+  await expect(domain.getByRole("option", { name: "Finance" })).toHaveCount(0);
+  expect(await seriousViolations(page)).toEqual([]);
+
+  await page.unroute(catalog);
+  await banner.getByRole("button", { name: "Réessayer" }).click();
+  await expect(table(page).getByRole("row")).toHaveCount(8);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(domain.getByRole("option", { name: "Finance" })).toHaveCount(1);
+});

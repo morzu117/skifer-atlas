@@ -1,7 +1,9 @@
 import { ReactFlowProvider, useReactFlow, useViewport } from "@xyflow/react";
+import { isTauri } from "@tauri-apps/api/core";
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
 import { api, ApiError, UnreachableError, type CheckResult, type EditorDocument, type Issue, type Proposal, type Workspace } from "../api";
 import { Banner } from "../components/Banner";
+import { Confirmation } from "../components/Confirmation";
 import { Icon, type IconName } from "../components/Icon";
 import { Select } from "../components/Select";
 import { ago, plural, slugify } from "../format";
@@ -47,12 +49,13 @@ const YamlView = lazy(() => import("../editor/YamlView").then((m) => ({ default:
 
 const CHECK_DELAY = 300;
 const SAVE_DELAY = 800;
+const CLOSE_SAVE_TIMEOUT = 2000;
 // Centre d'un nœud de 184 px pour « Aller au nœud ».
 const NODE_CENTER = { x: 92, y: 40 };
 
 type Session = { doc: Raw; positions: Positions; highest: number; history: History };
 type Load = { kind: "loading" } | { kind: "ready"; info: EditorDocument } | { kind: "error"; error: Explained };
-type Yaml = { text: string; issues: Issue[]; check: CheckResult | null };
+type Yaml = { text: string; issues: Issue[]; check?: CheckResult | null };
 
 const isRaw = (value: unknown): value is Raw => typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -72,7 +75,7 @@ export function Editor({ ws, params, heading }: { ws: Workspace; params: Params;
   if (!from) return <NewDocument ws={ws} heading={heading} />;
   return (
     <ReactFlowProvider>
-      <Session key={from} ws={ws} id={from} heading={heading} />
+      <Session key={`${ws.id}/${from}`} ws={ws} id={from} heading={heading} />
     </ReactFlowProvider>
   );
 }
@@ -334,13 +337,39 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   const [saving, setSaving] = useState(false);
   const [resumed, setResumed] = useState<{ savedAt: string; base: number | null } | null>(null);
   const [yaml, setYaml] = useState<Yaml | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<{ document: Raw; yaml: string } | null>(null);
   const [submitted, setSubmitted] = useState<Proposal | null>(null);
   const [kpis, setKpis] = useState<{ value: string; label: string }[]>([]);
   const [, setTick] = useState(0);
   const checkSeq = useRef(0);
+  const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const checkedDoc = useRef<Raw | null>(null);
+  const failedDoc = useRef<Raw | null>(null);
+  const yamlRef = useRef<Yaml | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSave = useRef(false);
+  const closedRef = useRef(false);
+  const saveInFlight = useRef<Promise<void> | null>(null);
+  const infoRef = useRef<EditorDocument | null>(null);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const restartTrigger = useRef<HTMLButtonElement>(null);
+  const updateYaml = useCallback((fn: (value: Yaml | null) => Yaml | null) => {
+    const next = fn(yamlRef.current);
+    yamlRef.current = next;
+    setYaml(next);
+  }, []);
 
   const commit = useCallback((next: Session) => {
+    if (closedRef.current) return;
+    if (current.current?.doc !== next.doc) {
+      checkedDoc.current = null;
+      failedDoc.current = null;
+      checkSeq.current++;
+      setCheck(null);
+      setChecking(false);
+    }
+    pendingSave.current = true;
     current.current = next;
     setSession(next);
     setRevision((r) => r + 1);
@@ -364,6 +393,8 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
         };
         current.current = start;
         setSession(start);
+        infoRef.current = info;
+        if (draft?.yaml_text != null) updateYaml(() => ({ text: draft.yaml_text!, issues: [] }));
         if (draft) {
           setSavedAt(draft.saved_at);
           if (info.base_version !== null) setResumed({ savedAt: draft.saved_at, base: draft.base_version });
@@ -380,20 +411,33 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
     return () => {
       alive = false;
     };
-  }, [ws.id, id]);
+  }, [ws.id, id, updateYaml]);
 
   const info = load.kind === "ready" ? load.info : null;
   const doc = session?.doc ?? null;
 
   const runCheck = useCallback(
     async (document: Raw, node: string | null) => {
+      if (checkTimer.current) clearTimeout(checkTimer.current);
+      checkTimer.current = null;
       const seq = ++checkSeq.current;
       setChecking(true);
       try {
         const result = await api.editorCheck(ws.id, document, node);
-        if (seq === checkSeq.current) setCheck(result);
+        if (seq === checkSeq.current && current.current?.doc === document) {
+          checkedDoc.current = document;
+          failedDoc.current = null;
+          setCheck(result);
+        }
         return result;
-      } catch {
+      } catch (reason) {
+        if (seq === checkSeq.current) {
+          checkedDoc.current = null;
+          failedDoc.current = document;
+          setCheck(null);
+          const error = explain(reason);
+          setNotice(`${error.title} : ${error.text}`);
+        }
         return null;
       } finally {
         if (seq === checkSeq.current) setChecking(false);
@@ -405,25 +449,92 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   // Validation à la frappe, temporisée.
   useEffect(() => {
     if (!doc || yaml) return;
-    const timer = setTimeout(() => void runCheck(doc, selected), CHECK_DELAY);
-    return () => clearTimeout(timer);
+    checkTimer.current = setTimeout(() => void runCheck(doc, selected), CHECK_DELAY);
+    return () => { if (checkTimer.current) clearTimeout(checkTimer.current); };
   }, [doc, selected, yaml, runCheck]);
 
-  // Brouillon local : seulement après une modification.
+  // Déclenche aussi l'écriture en attente au départ de l'écran ou de la page.
+  const flushDraft = useCallback((keepalive = false) => {
+    if (closedRef.current) return saveInFlight.current ?? Promise.resolve();
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    const s = current.current;
+    const details = infoRef.current;
+    if (!pendingSave.current || !s || !details) return saveInFlight.current ?? Promise.resolve();
+    pendingSave.current = false;
+    setSaving(true);
+    const draft = { document: s.doc, positions: s.positions, highest: s.highest,
+      base_version: details.base_version, yaml_text: yamlRef.current?.text ?? null };
+    // Les PUT restent ordonnés ; une suppression attend la dernière écriture lancée.
+    const save = async () => {
+      if (closedRef.current) return;
+      return api.saveDraft(ws.id, id, draft, keepalive);
+    };
+    const writing = (saveInFlight.current ? saveInFlight.current.then(save) : save())
+      .then((saved) => { if (saved && !closedRef.current) setSavedAt(saved.saved_at); })
+      .catch(() => {
+        if (!closedRef.current) {
+          pendingSave.current = true;
+          setNotice("Le brouillon n'a pas pu être enregistré sur ce poste.");
+        }
+      })
+      .finally(() => {
+        if (saveInFlight.current === writing) { saveInFlight.current = null; setSaving(false); }
+      });
+    saveInFlight.current = writing;
+    return writing;
+  }, [ws.id, id]);
   useEffect(() => {
-    if (revision === 0 || !info || submitted) return;
-    const timer = setTimeout(() => {
-      const s = current.current;
-      if (!s) return;
-      setSaving(true);
-      api
-        .saveDraft(ws.id, id, { document: s.doc, positions: s.positions, highest: s.highest, base_version: info.base_version })
-        .then((saved) => setSavedAt(saved.saved_at))
-        .catch(() => setNotice("Le brouillon n'a pas pu être enregistré sur ce poste."))
-        .finally(() => setSaving(false));
-    }, SAVE_DELAY);
-    return () => clearTimeout(timer);
-  }, [revision, info, ws.id, id, submitted]);
+    if (revision === 0 || !info || submitted || closedRef.current || !pendingSave.current) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => flushDraft(), SAVE_DELAY);
+  }, [revision, info, submitted, flushDraft]);
+  useEffect(() => {
+    const tauri = isTauri();
+    const onPageHide = () => { void flushDraft(true); };
+    const onVisibilityChange = () => { if (document.visibilityState === "hidden") void flushDraft(true); };
+    if (!tauri) window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    let closing = false;
+    if (tauri) {
+      void import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
+        if (disposed) return;
+        const window = getCurrentWindow();
+        const stop = await window.onCloseRequested(async (event) => {
+          event.preventDefault();
+          if (closing) return;
+          closing = true;
+          let timeout: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              flushDraft(),
+              new Promise<void>((resolve) => { timeout = setTimeout(resolve, CLOSE_SAVE_TIMEOUT); }),
+            ]);
+            await window.destroy();
+          } catch (reason) {
+            closing = false;
+            const error = explain(reason);
+            setNotice(`${error.title} : ${error.text}`);
+          } finally {
+            clearTimeout(timeout);
+          }
+        });
+        if (disposed) stop();
+        else unlisten = stop;
+      }).catch((reason) => {
+        if (!disposed) { const error = explain(reason); setNotice(`${error.title} : ${error.text}`); }
+      });
+    }
+    return () => {
+      disposed = true;
+      unlisten?.();
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      void flushDraft();
+    };
+  }, [flushDraft]);
 
   // « Enregistré il y a n min » reste juste.
   useEffect(() => {
@@ -435,7 +546,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   const dispatch = useCallback(
     (ops: Op | Op[], change: Partial<Pick<Session, "positions" | "highest">> = {}) => {
       const s = current.current;
-      if (!s) return false;
+      if (!s || closedRef.current) return false;
       const list = Array.isArray(ops) ? ops : [ops];
       let after = s.doc;
       try {
@@ -462,6 +573,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   const output = doc ? outputOf(mode === "override" && canonical ? canonical : doc) : undefined;
 
   const step = (direction: "undo" | "redo") => {
+    if (closedRef.current) return;
     const s = current.current;
     if (!s) return;
     const moved = direction === "undo" ? undo(s.history) : redo(s.history);
@@ -526,7 +638,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   // Annuler / rétablir au clavier, hors champ de saisie (qui garde son propre historique).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (yaml || typing(event.target) || !(event.metaKey || event.ctrlKey)) return;
+      if (closedRef.current || yaml || typing(event.target) || !(event.metaKey || event.ctrlKey)) return;
       const key = event.key.toLowerCase();
       if (key === "z") {
         event.preventDefault();
@@ -543,7 +655,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   const enterYaml = async () => {
     if (!doc) return;
     const result = await runCheck(doc, selected);
-    if (result) setYaml({ text: result.yaml, issues: result.issues, check: result });
+    if (result && !closedRef.current && current.current?.doc === doc) updateYaml(() => ({ text: result.yaml, issues: result.issues, check: result }));
   };
 
   // YAML plein écran : analyse puis validation, avec la même temporisation.
@@ -556,64 +668,133 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
         const parsed = await api.editorParse(ws.id, yamlText);
         if (!alive) return;
         if (!parsed.document) {
-          setYaml((y) => y && { ...y, issues: parsed.issues, check: null });
+          updateYaml((y) => y && { ...y, issues: parsed.issues, check: null });
           return;
         }
         const result = await api.editorCheck(ws.id, parsed.document, null);
-        if (alive) setYaml((y) => y && { ...y, issues: result.issues, check: result });
-      } catch {
-        // le bandeau du serveur injoignable suffit
+        if (alive) updateYaml((y) => y && { ...y, issues: result.issues, check: result });
+      } catch (reason) {
+        if (alive) { const error = explain(reason); setNotice(`${error.title} : ${error.text}`); }
       }
     }, CHECK_DELAY);
     return () => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [yamlText, ws.id]);
+  }, [yamlText, ws.id, updateYaml]);
 
   const leaveYaml = async () => {
-    if (!yaml || !doc) return;
-    const parsed = await api.editorParse(ws.id, yaml.text);
-    if (!parsed.document) {
-      setYaml({ ...yaml, issues: parsed.issues, check: null });
-      setNotice("YAML illisible : corriger l'erreur signalée pour revenir au canevas.");
-      return;
-    }
-    const next = parsed.document;
-    if (JSON.stringify(next) !== JSON.stringify(doc)) {
+    const edited = yamlRef.current;
+    if (!edited || closedRef.current) return;
+    try {
+      const parsed = await api.editorParse(ws.id, edited.text);
+      if (closedRef.current || !yamlRef.current) return;
+      if (yamlRef.current.text !== edited.text) {
+        setNotice("Le YAML a changé pendant l'analyse : réessayez de revenir au canevas.");
+        return;
+      }
+      if (!parsed.document) {
+        updateYaml((y) => y && { ...y, issues: parsed.issues, check: null });
+        setNotice("YAML illisible : corriger l'erreur signalée pour revenir au canevas.");
+        return;
+      }
+      const next = parsed.document;
       const s = current.current!;
-      dispatch({ kind: "replace", document: next }, { positions: placed(viewNodes(next, mode, canonical), s.positions) });
+      if (JSON.stringify(next) !== JSON.stringify(s.doc) &&
+        !dispatch({ kind: "replace", document: next }, { positions: placed(viewNodes(next, mode, canonical), s.positions) })) {
+        setNotice((message) => message ?? "Le YAML n'a pas pu être appliqué au canevas. Corrigez-le, puis réessayez.");
+        return;
+      }
+      setNotice(null);
+      updateYaml(() => null);
+      pendingSave.current = true;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => void flushDraft(), SAVE_DELAY);
+    } catch (reason) {
+      const error = explain(reason);
+      setNotice(`${error.title} : ${error.text}`);
     }
-    setNotice(null);
-    setYaml(null);
   };
 
   const startSubmit = () => {
-    if (!check?.submittable || checking) {
+    if (!doc || closedRef.current) return;
+    if (checkedDoc.current !== doc) {
       setTab("problems");
-      const errors = check?.issues.filter((i) => i.severity === "error").length ?? 0;
-      setNotice(errors > 0 ? `Soumission bloquée : ${plural(errors, "erreur")} à corriger (onglet Problèmes).` : "Validation en cours : réessayer dans un instant.");
+      if (checking) {
+        setNotice("Validation en cours : réessayer dans un instant.");
+        return;
+      }
+      setNotice(failedDoc.current === doc
+        ? "La validation a échoué : nouvelle tentative lancée."
+        : "Validation lancée : réessayer dans un instant.");
+      void runCheck(doc, selected);
       return;
     }
-    setSubmitting(true);
+    if (checking) {
+      setNotice("Validation en cours : réessayer dans un instant.");
+      return;
+    }
+    if (!check?.submittable) {
+      setTab("problems");
+      const errors = check?.issues.filter((i) => i.severity === "error").length ?? 0;
+      setNotice(`Soumission bloquée : ${plural(errors, "erreur")} à corriger (onglet Problèmes).`);
+      return;
+    }
+    setSubmitting({ document: doc, yaml: check.yaml });
   };
 
-  const onSubmitted = (proposal: Proposal) => {
-    setSubmitting(false);
+  const onSubmitted = async (proposal: Proposal) => {
+    closedRef.current = true;
+    setNotice(null);
+    setSubmitting(null);
     setSubmitted(proposal);
-    api.deleteDraft(ws.id, id).catch(() => undefined);
+    pendingSave.current = false;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    await saveInFlight.current;
+    await api.deleteDraft(ws.id, id).catch(() => {
+      setNotice("La proposition est créée, mais le brouillon local n'a pas pu être supprimé.");
+    });
   };
 
   const restart = async () => {
-    if (!info) return;
-    await api.deleteDraft(ws.id, id).catch(() => undefined);
+    if (!info || closedRef.current) return;
+    closedRef.current = true;
+    setRestarting(true);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    try {
+      await saveInFlight.current;
+      await api.deleteDraft(ws.id, id);
+    } catch (reason) {
+      closedRef.current = false;
+      // La session reste modifiable et sauvegardable après un refus de suppression.
+      pendingSave.current = true;
+      const error = explain(reason);
+      setNotice(`${error.title} : ${error.text}`);
+      setRestarting(false);
+      setConfirmRestart(false);
+      return;
+    }
+    pendingSave.current = false;
     const nodes = viewNodes(info.document, info.mode, info.canonical);
     const fresh: Session = { doc: info.document, positions: placed(nodes, info.positions), highest: Math.max(info.highest, session?.highest ?? 0), history: emptyHistory() };
     current.current = fresh;
+    checkedDoc.current = null;
+    failedDoc.current = null;
+    checkSeq.current++;
+    setCheck(null);
+    setChecking(false);
+    updateYaml(() => null);
+    setRevision(0);
     setSession(fresh);
+    heading.current?.focus();
     setResumed(null);
     setSavedAt(null);
     setSelected(null);
+    setNotice(null);
+    setConfirmRestart(false);
+    setRestarting(false);
+    // Toutes les écritures de l'ancienne session sont terminées : la nouvelle peut éditer.
+    closedRef.current = false;
   };
 
   // --- rendu -------------------------------------------------------------------------------
@@ -654,8 +835,29 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
         : { href: href.view(ws.id), label: "Catalogue" };
   const edges = edgesOf(nodes).length;
   const saved = saving ? "Enregistrement…" : savedAt ? `Enregistré ${ago(savedAt)} (local)` : "Non enregistré";
-  const blocked = !check?.submittable || checking;
-  const yamlBlocked = yaml ? !yaml.check : false;
+  const blocked = checkedDoc.current !== doc || !check?.submittable || checking;
+  const yamlBlocked = yaml?.check === null;
+
+  const resumeNotice = resumed && (
+    <>
+      <Banner
+        tone={resumed.base !== info.base_version ? "warn" : "info"}
+        title={resumed.base !== info.base_version ? "La version courante a changé depuis ce brouillon" : "Brouillon local repris"}
+        action={
+          <button ref={restartTrigger} type="button" className="btn btn-neutral btn-dense" disabled={restarting} onClick={() => setConfirmRestart(true)}>
+            Repartir de la v{info.base_version}
+          </button>
+        }
+      >
+        Enregistré {ago(resumed.savedAt)} sur ce poste
+        {resumed.base !== info.base_version ? ` à partir de la v${resumed.base ?? "?"} ; la proposition sera comparée à la v${info.base_version}.` : "."}
+      </Banner>
+      {confirmRestart && <Confirmation title={`Repartir de la v${info.base_version} ?`} action="Supprimer le brouillon"
+        description="Le brouillon local et ses modifications seront supprimés."
+        returnFocusTo={restartTrigger}
+        busy={restarting} onCancel={() => setConfirmRestart(false)} onConfirm={() => void restart()} />}
+    </>
+  );
 
   const tools: { id: Tool; label: string; icon: IconName }[] = [
     { id: "select", label: "Sélection", icon: "pointer" },
@@ -687,44 +889,51 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
         {!submitted && (
           <div className="editor-head-end">
             {yaml ? (
-              <button type="button" className="btn btn-head" aria-disabled={yamlBlocked || undefined} onClick={() => void leaveYaml()}>
+              <button type="button" className="btn btn-head" disabled={restarting} aria-disabled={yamlBlocked || undefined} onClick={() => void leaveYaml()}>
                 <Icon name="edge" className="icon-sm" />
                 Revenir au canevas
               </button>
             ) : (
-              <button type="button" className="btn btn-head" onClick={() => void enterYaml()}>
+              <button type="button" className="btn btn-head" disabled={restarting} onClick={() => void enterYaml()}>
                 <Icon name="code" className="icon-sm" />
                 Éditer en YAML
               </button>
             )}
-            <button type="button" className="btn btn-mint" aria-disabled={blocked || !!yaml || undefined} onClick={yaml ? undefined : startSubmit}>
+            <button type="button" className="btn btn-mint" disabled={restarting} aria-disabled={blocked || !!yaml || undefined} onClick={yaml ? undefined : startSubmit}>
               Soumettre la proposition
             </button>
           </div>
         )}
       </header>
 
+      <div className="editor-notice" role="status" aria-label="Reprise du brouillon">
+        {restarting ? "Reprise en cours : l'édition est suspendue. Patientez jusqu'à la suppression du brouillon." : ""}
+      </div>
       {submitted ? (
         <main className="editor-new">
-          <div className="card editor-new-card" role="status">
-            <h2>Proposition n° {submitted.id} créée</h2>
-            <p>
-              {submitted.title} · branche <span className="mono">{submitted.branch}</span>
-              {submitted.approvals ? ` · validations ${submitted.approvals.obtained} / ${submitted.approvals.required}` : ""}.
-            </p>
-            <p className="muted">Le brouillon local est supprimé : la proposition attend maintenant ses validateurs.</p>
-            <div className="actions">
-              <a className="btn btn-primary" href={href.view(ws.id, "propositions")}>
-                Voir les propositions
-              </a>
-              <a className="btn btn-neutral" href={back.href}>
-                {info.base_version !== null ? "Retour à la fiche" : "Retour au catalogue"}
-              </a>
+          <div className="editor-new-card">
+            <div className="card" role="status">
+              <h2>Proposition n° {submitted.id} créée</h2>
+              <p>
+                {submitted.title} · branche <span className="mono">{submitted.branch}</span>
+                {submitted.approvals ? ` · validations ${submitted.approvals.obtained} / ${submitted.approvals.required}` : ""}.
+              </p>
+              <p className="muted">La proposition attend maintenant ses validateurs.</p>
+              <div className="actions">
+                <a className="btn btn-primary" href={href.view(ws.id, "propositions")}>
+                  Voir les propositions
+                </a>
+                <a className="btn btn-neutral" href={back.href}>
+                  {info.base_version !== null ? "Retour à la fiche" : "Retour au catalogue"}
+                </a>
+              </div>
             </div>
+            <p className="muted" role="status">{notice}</p>
           </div>
         </main>
       ) : yaml ? (
-        <main className="editor-yaml">
+        <main className="editor-yaml" aria-busy={restarting}>
+          {resumeNotice}
           {notice && (
             <div className="editor-notice" role="alert">
               <Icon name="alert" className="icon-sm" />
@@ -732,7 +941,13 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
             </div>
           )}
           <Suspense fallback={<p className="bottom-empty muted">Chargement de l'éditeur YAML…</p>}>
-            <YamlView initial={yaml.text} label={`YAML de ${label}`} onChange={(value) => setYaml((y) => y && { ...y, text: value })} />
+            <YamlView initial={yaml.text} label={`YAML de ${label}`} onChange={(value) => {
+              if (closedRef.current) return;
+              updateYaml((y) => y && { ...y, text: value });
+              pendingSave.current = true;
+              if (saveTimer.current) clearTimeout(saveTimer.current);
+              saveTimer.current = setTimeout(() => flushDraft(), SAVE_DELAY);
+            }} />
           </Suspense>
           <BottomPanel
             check={yaml.check ?? { yaml: "", fragments: {}, issues: yaml.issues, columns: {}, submittable: false, status: { schema: false, acyclic: true, cycle: null, compilable: {} } }}
@@ -809,23 +1024,10 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
             </div>
           </div>
 
-          <div className="editor-body">
+          <div className="editor-body" aria-busy={restarting}>
             <Palette onAdd={(type) => addNode(type)} disabled={locked} />
             <section className="editor-center" aria-label="Graphe">
-              {resumed && (
-                <Banner
-                  tone={resumed.base !== info.base_version ? "warn" : "info"}
-                  title={resumed.base !== info.base_version ? "La version courante a changé depuis ce brouillon" : "Brouillon local repris"}
-                  action={
-                    <button type="button" className="btn btn-neutral btn-dense" onClick={() => void restart()}>
-                      Repartir de la v{info.base_version}
-                    </button>
-                  }
-                >
-                  Enregistré {ago(resumed.savedAt)} sur ce poste
-                  {resumed.base !== info.base_version ? ` à partir de la v${resumed.base ?? "?"} ; la proposition sera comparée à la v${info.base_version}.` : "."}
-                </Banner>
-              )}
+              {resumeNotice}
               {notice && (
                 <div className="editor-notice" role="alert">
                   <Icon name="alert" className="icon-sm" />
@@ -841,6 +1043,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
                 </p>
               )}
               <Canvas
+                inert={restarting}
                 nodes={nodes}
                 positions={session.positions}
                 selected={selected}
@@ -871,6 +1074,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
               />
             </section>
             <Properties
+              inert={restarting}
               doc={doc}
               mode={mode}
               canonical={canonical}
@@ -889,13 +1093,13 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
         </>
       )}
 
-      {submitting && check && (
+      {submitting && (
         <SubmitDialog
           ws={ws.id}
-          document={doc}
-          yaml={check.yaml}
+          document={submitting.document}
+          yaml={submitting.yaml}
           baseVersion={info.base_version}
-          onClose={() => setSubmitting(false)}
+          onClose={() => setSubmitting(null)}
           onSubmitted={onSubmitted}
         />
       )}

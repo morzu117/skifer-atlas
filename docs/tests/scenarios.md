@@ -34,7 +34,7 @@
 | 0010 | 10 | 9 | 0 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 7 | 7 | 0 | 0 | 0 |
-| 0013 | 11 | 11 | 0 | 0 | 0 |
+| 0013 | 22 | 18 | 4 | 0 | 0 |
 | 0014 | 7 | 7 | 0 | 0 | 0 |
 | 0015 | 7 | 5 | 2 | 0 | 0 |
 | 0016 | 6 | 6 | 0 | 0 | 0 |
@@ -55,7 +55,7 @@
 | 0033 | 9 | 8 | 0 | 1 | 0 |
 | 0034 | 10 | 6 | 3 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **256** | **190** | **8** | **58** | **0** |
+| **Total** | **267** | **197** | **12** | **58** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -640,6 +640,119 @@ Plan 0013, critère 11 · Test : `app/e2e/editor.spec.ts` › `[S-0013-11]`
 - **Alors** un problème qui nomme `colonne_absente` apparaît, puis le statut redevient « Compilable Databricks, Snowflake »
 - **Et** la durée entre la saisie et le problème est écrite dans la console, sans seuil
 - Limite : cette durée comprend la temporisation de 300 ms et le transport. Le seuil de 150 ms est vérifié par `core/tests/repo/test_editor_api.py::test_validation_of_50_nodes_under_150_ms`.
+
+### S-0013-12 — Après une modification, la soumission attend la validation de ce document
+Plan 0013, critère 12 · Test : `app/e2e/editor.spec.ts` › `[S-0013-12]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-12]`
+- **Étant donné** un brouillon indépendant de Revenu net, « Compilable Databricks, Snowflake »
+- **Quand** les réponses de `editor/check` sont retenues par le test (`page.route`), que je saisis une description dans Propriétés et clique « Soumettre la proposition » aussitôt, puis que je relâche les réponses
+- **Alors** l'alerte « Validation lancée : réessayer dans un instant. » (ou « Validation en cours : … » si la temporisation de 300 ms est déjà écoulée) s'affiche, sans le mot « échoué », la fenêtre de soumission ne s'ouvre pas, puis le statut redevient « Compilable Databricks, Snowflake »
+- **Quand** je saisis une autre description, attends que la validation de ce document soit en vol, puis clique « Soumettre la proposition »
+- **Alors** le bouton est `aria-disabled`, l'alerte « Validation en cours : réessayer dans un instant. » s'affiche et la fenêtre de soumission ne s'ouvre pas
+- **Quand** la validation répond, que j'ouvre la fenêtre, saisis la justification et clique « Soumettre »
+- **Alors** la requête `POST /proposals` porte un `document_yaml` qui contient la description saisie, et « Proposition n° N créée » s'affiche
+- **Et** la liste des propositions de l'API contient le document
+- Limite : le test e2e accepte « lancée » ou « en cours » pour ne pas dépendre de la vitesse du poste ; la phrase exacte « Validation lancée : réessayer dans un instant. » est vérifiée par Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-12]`.
+
+### S-0013-13 — Une validation indisponible s'affiche, bloque la soumission et se relance au clic
+Plan 0013, critère 13 · Test : `app/e2e/editor.spec.ts` › `[S-0013-13]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-13]` (deux tests)
+- **Étant donné** un brouillon indépendant de Revenu net, « Compilable Databricks, Snowflake », dont `editor/check` répond 503 (`page.route`)
+- **Quand** je saisis une description dans Propriétés
+- **Alors** l'alerte « L'opération a échoué : Validation indisponible. » s'affiche, le bouton est `aria-disabled`, le contrôle axe ne relève rien de sérieux et le brouillon relu par l'API contient la description
+- **Quand** je clique « Soumettre la proposition » sans modifier le document, la réponse de la nouvelle validation étant retenue
+- **Alors** l'alerte « La validation a échoué : nouvelle tentative lancée. » s'affiche (jamais « Validation en cours »), une requête `editor/check` de plus est partie et la fenêtre de soumission ne s'ouvre pas
+- **Quand** la réponse arrive en 503
+- **Alors** l'alerte « L'opération a échoué : Validation indisponible. » revient
+- **Quand** la validation redevient disponible et que je clique de nouveau, toujours sans modifier le document
+- **Alors** le statut devient « Compilable Databricks, Snowflake », le bouton n'est plus `aria-disabled` et le clic suivant ouvre la fenêtre de soumission
+
+### S-0013-14 — Quitter l'éditeur, masquer la page ou fermer la fenêtre ne perd rien
+Plan 0013, critère 14 · Tests : `app/e2e/editor.spec.ts` › `[S-0013-14]` (deux tests) ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-14]` (quatre tests)
+- **Étant donné** un brouillon indépendant de Revenu net, « Compilable Databricks, Snowflake »
+- **Quand** je saisis une description puis clique aussitôt le lien « Catalogue », avant le délai d'enregistrement de 800 ms, puis reviens en arrière
+- **Alors** le brouillon relu par l'API contient la description, et Propriétés la montre à la réouverture
+- **Quand** j'ouvre « Éditer en YAML », ajoute `label: [ouvert` en tête du texte, puis clique « Catalogue » et reviens en arrière
+- **Alors** le champ `yaml_text` du brouillon contient `label: [ouvert`, et la vue YAML se rouvre avec ce texte inachevé
+- **Quand** (second test, Chromium) je saisis une description et que la page reçoit un vrai évènement `pagehide`, avant le délai d'enregistrement
+- **Alors** une requête `PUT` du brouillon part aussitôt avec la description, et l'API la relit
+- Limite : le test `pagehide` vérifie la requête, pas son option `keepalive`, qu'un test navigateur ne voit pas ; Vitest l'établit (`[S-0013-14] [S-0013-21]`). Le passage à `hidden` (`visibilitychange`) et la fermeture de la fenêtre Tauri (`onCloseRequested`, attente d'au plus deux secondes puis `destroy`) ne sont couverts que par Vitest (`[S-0013-14] [S-0013-20] [S-0013-21]`, `[S-0013-20]`) ; une vérification dans la vraie fenêtre Tauri reste à faire (ADR 0040). Le champ `yaml_text` côté serveur : `core/tests/repo/test_editor_api.py::test_draft_keeps_the_unfinished_yaml_text_and_stays_valid_without_it`.
+
+### S-0013-15 — « Repartir de la vN » demande confirmation, au clavier
+Plan 0013, critère 15 · Test : `app/e2e/editor.spec.ts` › `[S-0013-15]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-15]`
+- **Étant donné** un brouillon local repris de Revenu net, au libellé « Revenu net (brouillon repris) », et la bannière « Brouillon local repris »
+- **Quand** je clique « Repartir de la v4 »
+- **Alors** la confirmation « Repartir de la v4 ? » s'ouvre, le focus est sur « Annuler » et le contrôle axe ne relève rien de sérieux
+- **Quand** j'appuie sur Échap, puis rouvre la confirmation et clique « Annuler »
+- **Alors** la confirmation se ferme chaque fois, le focus revient sur « Repartir de la v4 » et le brouillon relu par l'API reste celui du libellé modifié
+- **Quand** la suppression du brouillon échoue (500, `page.route`) et que je clique « Supprimer le brouillon »
+- **Alors** l'alerte « L'opération a échoué : Suppression impossible. » s'affiche, la session garde son titre, « Repartir de la v4 » reste proposé et le brouillon de l'API est intact
+- **Quand** je confirme avec une suppression retenue par le test (`page.route`)
+- **Alors** « Reprise en cours : l'édition est suspendue. » s'affiche, une zone est `aria-busy`, « Annuler », « Supprimer le brouillon », « Soumettre la proposition » et « Éditer en YAML » sont désactivés
+- **Quand** la suppression est relâchée
+- **Alors** le titre devient « Revenu net : v5 · brouillon », la bannière, la notice et `aria-busy` disparaissent et l'API ne rend plus de brouillon
+
+### S-0013-16 — Une erreur à l'entrée ou à la sortie de la vue YAML s'affiche
+Plan 0013, critère 16 · Test : `app/e2e/editor.spec.ts` › `[S-0013-16]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-16]`
+- **Étant donné** un brouillon indépendant de Revenu net, « Compilable Databricks, Snowflake »
+- **Quand** `editor/check` répond 503 et que je clique « Éditer en YAML »
+- **Alors** l'alerte « L'opération a échoué : Validation indisponible. » s'affiche et l'éditeur reste sur le canevas, avec « Éditer en YAML » proposé
+- **Quand** la validation revient, que j'ouvre la vue YAML puis que `editor/parse` est refusé en connexion (`page.route`, `abort`) et que je clique « Revenir au canevas »
+- **Alors** l'alerte « Serveur local injoignable : Réessayez dans un instant. » s'affiche et la vue YAML reste ouverte
+- **Quand** l'analyse répond de nouveau et que je clique « Revenir au canevas »
+- **Alors** le canevas revient (« schéma 1 · 7 nœuds ») et le contrôle axe ne relève rien de sérieux
+
+### S-0013-17 — Catalogue en échec au premier chargement : état sobre ou bandeau, puis reprise
+Plan 0013, critère 17 · Test : `app/e2e/catalogue.spec.ts` › `[S-0013-17]` ; Vitest : `app/src/screens/Catalogue.test.tsx` › `[S-0013-17]` (deux tests)
+- **Étant donné** l'espace Groupe Nordis, dont les requêtes du catalogue et de ses facettes sont refusées en connexion (`page.route`, `abort`) au premier chargement
+- **Quand** j'ouvre le catalogue
+- **Alors** « Catalogue indisponible. » s'affiche, sans bandeau dans la page ; `getByRole("alert")` ne trouve qu'une alerte (celle de la coque) et un seul bouton « Réessayer »
+- **Et** le tableau n'est plus `aria-busy`, « Chargement du catalogue… » a disparu et le contrôle axe ne relève rien de sérieux
+- **Quand** les requêtes aboutissent de nouveau et que je clique ce « Réessayer »
+- **Alors** le tableau reprend les sept lignes du catalogue (huit avec l'en-tête), et ni alerte, ni « Catalogue indisponible. », ni squelette ne restent affichés
+- **Quand** les requêtes répondent ensuite 500 (« Index illisible. ») et que je recharge la page
+- **Alors** le bandeau de la page affiche l'erreur et son « Réessayer », sans le texte « Catalogue indisponible. » ni squelette, et le filtre Domaine n'a pas ses options
+- **Quand** les requêtes aboutissent et que je clique le « Réessayer » du bandeau
+- **Alors** le tableau reprend ses huit lignes, l'alerte disparaît et le filtre Domaine propose « Finance »
+
+### S-0013-18 — Un brouillon YAML illisible se reprend en vue YAML et s'écarte sans le réparer
+Plan 0013, critère 18 · Test : `app/e2e/editor.spec.ts` › `[S-0013-18]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-18]`
+- **Étant donné** un brouillon de Revenu net enregistré avec `yaml_text` = `label: [ouvert` (YAML illisible) et sa version de base
+- **Quand** j'ouvre l'éditeur
+- **Alors** la vue YAML s'ouvre avec ce texte exactement, la bannière « Brouillon local repris » et « Repartir de la v4 » sont visibles
+- **Quand** j'ouvre la confirmation, appuie sur Échap, puis la rouvre et clique « Annuler »
+- **Alors** le focus est sur « Annuler » à l'ouverture, revient sur « Repartir de la v4 » à chaque fermeture, et le brouillon de l'API garde son `yaml_text`
+- **Quand** je confirme « Supprimer le brouillon »
+- **Alors** le titre devient « Revenu net : v5 · brouillon », la région Graphe s'affiche, la vue YAML et la bannière ont disparu, l'API ne rend plus de brouillon et le contrôle axe ne relève rien de sérieux (le texte illisible n'a pas été analysé ni réparé)
+- Limite : le contrôle axe n'est pas fait dans la vue YAML, où CodeMirror signale `scrollable-region-focusable` (hors périmètre du correctif).
+
+### S-0013-19 — Une sauvegarde tardive ne recrée pas un brouillon supprimé
+Plan 0013, critère 19 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-19]` (Vitest, deux tests : soumission, puis « Repartir »)
+- **Étant donné** un brouillon repris et une écriture de brouillon lancée par `pagehide`, dont la réponse est retenue
+- **Quand** je soumets la proposition, ou confirme « Repartir de la v4 », puis que l'écriture échoue tardivement
+- **Alors** la suppression du brouillon n'est envoyée qu'après la fin de l'écriture, Ctrl/Cmd+Z ne change plus le graphe, aucune autre écriture ne part, et la session issue de « Repartir » reste modifiable
+- Limite : le temps réel d'une vraie écriture n'est pas exercé ; la course est simulée par la promesse retenue. Pas de test e2e : la course exige de retenir puis de faire échouer une écriture déjà lancée, ce que seule la promesse simulée de Vitest maîtrise.
+
+### S-0013-20 — Fermer la fenêtre Tauri attend la sauvegarde, au plus deux secondes
+Plan 0013, critère 20 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-20]` (Vitest, deux tests : succès, délai dépassé ; le passage à `hidden` est aussi dans `[S-0013-14] [S-0013-20] [S-0013-21]`)
+- **Étant donné** l'éditeur sous Tauri (API de fenêtre simulée) et une écriture en attente ou lancée
+- **Quand** la fenêtre demande à se fermer
+- **Alors** la fermeture est d'abord empêchée, la sauvegarde est attendue (au plus deux secondes), puis la fenêtre est détruite une seule fois ; quitter l'écran retire l'écouteur
+- Limite : sans fenêtre native. Le cycle réel de fermeture de la WebView reste une vérification dans l'application Tauri (ADR 0040), et `pagehide` du navigateur est visible en e2e (S-0013-14).
+
+### S-0013-21 — `keepalive` seulement sous 60 Kio
+Plan 0013, critère 21 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-21]` (Vitest, deux tests : `pagehide` d'un petit brouillon, `visibilitychange` d'un corps de plus de 60 Kio en UTF-8)
+- **Étant donné** l'éditeur ouvert
+- **Quand** la page est masquée avec un petit brouillon, puis avec un texte YAML de 31 000 « é » (moins de 60 000 caractères, plus de 60 Kio en UTF-8)
+- **Alors** le premier `PUT` part avec `keepalive`, le second sans
+- Limite : le navigateur n'expose pas `keepalive` aux tests Playwright ; la mesure en octets est donc vérifiée sur l'appel `fetch`.
+
+### S-0013-22 — Saisir du YAML ne désactive pas « Revenir au canevas »
+Plan 0013, critère 22 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-22]` (Vitest, deux tests)
+- **Étant donné** la vue « Éditer en YAML » de Revenu net
+- **Quand** je saisis du YAML pendant la validation
+- **Alors** « Revenir au canevas » n'est pas `aria-disabled`, et une saisie arrivée pendant l'analyse de retour garde la vue YAML, le dernier texte et un avis
+- **Quand** le remplacement du canevas est refusé
+- **Alors** la vue YAML, le texte saisi et l'avis « Remplacement refusé. » restent affichés
+- Limite : Vitest seulement, parce que l'absence d'`aria-disabled` pendant la frappe est une course contre la temporisation de 300 ms que Playwright ne tient pas : après l'échec de l'analyse, le bouton est de nouveau `aria-disabled` et un clic sans `force` attend indéfiniment. Le parcours e2e s'appuie sur ce comportement : `[S-0013-06]` et `[S-0001-10]` attendent l'état stable (bouton `aria-disabled`, cause affichée) et cliquent avec `force`, puisque le bouton `aria-disabled` explique son blocage au clic.
 
 **Plan 0021**
 

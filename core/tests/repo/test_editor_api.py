@@ -2,6 +2,7 @@
 (`examples/depot-nordis.sh` : Revenu net v1 à v4, trois déclinaisons)."""
 
 import copy
+import json
 import statistics
 import subprocess
 import time
@@ -228,6 +229,31 @@ def test_draft_survives_and_is_deleted(client):
     assert (info["draft"]["highest"], info["positions"]) == (8, {"n01": {"x": 24, "y": 48}})
     assert client.delete(f"{EDITOR}/documents/revenu-net/draft").status_code == 204
     assert opened(client)["draft"] is None
+
+
+def test_draft_keeps_the_unfinished_yaml_text_and_stays_valid_without_it(client):
+    """Plan 0013, critère 14 : le texte YAML inachevé revient tel quel à la relecture ; un
+    brouillon sans `yaml_text` (ancien ou venu d'un autre usage) reste valide."""
+    path = f"{EDITOR}/documents/revenu-net/draft"
+    document = opened(client)["document"]
+    unfinished = "schema_version: 1\nlabel: [ouvert\n"
+    saved = client.put(path, json={"document": document, "positions": {}, "highest": 7,
+                                   "base_version": 4, "yaml_text": unfinished})
+    assert saved.status_code == 200, saved.text
+    draft = opened(client)["draft"]
+    assert draft["yaml_text"] == unfinished and draft["document"] == document
+
+    without = client.put(path, json={"document": document, "positions": {}, "highest": 7,
+                                     "base_version": 4})
+    assert without.status_code == 200, without.text
+    assert opened(client)["draft"]["yaml_text"] is None
+
+    legacy = workspace_dir("groupe-nordis") / ".atlas/drafts/ancien.json"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(json.dumps({"document": document, "positions": {}, "highest": 7,
+                                  "base_version": None,
+                                  "saved_at": "2026-01-01T00:00:00+00:00"}), encoding="utf-8")
+    assert opened(client, "ancien")["draft"]["document"] == document
 
 
 def test_corrupt_document_in_draft_is_reported(client):

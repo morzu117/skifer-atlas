@@ -28,6 +28,7 @@ const isRaw = (value: unknown): value is Raw => typeof value === "object" && val
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
 export type PropertiesProps = {
+  inert?: boolean;
   doc: Raw;
   mode: Mode;
   canonical: Raw | null;
@@ -409,7 +410,7 @@ function DocumentPanel({ doc, mode, dispatch, info, vocabulary }: PropertiesProp
 
 export function Properties(props: PropertiesProps) {
   return (
-    <aside className="props" aria-label="Propriétés">
+    <aside className="props" aria-label="Propriétés" {...(props.inert ? { inert: "" } : {})}>
       {props.node ? <NodePanel key={props.node.id} {...props} node={props.node} /> : <DocumentPanel {...props} />}
     </aside>
   );
