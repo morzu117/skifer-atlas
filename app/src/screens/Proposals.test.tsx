@@ -177,9 +177,13 @@ const GRAPHS: ProposalGraphs = {
   recurring: [{ node: "n02", label: "Factures validées", entities: ["nordis-de", "nordis-fr"] }],
 };
 
-type Overrides = { queue?: ProposalQueue; detail?: (n: number, call: number) => ProposalDetail };
+type Overrides = {
+  queue?: ProposalQueue;
+  detail?: (n: number, call: number) => ProposalDetail;
+  merge?: { status: number; json: unknown };
+};
 
-function proposalServer({ queue = QUEUE, detail: detailOf }: Overrides = {}) {
+function proposalServer({ queue = QUEUE, detail: detailOf, merge }: Overrides = {}) {
   const items = () => queue.items;
   let reads = 0;
   return fakeServer(({ method, path }) => {
@@ -191,6 +195,7 @@ function proposalServer({ queue = QUEUE, detail: detailOf }: Overrides = {}) {
     if (match[2] === "/graphs") return { json: number === 5 ? GRAPHS : { ...GRAPHS, undeclared: [], recurring: [] } };
     if (match[2] === "/reviews" && method === "POST") return { json: found };
     if (match[2] === "/comments" && method === "POST") return { json: { account: "claire.m", body: "ok", created_at: "" } };
+    if (match[2] === "/merge" && method === "POST" && merge) return merge;
     if (match[2] === "/merge" && method === "POST") return { json: { id: number, commit: "abc", tag: "t", version: found.version } };
     return { json: detailOf ? detailOf(number, reads++) : detail(found) };
   });
@@ -388,6 +393,83 @@ describe("propositions", () => {
     );
     expect(server.calls.find((c) => c.method === "POST")).toMatchObject({ path: `${API}/2/merge`, body: {} });
     expect(server.calls.filter((c) => c.path.startsWith(`${API}/queue`)).length).toBeGreaterThan(1);
+  });
+
+  it("[S-0014-08] refus de fusion : ce qui s'est passé et quoi faire, jamais la sortie de git", async () => {
+    window.location.hash = "#/w/groupe-nordis/propositions?domain=tous&n=2";
+    const raw = "git merge a échoué : CONFLICT (content): Merge conflict in kpis/taux-de-service.yaml";
+    proposalServer({
+      detail: (n) => detail(QUEUE.items.find((i) => i.id === n)!, { viewer: { ...VIEWER, can_merge: true, merge_reason: null } }),
+      merge: { status: 409, json: { detail: { code: "merge_conflict", message: raw } } },
+    });
+    render(<Harness />);
+    await userEvent.click(await screen.findByRole("button", { name: "Fusionner" }));
+    const banner = await within(selection()).findByRole("alert");
+    expect(banner).toHaveTextContent("La fusion provoque un conflit");
+    expect(banner).toHaveTextContent("demandez à l'auteur de la reproposer");
+    expect(banner).not.toHaveTextContent("CONFLICT");
+    expect(banner).not.toHaveTextContent("git merge");
+    expect(screen.queryByText("Proposition n° 2 fusionnée")).not.toBeInTheDocument();
+  });
+
+  it("[S-0014-08] la proposition a bougé depuis l'affichage : le refus relit le détail et garde le message", async () => {
+    window.location.hash = "#/w/groupe-nordis/propositions?domain=tous&n=2";
+    const server = proposalServer({
+      detail: (n) => detail(QUEUE.items.find((i) => i.id === n)!, { viewer: { ...VIEWER, can_merge: true, merge_reason: null } }),
+      merge: { status: 409, json: { detail: { code: "head_changed", message: "GitHub a répondu 409 : Head branch was modified." } } },
+    });
+    render(<Harness />);
+    await userEvent.click(await screen.findByRole("button", { name: "Fusionner" }));
+    const banner = await within(selection()).findByRole("alert");
+    expect(banner).toHaveTextContent("La proposition a changé depuis son affichage");
+    expect(banner).not.toHaveTextContent("Head branch");
+    await waitFor(() => expect(server.calls.filter((c) => c.path === `${API}/2`)).toHaveLength(2));
+    await waitFor(() => expect(server.calls.filter((c) => c.path.startsWith(`${API}/queue`))).toHaveLength(2));
+    expect(within(selection()).getByRole("alert")).toHaveTextContent("faites approuver la proposition de nouveau");
+  });
+
+  it("[S-0014-08] proposition déjà fusionnée ailleurs : pas de relecture, le message reste", async () => {
+    window.location.hash = "#/w/groupe-nordis/propositions?domain=tous&n=2";
+    const server = proposalServer({
+      detail: (n) => detail(QUEUE.items.find((i) => i.id === n)!, { viewer: { ...VIEWER, can_merge: true, merge_reason: null } }),
+      merge: { status: 409, json: { detail: { code: "not_open", message: "La proposition #2 n'est plus ouverte." } } },
+    });
+    render(<Harness />);
+    await userEvent.click(await screen.findByRole("button", { name: "Fusionner" }));
+    expect(await within(selection()).findByRole("alert")).toHaveTextContent("La proposition n'est plus ouverte");
+    expect(server.calls.filter((c) => c.path.startsWith(`${API}/queue`))).toHaveLength(1);
+  });
+
+  it("[S-0014-09] changer de statut vide la file le temps du chargement, et une réponse tardive de l'ancien filtre ne l'écrase pas", async () => {
+    const answers = new Map<string, (queue: ProposalQueue) => void>();
+    const asked: string[] = [];
+    fakeServer(({ path }) => {
+      if (!path.startsWith(`${API}/queue`)) return undefined;
+      const status = new URL(`http://srv${path}`).searchParams.get("status")!;
+      asked.push(status);
+      return new Promise((resolve) => answers.set(status, (json) => resolve({ json })));
+    });
+    render(<Harness />);
+    await waitFor(() => expect(asked).toEqual(["open"]));
+    answers.get("open")!({ ...QUEUE, items: [DE] });
+    const open = await queueList();
+    expect(within(open).getAllByRole("link")).toHaveLength(1);
+
+    // Les fusionnées tardent : la file ouverte ne reste pas affichée sous le filtre « Fusionnées ».
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Statut" }), "merged");
+    expect(await screen.findByText("Chargement des propositions…")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "File des propositions" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Statut" })).toHaveValue("merged");
+
+    // On revient aux ouvertes puis on repart sur les fusionnées : la réponse de la première
+    // demande « Fusionnées », arrivée après, ne doit pas masquer la dernière.
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Statut" }), "closed");
+    await waitFor(() => expect(asked).toEqual(["open", "merged", "closed"]));
+    answers.get("closed")!({ ...QUEUE, items: [item(7, { state: "closed" })] });
+    expect(await queueList()).toBeInTheDocument();
+    answers.get("merged")!({ ...QUEUE, items: [item(9, { state: "merged" }), item(8, { state: "merged" })] });
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "File des propositions" })).getAllByRole("link")).toHaveLength(1));
+    expect(screen.getByRole("combobox", { name: "Statut" })).toHaveValue("closed");
   });
 
   it("seul habilité : la proposition porte la mention « Fusionnée sans revue » (critère 12)", async () => {

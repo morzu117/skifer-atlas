@@ -139,3 +139,75 @@ p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work);
   await expect(page.getByRole("region", { name: "Proposition sélectionnée" })).not.toContainText("Fusionnée sans revue");
   await expect(page.getByRole("button", { name: "Fusionner", exact: true })).toHaveCount(0);
 });
+
+test("[S-0014-08] Un refus de fusion dit ce qui s'est passé et quoi faire, sans la sortie de git ni de GitHub", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, API);
+  for (const server of [CLAIRE, MARC]) {
+    await joinReviewer(request, ws.remote, server);
+    expect((await request.post(`${server}/api/workspaces/${ws.id}/proposals/5/reviews`, { data: { event: "approve" } })).ok()).toBe(true);
+  }
+  await relay(page, CLAIRE);
+  await page.goto(`${ws.root}/propositions?n=5&status=open&domain=tous`);
+  await expect(entry(page, "Revenu net · nordis-de")).toContainText("Validations : 2 / 2");
+  const selection = page.getByRole("region", { name: "Proposition sélectionnée" });
+  const merge = page.getByRole("button", { name: "Fusionner", exact: true });
+  const refusal = (title: string) => selection.getByRole("alert").filter({ hasText: title });
+
+  // Réponse de GitHub à une fusion en conflit : le serveur la relaie telle quelle.
+  const raw = "GitHub a répondu 405 : Pull Request is not mergeable";
+  await page.route("**/proposals/5/merge", (route) => route.fulfill({ status: 409, json: { detail: { code: "merge_conflict", message: raw } } }), { times: 1 });
+  await merge.click();
+  await expect(refusal("La fusion provoque un conflit")).toContainText("demandez à l'auteur de la reproposer à partir de la version courante");
+  await expect(refusal("La fusion provoque un conflit")).not.toContainText("not mergeable");
+  await expect(page.getByText("L'opération a échoué")).toHaveCount(0);
+
+  // Un commit arrive sur la branche après l'affichage : le décompte tombe à zéro, la fusion est refusée.
+  const detail = await (await request.get(`${ws.api}/proposals/5`)).json();
+  git(ws.work, "fetch", "origin", detail.branch); git(ws.work, "checkout", "-b", "reprise", "FETCH_HEAD");
+  const path = join(ws.work, "variants/revenu-net/nordis-de.yaml");
+  writeFileSync(path, readFileSync(path, "utf8") + "\n# Reprise après revue\n");
+  git(ws.work, "add", "."); git(ws.work, "commit", "-qm", "Reprise"); git(ws.work, "push", "origin", `HEAD:${detail.branch}`);
+  const head = git(ws.remote, "rev-parse", "main");
+  const response = page.waitForResponse((r) => r.url().endsWith("/proposals/5/merge") && r.request().method() === "POST");
+  await merge.click();
+  expect((await response).status()).toBe(409);
+  expect(await (await response).json()).toMatchObject({ detail: { code: "not_ready" } });
+  await expect(refusal("La proposition ne remplit plus les conditions de fusion")).toContainText("0 validation(s) sur 2.");
+  await expect(refusal("La proposition ne remplit plus les conditions de fusion")).toContainText("L'écran vient d'être relu");
+  // L'écran s'est relu sans perdre le message : plus de « Fusionner », le décompte est à zéro.
+  await expect(entry(page, "Revenu net · nordis-de")).toContainText("Validations : 0 / 2");
+  await expect(merge).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Approuver (0 / 2)" })).toBeVisible();
+  expect(git(ws.remote, "rev-parse", "main")).toBe(head);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("[S-0014-09] Changer de statut affiche le chargement, pas la file de l'ancien statut, même si la requête échoue", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, API);
+  await page.goto(`${ws.root}/propositions`);
+  await expect(entry(page, "Revenu net · nordis-de")).toHaveCount(1);
+  const list = page.getByRole("list", { name: "File des propositions" });
+  const status = page.getByRole("combobox", { name: "Statut" });
+  const queueFor = (value: string) => (url: URL) => url.pathname.endsWith("/proposals/queue") && url.searchParams.get("status") === value;
+
+  // Les fusionnées tardent : la file ouverte disparaît le temps de la réponse.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(queueFor("merged"), async (route) => { await gate; await route.continue(); });
+  await status.selectOption("merged");
+  await expect(status).toHaveValue("merged");
+  await expect(page.getByText("Chargement des propositions…")).toBeVisible();
+  await expect(list).toHaveCount(0);
+  release();
+  await expect(page.getByText("Chargement des propositions…")).toHaveCount(0);
+  await expect(entry(page, "Revenu net · nordis-de")).toHaveCount(0);
+
+  // Les fermées échouent (serveur injoignable) : jamais la file des fusionnées sous « Fermées ».
+  await page.route(queueFor("closed"), (route) => route.abort("connectionrefused"));
+  await status.selectOption("closed");
+  await expect(status).toHaveValue("closed");
+  await expect(page.getByText("Chargement des propositions…")).toBeVisible();
+  await expect(list).toHaveCount(0);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+

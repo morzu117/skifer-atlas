@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminState, Governance } from "../api";
 import { fakeServer, workspace, type Call } from "../test/fakeServer";
+import { navigate } from "../router";
 import { Administration, domainReferents, mainRole, withoutDomain, withoutMember } from "./Administration";
 
 const API = "/api/workspaces/groupe-nordis";
@@ -50,7 +51,8 @@ function state(overrides: Partial<AdminState> = {}): AdminState {
   };
 }
 
-type Handler = (call: Call) => { status?: number; json?: unknown } | undefined;
+type Reply = { status?: number; json?: unknown };
+type Handler = (call: Call) => Reply | Promise<Reply> | undefined;
 
 function server(admin: AdminState | (() => AdminState) = state(), extra: Handler = () => undefined) {
   return fakeServer((call) => {
@@ -405,5 +407,157 @@ describe("administration", () => {
     render(screenFor());
     expect(await screen.findByText("Réservée aux référents de l'espace")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Enregistrer/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("quitter l'Administration avec un brouillon (ADR 0043)", () => {
+  const PROPOSALS = "#/w/groupe-nordis/propositions";
+  const withNavigation = () => (
+    <>
+      <a href={PROPOSALS}>Propositions</a>
+      {screenFor()}
+    </>
+  );
+  const dialog = () => screen.queryByRole("alertdialog", { name: "Quitter l'Administration ?" });
+
+  beforeEach(() => {
+    window.location.hash = "#/w/groupe-nordis/administration";
+  });
+
+  it("[S-0017-09] brouillon non enregistré : la sortie demande confirmation, Annuler reste sur l'écran", async () => {
+    server();
+    render(withNavigation());
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
+    const link = screen.getByRole("link", { name: "Propositions" });
+    await userEvent.click(link);
+    expect(await screen.findByRole("alertdialog", { name: "Quitter l'Administration ?" })).toHaveAccessibleDescription(/seront perdues/);
+    expect(window.location.hash).toBe("#/w/groupe-nordis/administration");
+    await userEvent.click(within(dialog()!).getByRole("button", { name: "Annuler" }));
+    expect(dialog()).not.toBeInTheDocument();
+    expect(window.location.hash).toBe("#/w/groupe-nordis/administration");
+    expect(screen.getByRole("checkbox", { name: "Redshift" })).toBeChecked(); // le brouillon est intact
+    expect(link).toHaveFocus();
+  });
+
+  it("[S-0017-09] Quitter sans enregistrer mène à la vue demandée", async () => {
+    server();
+    render(withNavigation());
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Quitter sans enregistrer" }));
+    expect(window.location.hash).toBe(PROPOSALS);
+  });
+
+  it("[S-0017-09] la navigation par le code (changement d'espace, redirection) est retenue de même", async () => {
+    server();
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
+    act(() => navigate("#/"));
+    expect(await screen.findByRole("alertdialog", { name: "Quitter l'Administration ?" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/w/groupe-nordis/administration");
+  });
+
+  it("[S-0017-09] une saisie encore dans le formulaire d'un domaine ou d'un membre (avant « Appliquer ») compte aussi", async () => {
+    server();
+    render(withNavigation());
+    // Formulaire ouvert mais intact : rien à perdre.
+    await userEvent.click(await screen.findByRole("button", { name: "Modifier le domaine Finance" }));
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    expect(dialog()).not.toBeInTheDocument();
+
+    window.location.hash = "#/w/groupe-nordis/administration";
+    await userEvent.type(within(screen.getByRole("group", { name: "Domaine Finance" })).getByRole("textbox", { name: /Libellé/ }), " bis");
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    expect(await screen.findByRole("alertdialog", { name: "Quitter l'Administration ?" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/w/groupe-nordis/administration");
+    await userEvent.click(within(dialog()!).getByRole("button", { name: "Annuler" }));
+
+    // Annuler le formulaire abandonne la saisie : plus de question.
+    await userEvent.click(within(screen.getByRole("group", { name: "Domaine Finance" })).getByRole("button", { name: "Annuler" }));
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    expect(dialog()).not.toBeInTheDocument();
+    expect(window.location.hash).toBe(PROPOSALS);
+  });
+
+  it("[S-0017-09] un nouveau membre à moitié saisi retient la sortie", async () => {
+    server();
+    render(withNavigation());
+    await userEvent.click(await screen.findByRole("button", { name: "Inviter" }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Nom/ }), "Léa");
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    expect(await screen.findByRole("alertdialog", { name: "Quitter l'Administration ?" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/w/groupe-nordis/administration");
+  });
+
+  it("[S-0017-10] sans brouillon, ou brouillon annulé : aucune confirmation", async () => {
+    server();
+    render(withNavigation());
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
+    await userEvent.click(screen.getByRole("button", { name: "Annuler" }));
+    expect(screen.getByRole("checkbox", { name: "Redshift" })).not.toBeChecked();
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    expect(dialog()).not.toBeInTheDocument();
+    expect(window.location.hash).toBe(PROPOSALS);
+  });
+
+  it("[S-0017-10] brouillon enregistré en proposition : aucune confirmation", async () => {
+    server(state({ single_referent: false }), ({ path, method }) =>
+      path === `${API}/admin/governance` && method === "POST"
+        ? { status: 201, json: { id: 13, title: "Gouvernance de l'espace", merged: false, mention: null, changes: [] } }
+        : undefined,
+    );
+    render(withNavigation());
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
+    await userEvent.click(saveButton());
+    expect(await screen.findByText(/Proposition n° 13 ouverte/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    expect(dialog()).not.toBeInTheDocument();
+    expect(window.location.hash).toBe(PROPOSALS);
+  });
+
+  it("[S-0017-09] une modification faite pendant l'enregistrement n'est pas couverte par la proposition créée", async () => {
+    let release: (reply: { status: number; json: unknown }) => void = () => undefined;
+    const held = new Promise<{ status: number; json: unknown }>((resolve) => (release = resolve));
+    const api = server(state({ single_referent: false }), ({ path, method }) => (path === `${API}/admin/governance` && method === "POST" ? held : undefined));
+    render(withNavigation());
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(saves(api.calls)).toHaveLength(1));
+
+    // La requête est retenue : le brouillon change encore avant la réponse.
+    await userEvent.click(screen.getByRole("checkbox", { name: "BigQuery" }));
+    release({ status: 201, json: { id: 13, title: "Gouvernance de l'espace", merged: false, mention: null, changes: [] } });
+    expect(await screen.findByText(/Proposition n° 13 ouverte/)).toBeInTheDocument();
+    expect(savedGovernance(api.calls).allowed_platforms).not.toContain("bigquery"); // la requête portait l'ancien brouillon
+    expect(screen.getByText(/Les modifications faites depuis l'envoi ne sont pas enregistrées/)).toBeInTheDocument();
+    await waitFor(() => expect(saveButton()).toBeEnabled()); // le brouillon plus récent peut être enregistré
+
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    expect(await screen.findByRole("alertdialog", { name: "Quitter l'Administration ?" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/w/groupe-nordis/administration");
+  });
+
+  it("annuler le brouillon pendant la question ferme la question", async () => {
+    server();
+    render(withNavigation());
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
+    await userEvent.click(screen.getByRole("link", { name: "Propositions" }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    // Deux « Annuler » : celui de la question, puis celui du formulaire.
+    await userEvent.click(screen.getAllByRole("button", { name: "Annuler" })[1]);
+    expect(dialog()).not.toBeInTheDocument();
+  });
+
+  it("fermer la fenêtre avec un brouillon déclenche l'avertissement du navigateur, pas sans brouillon", async () => {
+    server();
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
+    const dirty = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(dirty);
+    expect(dirty.defaultPrevented).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "Annuler" }));
+    const clean = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(clean);
+    expect(clean.defaultPrevented).toBe(false);
   });
 });

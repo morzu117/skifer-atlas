@@ -16,6 +16,8 @@ Brief 4.1, 5, 8.2, 10.4 ; guide 3.4, 3.7, 4 (diff), 5 (10.4) ; `screens/10.4-pro
 - **Diff** : deux colonnes, canonique à gauche et proposition à droite, nœuds alignés par appariement (0003) et disposés par le composant de 0012. Grammaire : modifié = bordure 2 px `--atlas-bad` et étiquette « modifié » ; surchargé sur point déclaré = pointillé orange, « Normal » ; ajouté = teal ; retiré = rouge barré ; libellé de classification à droite de chaque nœud concerné. Sous le diff, la liste textuelle des écarts (lisible sans couleur).
 - **Commentaires** : fil chronologique (`GitHost.list_comments`), champ de réponse, envoi.
 - **Actions** : « Approuver (n / m) » est désactivé pour l'auteur et pour un compte sans le rôle requis, avec une infobulle qui dit pourquoi. « Demander des changements » exige un commentaire. « Fusionner » apparaît quand `ready_to_merge`.
+- **Refus** : une fusion ou une revue refusée par le serveur s'affiche en bandeau avec ce qui s'est passé et quoi faire, jamais la sortie de git ni la réponse de GitHub (`merge_conflict`, `merge_refused`, `branch_protected`, `head_changed`, `not_ready`, `not_open`, `cannot_review_own`, `comment_required` ; ADR 0043). `head_changed` et `not_ready` relisent la proposition sans effacer le message.
+- **Changement de filtre** : la file passe en « Chargement des propositions… » quand le statut ou l'espace change ; elle n'affiche jamais la liste d'un autre statut.
 
 ## Critères d'acceptation
 1. La file reflète les propositions du dépôt de démonstration, avec les bons badges et compteurs.
@@ -25,6 +27,8 @@ Brief 4.1, 5, 8.2, 10.4 ; guide 3.4, 3.7, 4 (diff), 5 (10.4) ; `screens/10.4-pro
 5. Demander des changements sans commentaire est impossible.
 6. Une proposition prête affiche « Fusionner » ; après fusion, elle quitte la file et la fiche montre la nouvelle version.
 7. La liste textuelle des écarts reprend chaque écart du diff (accessibilité : le sens ne repose pas sur la couleur).
+8. Un refus de fusion ou de revue dit ce qui s'est passé et quoi faire, sans reprendre la sortie de git ni de GitHub.
+9. Changer de statut remplace la file par son chargement ; une réponse tardive de l'ancien filtre ne l'écrase pas.
 
 ## Tests
 - Composants : liste, badges, rendu du diff à partir d'un rapport 0003 commité.

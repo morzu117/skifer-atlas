@@ -112,6 +112,42 @@ const KNOWN: Record<string, Explained> = {
     title: "Identifiant déjà pris",
     text: "Un espace porte déjà cet identifiant sur ce poste. Choisissez-en un autre.",
   },
+  // Propositions : revue et fusion (plan 0006). Le serveur y joint la sortie de git ou la
+  // réponse de GitHub, en anglais ; l'écran dit ce qui s'est passé et quoi faire.
+  merge_conflict: {
+    title: "La fusion provoque un conflit",
+    text: "La proposition modifie des lignes que la branche principale a changées depuis. Rien n'a été fusionné : demandez à l'auteur de la reproposer à partir de la version courante.",
+  },
+  merge_refused: {
+    title: "Le dépôt a refusé la fusion",
+    text: "La branche principale a sans doute avancé pendant l'opération. Rien n'a été fusionné : relisez la proposition, puis réessayez.",
+  },
+  branch_protected: {
+    title: "La branche principale est protégée",
+    text: "Une règle de la branche, sur GitHub, empêche cette fusion (vérifications ou relectures exigées par le dépôt, par exemple). Rien n'a été fusionné : remplissez la condition sur GitHub, ou contactez le référent de l'espace.",
+  },
+  head_changed: {
+    title: "La proposition a changé depuis son affichage",
+    text: "Son auteur a ajouté des commits : les validations données ne valent plus pour cette version. Rien n'a été fusionné. L'écran vient d'être relu : relisez le diff, puis faites approuver la proposition de nouveau.",
+  },
+  // Le serveur donne ici la raison exacte, en français (« Changements demandés par claire.m. »,
+  // « 1 validation(s) sur 2. »…) : `explain` la place avant cette consigne.
+  not_ready: {
+    title: "La proposition ne remplit plus les conditions de fusion",
+    text: "Rien n'a été fusionné. L'écran vient d'être relu : relisez la proposition, puis agissez selon ce qu'elle indique (validations à obtenir, changements demandés à traiter).",
+  },
+  not_open: {
+    title: "La proposition n'est plus ouverte",
+    text: "Elle a déjà été fusionnée ou fermée. Rien à faire : retrouvez-la dans les filtres « Fusionnées » ou « Fermées ».",
+  },
+  cannot_review_own: {
+    title: "Vous ne pouvez pas relire votre proposition",
+    text: "L'auteur ne peut ni l'approuver ni demander de changements. Demandez à un autre validateur du domaine de la relire.",
+  },
+  comment_required: {
+    title: "Commentaire manquant",
+    text: "Une demande de changements doit dire ce qui doit changer. Écrivez un commentaire, puis envoyez la demande de nouveau.",
+  },
 };
 
 export function explain(error: unknown): Explained {
@@ -129,6 +165,10 @@ export function explain(error: unknown): Explained {
     // ou quelle adresse origin (identifiant masqué), est en cause.
     if (error.code === "remote_partial" || error.code === "origin_conflict") {
       return { title: KNOWN[error.code].title, text: error.message };
+    }
+    // La raison du refus (décompte, changements demandés, aucun habilité) précède la consigne.
+    if (error.code === "not_ready") {
+      return { title: KNOWN.not_ready.title, text: `${error.message} ${KNOWN.not_ready.text}` };
     }
     return KNOWN[error.code] ?? { title: "L'opération a échoué", text: error.message };
   }

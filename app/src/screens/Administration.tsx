@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import {
   api,
   ApiError,
@@ -15,12 +15,13 @@ import {
 } from "../api";
 import { AttachRemote } from "../components/AttachRemote";
 import { Banner } from "../components/Banner";
+import { Confirmation } from "../components/Confirmation";
 import { Field } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
 import { ago, plural, slugify } from "../format";
 import { explain, type Explained } from "../messages";
-import { href } from "../router";
+import { href, useLeaveGuard } from "../router";
 
 // Administration (guide 10.7, plan 0017) : le référent de l'espace modifie la gouvernance
 // sur une copie locale ; « Enregistrer » en fait une proposition sur governance.yaml, que
@@ -295,6 +296,28 @@ function Settings({
     validators_required: { canonical: Number(levels.canonical), variants: Number(levels.variants) },
   };
   const dirty = JSON.stringify(proposed) !== JSON.stringify(initial.governance);
+  // Quitter l'Administration avec un brouillon que personne n'a enregistré le perdrait : on
+  // demande d'abord (ADR 0043). Une fois la proposition créée, le brouillon vit dans le dépôt.
+  const [leaving, setLeaving] = useState<string | null>(null);
+  const leaveOrigin = useRef<HTMLElement | null>(null);
+  // Un formulaire de domaine ou de membre ouvert et modifié, pas encore appliqué, compte aussi.
+  const [formEdited, setFormEdited] = useState(false);
+  useEffect(() => {
+    if (editing === null) setFormEdited(false);
+  }, [editing]);
+  // Instantané soumis à la dernière requête réussie : une modification faite pendant l'attente de
+  // la réponse n'est pas dans la proposition créée, et `saved` ne doit pas la couvrir.
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+  const proposedKey = JSON.stringify(proposed);
+  const current = saved !== null && savedKey === proposedKey;
+  const unsaved = (dirty && !current) || formEdited;
+  const leave = useLeaveGuard(unsaved, (to, origin) => {
+    leaveOrigin.current = origin;
+    setLeaving(to);
+  });
+  useEffect(() => {
+    if (!unsaved) setLeaving(null); // brouillon annulé ou enregistré pendant la question
+  }, [unsaved]);
   const referents = draft.members.filter((m) => m.roles.some((r) => r.role === "referent" && r.domains.length === 0)).length;
   const alone = initial.single_referent;
   // Sans dépôt distant, l'enregistrement (une proposition) échouerait : on rattache d'abord.
@@ -318,7 +341,9 @@ function Settings({
     setBusy(true);
     setFailure(null);
     try {
+      const submitted = proposedKey;
       const result = await api.saveGovernance(ws.id, proposed, initial.base_digest);
+      setSavedKey(submitted);
       setSaved(result);
       if (result.merged) onReload();
     } catch (reason) {
@@ -356,6 +381,7 @@ function Settings({
                       onApply={(next) => (change(replaceDomain(draft, d.id, next)), setEditing(null))}
                       onRemove={() => (change(withoutDomain(draft, d.id)), setEditing(null))}
                       onCancel={() => setEditing(null)}
+                      onEdited={setFormEdited}
                     />
                   </li>
                 ) : (
@@ -371,7 +397,7 @@ function Settings({
               )}
               {editing?.kind === "domain" && editing.id === null && (
                 <li>
-                  <DomainForm g={draft} domain={null} onApply={(next) => (change({ ...draft, domains: [...draft.domains, next] }), setEditing(null))} onCancel={() => setEditing(null)} />
+                  <DomainForm g={draft} domain={null} onApply={(next) => (change({ ...draft, domains: [...draft.domains, next] }), setEditing(null))} onCancel={() => setEditing(null)} onEdited={setFormEdited} />
                 </li>
               )}
             </ul>
@@ -420,6 +446,7 @@ function Settings({
                 }}
                 onRemove={(account) => (change(withoutMember(draft, account)), setEditing(null))}
                 onCancel={() => setEditing(null)}
+                onEdited={setFormEdited}
               />
             ) : (
               <div className="table-wrap">
@@ -566,7 +593,18 @@ function Settings({
         <p className="tone-ok admin-saved" role="status">
           {saved.merged ? `Paramètres enregistrés : proposition n° ${saved.id} fusionnée sans revue.` : `Proposition n° ${saved.id} ouverte : elle attend la revue d'un autre référent.`}{" "}
           <a href={href.view(ws.id, "propositions", { n: String(saved.id), status: saved.merged ? "merged" : "open", domain: "tous" })}>Voir la proposition</a>
+          {dirty && !current && " Les modifications faites depuis l'envoi ne sont pas enregistrées : enregistrez-les à nouveau."}
         </p>
+      )}
+      {leaving !== null && unsaved && (
+        <Confirmation
+          title="Quitter l'Administration ?"
+          action="Quitter sans enregistrer"
+          description="Les modifications de la gouvernance n'ont pas été enregistrées : elles seront perdues si vous quittez cet écran."
+          returnFocusTo={leaveOrigin}
+          onCancel={() => setLeaving(null)}
+          onConfirm={() => leave(leaving)}
+        />
       )}
       <div className="admin-actions">
         {editing !== null && <span className="field-hint">Appliquez ou annulez la modification en cours.</span>}
@@ -577,7 +615,7 @@ function Settings({
         <button
           type="submit"
           className="btn btn-primary"
-          disabled={local || !dirty || busy || attaching || reloading || editing !== null || saved !== null || Boolean(levelErrors.canonical || levelErrors.variants)}
+          disabled={local || !dirty || busy || attaching || reloading || editing !== null || current || Boolean(levelErrors.canonical || levelErrors.variants)}
         >
           {alone ? "Enregistrer et fusionner" : "Enregistrer et créer la proposition"}
         </button>
@@ -691,6 +729,16 @@ function Members({ legend, g, value, onChange }: { legend: string; g: Governance
   );
 }
 
+/** Dit à `Settings` si le formulaire d'un domaine ou d'un membre a été modifié depuis son ouverture :
+ * sa saisie vit dans le formulaire jusqu'à « Appliquer », hors du brouillon (`draft`). */
+function useReportEdited(snapshot: unknown, onEdited?: (edited: boolean) => void) {
+  const opened = useRef(JSON.stringify(snapshot));
+  const edited = JSON.stringify(snapshot) !== opened.current;
+  useEffect(() => {
+    onEdited?.(edited);
+  }, [edited, onEdited]);
+}
+
 function DomainForm({
   g,
   domain,
@@ -698,6 +746,7 @@ function DomainForm({
   onApply,
   onRemove,
   onCancel,
+  onEdited,
 }: {
   g: Governance;
   domain: GovernanceDomain | null;
@@ -705,6 +754,7 @@ function DomainForm({
   onApply: (next: GovernanceDomain) => void;
   onRemove?: () => void;
   onCancel: () => void;
+  onEdited?: (edited: boolean) => void;
 }) {
   const [label, setLabel] = useState(domain?.label ?? "");
   const [id, setId] = useState(domain?.id ?? "");
@@ -718,6 +768,7 @@ function DomainForm({
   });
   const [submitted, setSubmitted] = useState(false);
   const effectiveId = domain ? domain.id : idTouched ? id : slugify(label);
+  useReportEdited({ label, effectiveId, referents, validators, override, levels }, onEdited);
   const prefix = domain ? `domain-${domain.id}` : "domain-new";
 
   const errors = {
@@ -815,6 +866,7 @@ function MemberForm({
   onApply,
   onRemove,
   onCancel,
+  onEdited,
 }: {
   g: Governance;
   ws: Workspace;
@@ -822,6 +874,7 @@ function MemberForm({
   onApply: (next: GovernanceMember) => void;
   onRemove: (account: string) => void;
   onCancel: () => void;
+  onEdited?: (edited: boolean) => void;
 }) {
   const [name, setName] = useState(member?.name ?? "");
   const [account, setAccount] = useState(member?.account ?? "");
@@ -830,6 +883,7 @@ function MemberForm({
     member && member.roles.length > 0 ? member.roles.map((r) => ({ role: r.role, domains: [...r.domains] })) : [{ role: "contributeur", domains: [] }],
   );
   const [submitted, setSubmitted] = useState(false);
+  useReportEdited({ name, account, entity, roles }, onEdited);
   const entities = [...new Set(["groupe", ...ws.entities, ...(member?.entity ? [member.entity] : [])])];
   const prefix = member ? `member-${member.account}` : "member-new";
   const several = roles.length > 1;
