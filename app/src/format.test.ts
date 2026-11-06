@@ -84,6 +84,20 @@ describe("routes", () => {
     expect(parse(hash)).toEqual(route);
   });
 
+  // Une séquence % invalide ne doit pas lever : l'écran resterait blanc.
+  it.each([
+    "#/w/%E0%A4%A/catalogue",
+    "#/w/groupe-nordis/fiche/%E0%A4%A",
+    "#/w/%/catalogue",
+    "#/%ZZ",
+  ])("[S-0010-11] adresse mal encodée %s : l'accueil", (hash) => {
+    expect(parse(hash)).toEqual({ name: "home" });
+  });
+
+  it("[S-0010-11] adresse mal encodée dans les paramètres : la vue reste ouverte", () => {
+    expect(parse("#/w/groupe-nordis/catalogue?q=100%")).toMatchObject({ name: "workspace", view: "catalogue" });
+  });
+
   it("paramètres vides absents de l'adresse", () => {
     expect(href.view("groupe-nordis", "catalogue", { q: "", domain: "finance" })).toBe(
       "#/w/groupe-nordis/catalogue?domain=finance",

@@ -1,4 +1,4 @@
-import { ApiError, UnreachableError } from "./api";
+import { ApiError, ServerInfoError, UnreachableError } from "./api";
 
 export type Explained = { title: string; text: string };
 
@@ -111,6 +111,12 @@ const KNOWN: Record<string, Explained> = {
 };
 
 export function explain(error: unknown): Explained {
+  if (error instanceof ServerInfoError) {
+    return {
+      title: "Serveur local injoignable",
+      text: "L'application n'a pas pu lire l'adresse et le token du serveur local. Relancez Skifer Atlas.",
+    };
+  }
   if (error instanceof UnreachableError) {
     return { title: "Serveur local injoignable", text: "Réessayez dans un instant." };
   }

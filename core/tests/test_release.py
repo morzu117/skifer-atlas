@@ -32,7 +32,7 @@ def test_one_version_for_app_sidecar_and_package():
     versions = version_script().found()
     assert set(versions.values()) == {__version__}, versions
     client = TestClient(create_app(token="t"))
-    assert client.get("/health").json()["version"] == __version__
+    assert client.get("/health", headers={"Authorization": "Bearer t"}).json()["version"] == __version__
 
 
 def test_version_bump_reaches_every_file(tmp_path, monkeypatch):

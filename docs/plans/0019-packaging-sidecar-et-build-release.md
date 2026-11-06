@@ -80,3 +80,26 @@ Décisions : [ADR 0023](../decisions/0023-packaging-release.md).
   - obtenir les certificats Apple Developer ID et Windows, puis les poser en secrets ;
   - parcours manuel sur un poste vierge de chaque OS ;
   - Linux, mise à jour automatique et canal de distribution, hors périmètre.
+
+### Suivi de la revue globale (#151, 6 novembre 2026)
+
+La revue de `b6af799` a relevé cinq défauts sur la coque, le sidecar et la sécurité. Décisions : [ADR 0041](../decisions/0041-sonde-authentifiee-et-csp.md).
+
+- **Sonde authentifiée** (P2) :
+  - `GET /alive?nonce=…` (seule route ouverte) rend `HMAC-SHA256(token, "skifer-atlas-alive:" || nonce)` ;
+  - `wait_alive` (`lib.rs`) envoie un nonce neuf à chaque essai, n'accepte qu'un 200 portant la bonne preuve et ne transmet jamais le token ;
+  - la sonde lit l'état du processus enfant : arrêt du serveur, échec immédiat avec le code de sortie, jusqu'à 3 essais sur d'autres ports ;
+  - `ServerInfo` devient un état renseigné par `setup`, avant la fenêtre ;
+  - `sha2` entre dans `Cargo.toml` (déjà dans le verrou).
+- **Routes fermées** (P3) : `/docs`, `/redoc`, `/openapi.json` répondent 404, sauf en mode dev sans token ; `/health` exige le token (l'interface l'envoie déjà).
+- **Fumée de l'app** : `scripts/smoke-app.sh` attend la ligne `[atlas] serveur vérifié, port N`, écrite par `lib.rs` une fois la preuve acceptée (sans token ni preuve), et mesure `SMOKE_LIMIT_SECONDS` jusqu'à elle. Il vérifie ensuite `/alive` et que `/health` répond 401 sans token, et échoue si l'app se ferme avant la ligne.
+- **CSP** (P3) : `default-src 'self'`, `connect-src` limité au serveur local et à `ipc:`, `style-src 'unsafe-inline'` (CodeMirror, attributs `style`), `img-src data:`. Une `devCsp` ajoute l'origine de Vite. Vérifiée par `vite preview` avec la même CSP en en-tête ; non vérifiée dans la vraie fenêtre Tauri (voir l'ADR).
+- **Repli sans token** (P3) : `serverInfo` ne retient `{ token: "" }` que hors Tauri ; sous Tauri, trois essais, puis `ServerInfoError` (bandeau « Serveur local injoignable ») sans rien mettre en cache.
+- **Adresse mal encodée** (P3) : `router.parse` replie sur l'accueil au lieu de lever `URIError`.
+- **Tests** :
+  - Rust : 14 tests dans `lib.rs` (HMAC, réponse de sonde, faux serveurs, preuve fausse jamais « prête », ligne de prêt) ;
+  - core : routes de documentation, `/alive`, `/health` (`test_api.py`) ;
+  - Vitest : `api.test.ts`, `csp.test.ts`, adresses invalides dans `format.test.ts` ;
+  - Playwright : `accueil.spec.ts` › `[S-0010-11]`.
+  - Scénarios : S-0010-11, S-0010-12 et S-0019-07 à S-0019-09.
+- **Reste à faire** : vérifier la CSP et la sonde dans la vraie fenêtre Tauri sur les trois plateformes (console du webview ouverte, aucune ligne « Content Security Policy »), au prochain essai de l'app.

@@ -10,7 +10,7 @@ Le brief impose un fonctionnement local-first (DuckDB, coffre de secrets personn
 
 - **Cœur** : librairie Python `skifer_atlas` + API FastAPI, exposée uniquement sur `127.0.0.1` avec un token de session.
 - **Interface** : React + React Flow.
-- **Shell** : Tauri 2. Il choisit un port libre, génère le token, lance le serveur (sidecar PyInstaller en release, `uv run` en dev), attend `/health`, affiche l'UI, tue le serveur à la fermeture.
+- **Shell** : Tauri 2. Il choisit un port libre, génère le token, lance le serveur (sidecar PyInstaller en release, `uv run` en dev), attend la preuve d'identité de `/alive` (ADR 0041, qui remplace la sonde `/health`), affiche l'UI, tue le serveur à la fermeture.
 - **Secrets** : trousseau de l'OS via `keyring`, rangés par espace de travail (à implémenter).
 - **Git** : piloté par la CLI git, pas de GitPython.
 

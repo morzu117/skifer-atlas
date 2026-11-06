@@ -25,7 +25,7 @@ docs/              brief de conception, décisions (ADR)
 scripts/           build du sidecar (PyInstaller)
 ```
 
-Au lancement, le shell choisit un port libre, génère un token de session, démarre le serveur sur `127.0.0.1`, attend `/health`, puis affiche l'interface. Le serveur est tué à la fermeture. Aucun Python à installer chez l'utilisateur final.
+Au lancement, le shell choisit un port libre, génère un token de session, démarre le serveur sur `127.0.0.1`, attend que le serveur prouve son identité (`/alive`, ADR 0041), puis affiche l'interface. Le serveur est tué à la fermeture. Aucun Python à installer chez l'utilisateur final.
 
 ## Développement
 
