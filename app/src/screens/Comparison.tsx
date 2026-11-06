@@ -48,6 +48,8 @@ const ALERT_TITLES: Record<string, string> = {
   common_source: "Source commune",
 };
 const POLL_MS = 400;
+const POLL_FAILURE_LIMIT = 5;
+const POLL_BACKOFF_MAX_MS = 3200;
 const ALL = "tous";
 
 type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "error"; error: Explained };
@@ -203,6 +205,8 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
   const [done, setDone] = useState<Run | null>(null);
   const [failure, setFailure] = useState<Explained | null>(null);
   const [attempted, setAttempted] = useState(false);
+  const starting = useRef(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   const chooseScope = (id: string) => {
     const next = setup.scopes.find((s) => s.id === id);
@@ -256,38 +260,53 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
   useEffect(() => {
     if (!running || running.run) return;
     let alive = true;
-    const timer = setInterval(() => {
-      api
-        .comparison(ws.id, running.id)
-        .then((run) => {
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = () => {
+      timer = setTimeout(() => {
+        api.comparison(ws.id, running.id).then((run) => {
           if (!alive) return;
+          failures = 0;
           if (run.status === "running") {
-            setRunning({ ...running, progress: run.progress ?? running.progress });
+            setRunning((current) => current ? { ...current, progress: run.progress ?? current.progress } : current);
+            poll();
             return;
           }
           const state = run.status === "cancelled" ? "cancelled" : run.status === "failed" ? "failed" : "done";
-          setRunning({
-            ...running,
+          setRunning((current) => current && ({
+            ...current,
             run,
-            progress: running.progress.map((p) => (p.state === "done" ? p : { ...p, state, percent: state === "done" ? 100 : p.percent })),
-          });
+            progress: current.progress.map((p) => (p.state === "done" ? p : { ...p, state, percent: state === "done" ? 100 : p.percent })),
+          }));
+          setFailure(null);
           setDone(run);
           onFinished(run);
         })
-        .catch(() => undefined);
-    }, POLL_MS);
+        .catch((reason) => {
+          if (!alive) return;
+          failures += 1;
+          if ((reason instanceof ApiError && reason.status === 404) || failures >= POLL_FAILURE_LIMIT) {
+            setFailure(explain(reason));
+            setRunning(null);
+          } else poll();
+        });
+      }, failures === 0 ? POLL_MS : Math.min(POLL_MS * 2 ** (failures - 1), POLL_BACKOFF_MAX_MS));
+    };
+    poll();
     return () => {
       alive = false;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
-  }, [ws.id, running]);
+  }, [ws.id, running?.id, running?.run]);
 
-  const blocked = !body || preview?.kind === "error" || (running !== null && running.run === null);
+  const blocked = isStarting || !body || preview?.kind === "error" || (running !== null && running.run === null);
 
   async function launch(authenticated = false) {
     setAttempted(true);
-    if (!body || blocked) return;
+    if (!body || blocked || starting.current) return;
     if (missing.length > 0 && !authenticated) return; // l'authentification d'abord, le lancement reprend ensuite
+    starting.current = true;
+    setIsStarting(true);
     setFailure(null);
     setDone(null);
     try {
@@ -307,11 +326,16 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
     } catch (reason) {
       if (reason instanceof ApiError && reason.code === "needs_auth") setMissing(reason.issues as MissingAccess[]);
       else setFailure(explain(reason));
+    } finally {
+      starting.current = false;
+      setIsStarting(false);
     }
   }
 
   const cancel = () => {
-    if (running && !running.run) void api.cancelComparison(ws.id, running.id).catch(() => undefined);
+    if (running && !running.run) void api.cancelComparison(ws.id, running.id).catch((reason) => {
+      if (!(reason instanceof ApiError && reason.code === "not_running")) setFailure(explain(reason));
+    });
   };
 
   const shownTolerance = chosen ?? (preview?.kind === "ready" ? preview.value.tolerance : fallback);
@@ -404,7 +428,7 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
           id="launch-tolerance"
           type="range"
           min={0}
-          max={5}
+          max={Math.ceil(Math.max(5, fallback, preview?.kind === "ready" ? preview.value.tolerance : fallback, shownTolerance) * 10) / 10}
           step={0.1}
           value={shownTolerance}
           aria-valuetext={tolerance(shownTolerance)}
@@ -438,6 +462,7 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
         type="button"
         className="btn btn-primary"
         aria-disabled={blocked || missing.length > 0 || undefined}
+        aria-busy={isStarting || undefined}
         onClick={() => void launch()}
       >
         {label}

@@ -30,13 +30,13 @@
 | 0006 | 13 | 9 | 0 | 4 | 0 |
 | 0007 | 9 | 4 | 0 | 5 | 0 |
 | 0008 | 9 | 5 | 0 | 4 | 0 |
-| 0009 | 10 | 5 | 1 | 4 | 0 |
+| 0009 | 13 | 6 | 1 | 6 | 0 |
 | 0010 | 12 | 10 | 1 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 7 | 7 | 0 | 0 | 0 |
 | 0013 | 22 | 18 | 4 | 0 | 0 |
 | 0014 | 7 | 7 | 0 | 0 | 0 |
-| 0015 | 7 | 5 | 2 | 0 | 0 |
+| 0015 | 11 | 9 | 2 | 0 | 0 |
 | 0016 | 6 | 6 | 0 | 0 | 0 |
 | 0017 | 8 | 8 | 0 | 0 | 0 |
 | 0018 | 6 | 1 | 0 | 5 | 0 |
@@ -55,7 +55,7 @@
 | 0033 | 9 | 8 | 0 | 1 | 0 |
 | 0034 | 10 | 6 | 3 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **272** | **198** | **13** | **61** | **0** |
+| **Total** | **279** | **203** | **13** | **63** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1051,6 +1051,14 @@ Plan 0009, critère 6 · Test : `app/e2e/comparaison-auth.spec.ts` › `[S-0009-
 - **Alors** « Connexion requise » s'affiche, avec le bouton « Se connecter à dbx-fr »
 - Limite : l'absence d'exécution partielle est vérifiée par `core/tests/repo/test_comparisons_api.py::test_needs_auth_before_any_execution`.
 
+### S-0009-13 — La comparaison déjà en cours est refusée, le message est traduit
+Plan 0009, critère 13 · Test : `app/e2e/comparaison.spec.ts` › `[S-0009-13]`
+- **Étant donné** l'écran Comparaison de Revenu net, prêt à lancer, et un serveur qui répond au lancement par un refus 409 `comparison_running`
+- **Quand** je clique « Lancer la comparaison »
+- **Alors** la bannière « Comparaison déjà en cours » s'affiche avec « Attendez sa fin avant de relancer cette comparaison. », sans barre de progression
+- **Et** le bouton de lancement reste utilisable, une seule demande est partie, et axe-core ne relève aucune violation sérieuse
+- Limite : le refus est simulé. Le refus réel d'une seconde demande identique, sans nouvelle exécution, est vérifié par `core/tests/compare/test_compare.py::test_identical_running_comparison_is_refused` et `core/tests/repo/test_comparisons_api.py::test_running_duplicate_then_distinct_tolerance_and_retry`.
+
 **Plan 0015**
 
 ### S-0015-01 — Lancer, voir la progression, lire 94 % / 6,1 %
@@ -1102,6 +1110,38 @@ Plan 0015, critère 7 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-07]`
 - **Alors** « Historique des comparaisons » s'ouvre ; la première ligne nomme anna.k et « nordis-de 94 % · nordis-es 75 % · nordis-fr 100 % » ; l'adresse porte `user=anna.k`
 - **Et** la date future donne « Aucune comparaison ne correspond à ces filtres. »
 - Limite : « seulement celles de l'espace » est vérifié par `core/tests/repo/test_comparisons_api.py::test_spaces_never_share_results`.
+
+### S-0015-08 — Un double clic sur le lancement n'envoie qu'une seule demande
+Plan 0015, critère 8 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-08]`
+- **Étant donné** l'écran Comparaison de Revenu net, prêt à lancer, et un serveur qui retient la réponse au lancement
+- **Quand** je double-clique « Lancer la comparaison », puis la réponse arrive
+- **Alors** pendant l'attente le bouton est marqué occupé et inactif ; ensuite la progression « Databricks · nordis-de, nordis-fr » s'affiche et le bouton n'est plus occupé
+- **Et** une seule demande de lancement est partie, et axe-core ne relève aucune violation sérieuse
+- Limite : le serveur est simulé. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-08]` couvrent le double clic et deux clics dans le même tick sans navigateur.
+
+### S-0015-09 — Un suivi en échec ou une exécution inconnue passent en échec ; le lancement redevient possible
+Plan 0015, critère 9 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-09]`
+- **Étant donné** l'écran Comparaison prêt à lancer, un premier lancement dont le suivi répond toujours par une erreur 500 (« Suivi impossible »), et un second dont le suivi répond 404 (« Comparaison introuvable »)
+- **Quand** je lance la comparaison, attends l'échec, puis la lance de nouveau
+- **Alors** le suivi s'arrête après exactement cinq lectures de la première exécution : « Suivi impossible » s'affiche, la progression disparaît et le bouton de lancement est utilisable
+- **Et** le second lancement est accepté ; au premier 404 (une seule lecture), « Comparaison introuvable » remplace la première erreur, la progression disparaît et le bouton redevient utilisable ; axe-core ne relève aucune violation sérieuse
+- Limite : le serveur est simulé. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-09]` couvrent chaque cas séparément, avec une horloge simulée pour les délais de reprise progressifs.
+
+### S-0015-10 — L'échec de l'annulation est affiché
+Plan 0015, critère 10 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-10]`
+- **Étant donné** une comparaison en cours suivie à l'écran et un serveur qui refuse l'annulation (500, « Annulation impossible »)
+- **Quand** je clique « Annuler »
+- **Alors** « Annulation impossible » s'affiche et la demande d'annulation de cette exécution est partie
+- **Et** le bouton « Annuler » et la barre « Databricks · nordis-de, nordis-fr » restent affichés, l'exécution étant toujours suivie ; axe-core ne relève aucune violation sérieuse
+- Limite : le serveur est simulé ; l'annulation réussie est S-0015-05. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-10]` couvrent aussi l'effacement de l'erreur en fin de suivi et le cas `not_running`.
+
+### S-0015-11 — Une tolérance de 8 % règle le curseur sur 8 et la comparaison l'utilise
+Plan 0015, critère 11 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-11]`
+- **Étant donné** l'écran Comparaison de Revenu net, dont le KPI et l'aperçu annoncent une tolérance de 8 %
+- **Quand** je lis le curseur de tolérance, le recule d'un cran au clavier, puis le ramène à sa butée haute (touche Fin), et lance la comparaison
+- **Alors** le curseur indique 8 (butée haute 8, intitulé « Tolérance : 8 % »), passe à 7,9 puis revient à 8 et non à 5
+- **Et** la demande de lancement porte `tolerance: 8` ; axe-core ne relève aucune violation sérieuse
+- Limite : le setup et l'aperçu sont les vraies réponses du serveur, modifiées pour annoncer 8 % ; le suivi et le lancement sont simulés. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-11]` couvrent aussi la borne haute pour une tolérance de 7,25 % et l'envoi de la valeur choisie.
 
 **Plan 0022**
 
@@ -1799,6 +1839,8 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0009-08 | La base d'un espace ne contient aucune donnée d'un autre | Fichiers séparés ; l'historique affiché (S-0015-07) ne le prouve pas | `core/tests/repo/test_comparisons_api.py::test_spaces_never_share_results` |
 | S-0009-09 | Lignes rapatriées par plateforme ≤ cellules du scope | Compteur du connecteur, non affiché | `core/tests/compare/test_compare.py::test_sql_is_kept_and_nothing_extracted_remains` |
 | S-0009-10 | Annuler laisse `cancelled` et aucune table temporaire | Les tables temporaires ne s'affichent pas ; l'état annulé est S-0015-05 (Vitest) | `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted` ; `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api` |
+| S-0009-11 | À tolérance nulle, deux entiers consécutifs au-delà de 2⁵³ et deux décimaux distincts au-delà de la précision d'un double sont hors tolérance | Calcul de réconciliation : l'écran ne reçoit et n'affiche que des écarts en pourcentage déjà arrondis, jamais les entiers ou décimaux exacts | `core/tests/compare/test_compare.py::test_exact_numeric_reconciliation` |
+| S-0009-12 | Deux dimensions décimales distinctes qui donneraient le même double restent deux cellules ; deux représentations de la même valeur se rejoignent | Appariement des cellules côté serveur : l'écran affiche les cellules qu'on lui renvoie, sans refaire l'appariement | `core/tests/compare/test_compare.py::test_precise_decimal_dimensions_do_not_collapse` |
 | S-0010-08 | Aucune couleur ou taille en dur hors `tokens.css` | Contrôle statique des sources : un rendu ne prouve pas l'absence de littéraux | `app/src/tokens.test.ts` |
 | S-0018-01 | SSO réel sur un compte de test, `test` puis requête agrégée | Compte réel Snowflake ; le faux SSO est exercé par S-0018-02 | `core/tests/connections/test_snowflake.py::test_real_account` (marqué `snowflake`) |
 | S-0018-03 | Revenu net, FR sur Databricks et DE sur Snowflake, s'exécute et se réconcilie | Compte réel sur les deux plateformes ; le faux Databricks ne calcule pas le SQL métier | `core/tests/repo/test_snowflake_compare.py::test_comparison_across_databricks_and_snowflake` (instable dans la suite complète, voir le Reste à faire) |

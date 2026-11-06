@@ -100,6 +100,10 @@ const KNOWN: Record<string, Explained> = {
     title: "Espace déjà rattaché",
     text: "Cet espace a déjà un dépôt distant : rien n'a été modifié.",
   },
+  comparison_running: {
+    title: "Comparaison déjà en cours",
+    text: "Attendez sa fin avant de relancer cette comparaison.",
+  },
   unsupported_host: {
     title: "Hébergeur non pris en charge",
     text: "Atlas rattache un dépôt GitHub. Vérifiez l'adresse.",

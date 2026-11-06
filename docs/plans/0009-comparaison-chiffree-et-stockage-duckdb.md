@@ -37,6 +37,8 @@ tolerance: {percent: 1.5}                      # optionnel ; défaut = governanc
 - `gap_pct = (variant − canonical) / |canonical| × 100` ; si `canonical = 0` : écart nul si `variant = 0`, sinon `gap_pct = null` et hors tolérance.
 - `validation_pct` = cellules dans la tolérance / total des cellules ; `max_gap_pct` = max |gap_pct|.
 - Chaque résultat porte les écarts structurels du diff (0003) entre canonique et déclinaison, et la liste des jointures en `bypass` (alerte 10.5).
+- Les entiers et décimaux sont comparés exactement, tolérance comprise ; les valeurs et écarts ne sont convertis en double qu'à la restitution et au stockage. Les dimensions décimales qui perdraient leur précision en double sont conservées sous forme textuelle exacte.
+- Compromis interplateformes : une dimension décimale précise (notamment au-delà de 15 chiffres significatifs) dont la valeur ne survit pas à l'aller-retour via `float` ne s'apparie plus au flottant arrondi de l'autre plateforme. On conserve deux cellules absentes d'un côté plutôt que de fusionner des valeurs distinctes. Des décimaux égaux, même écrits avec des zéros finaux différents, gardent la même clé (ADR 0042).
 - Lien vers le nœud divergent : premier écart `critical` du diff, ou `override_undeclared` à défaut. Ce n'est pas une preuve causale, et le libellé de l'UI le dit.
 
 ### Stockage (`atlas.duckdb`, schéma `results`)
@@ -59,11 +61,18 @@ En cas d'échec, `comparisons.error` donne la première erreur ; chaque exécuti
 8. La base d'un espace ne contient aucune donnée d'un autre (deux espaces, deux fichiers ; test d'isolation).
 9. Le nombre de lignes rapatriées par plateforme ne dépasse jamais le nombre de cellules du scope.
 10. Annuler une comparaison en cours laisse un statut `cancelled` et aucune table temporaire.
+11. À tolérance nulle, deux entiers consécutifs au-delà de 2⁵³ et deux décimaux distincts au-delà de la précision d'un double sont hors tolérance.
+12. Deux dimensions décimales distinctes qui donneraient le même double restent deux cellules ; deux représentations de la même valeur se rejoignent.
+13. Une seconde demande identique pendant une exécution active du même espace reçoit `comparison_running` (409), sans nouvelle exécution.
 
 ## Tests
 - Unitaires : réconciliation (table de cas), calcul des pourcentages, choix du nœud divergent.
 - Intégration : comparaison entièrement locale (DuckDB pour toutes les « plateformes ») ; connecteurs simulés ; un test réel optionnel sur Databricks.
 - À la main : une comparaison sur l'espace de démonstration via `curl`, puis consultation de `atlas.duckdb` avec la CLI duckdb.
+
+## Suivi de la revue globale (#149)
+
+6 novembre 2026 : calcul exact des écarts et de la tolérance pour les entiers et décimaux finis, comportement flottant conservé pour les valeurs non finies. Les dimensions décimales précises restent exactes, au prix du compromis interplateformes décrit ci-dessus. Le refus des doublons est testé avec deux préparations distinctes et par l'API ; une tolérance différente et les relances après terminaison, échec ou annulation restent possibles. Un échec de démarrage du thread retire le job et marque la comparaison en échec pour permettre une relance.
 
 ## Dépendances
 0003, 0007, 0008.

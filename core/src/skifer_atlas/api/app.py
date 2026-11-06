@@ -68,6 +68,7 @@ ERROR_STATUS = {
     "oauth_port_busy": 409,
     "query_canceled": 409,
     "needs_auth": 409,
+    "comparison_running": 409,
     "not_running": 409,
     "variant_outdated": 409,
     "invalid_remote": 422,

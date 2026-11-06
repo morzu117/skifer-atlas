@@ -200,6 +200,52 @@ def test_cancel_through_the_api(client, joined, local, monkeypatch):
     assert code(client.get(f"{COMPARISONS}/99")) == (404, "not_found")
 
 
+@pytest.mark.parametrize("outcome", ["done", "failed", "cancelled"])
+def test_running_duplicate_then_distinct_tolerance_and_retry(
+        client, joined, local, monkeypatch, outcome):
+    release = threading.Event()
+    runner = orchestrate.LocalRunner(DATA)
+    numbers = []
+
+    class Blocking:
+        def __init__(self, data):
+            pass
+
+        def __call__(self, plan, compiled, cancel):
+            assert release.wait(10)
+            if outcome == "failed":
+                raise RepoError("query_failed", "Échec simulé")
+            return runner(plan, compiled, cancel)
+
+    monkeypatch.setattr(service, "LocalRunner", Blocking)
+    try:
+        first = client.post(COMPARISONS, json=BODY)
+        assert first.status_code == 202, first.text
+        numbers.append(first.json()["id"])
+        assert code(client.post(COMPARISONS, json=BODY)) == (409, "comparison_running")
+        different = client.post(COMPARISONS, json={**BODY, "tolerance": 8})
+        assert different.status_code == 202, different.text
+        numbers.append(different.json()["id"])
+        assert numbers[0] != numbers[1]
+        if outcome == "cancelled":
+            assert client.post(f"{COMPARISONS}/{numbers[0]}/cancel").status_code == 200
+    finally:
+        release.set()
+        for number in numbers:
+            finished(client, number)
+            for _ in range(500):
+                if orchestrate.job(index_path("groupe-nordis"), number) is None:
+                    break
+                time.sleep(0.01)
+            assert orchestrate.job(index_path("groupe-nordis"), number) is None
+    assert client.get(f"{COMPARISONS}/{numbers[0]}").json()["status"] == outcome
+    assert client.get(f"{COMPARISONS}/{numbers[1]}").json()["tolerance_pct"] == 8
+    retried = client.post(COMPARISONS, json=BODY)
+    assert retried.status_code == 202, retried.text
+    assert retried.json()["id"] not in numbers
+    finished(client, retried.json()["id"])
+
+
 def test_comparison_left_running_by_a_stopped_process(client, joined):
     store.create(index_path("groupe-nordis"), "julien.h", "revenu-net", 4, {"id": "x"}, 1.0)
     assert client.get(f"{COMPARISONS}/1").json()["status"] == "interrupted"

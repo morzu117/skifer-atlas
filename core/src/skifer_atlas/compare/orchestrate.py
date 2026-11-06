@@ -495,6 +495,10 @@ def start(db: Path, account: str | None, prepared: Prepared, runner: Runner,
     # encore inscrit. `store.create` peut attendre une base occupée (ADR 0032) : le verrou
     # du registre n'est pas tenu pendant ce temps.
     with _creation_lock(db):
+        with _jobs_lock:
+            if any(existing.db == db and existing.prepared == prepared
+                   for existing in _jobs.values()):
+                raise RepoError("comparison_running", "Cette comparaison est déjà en cours.")
         number = store.create(db, account, prepared.kpi.data_product.id,
                               prepared.kpi.data_product.version, prepared.scope_dict(),
                               prepared.tolerance)
@@ -504,6 +508,12 @@ def start(db: Path, account: str | None, prepared: Prepared, runner: Runner,
     if wait:
         _guarded(current, runner)
     else:
-        threading.Thread(target=_guarded, args=(current, runner), daemon=True,
-                         name=f"comparison-{number}").start()
+        try:
+            threading.Thread(target=_guarded, args=(current, runner), daemon=True,
+                             name=f"comparison-{number}").start()
+        except Exception:
+            with _jobs_lock:
+                _jobs.pop((str(db), number), None)
+            store.fail(db, number)
+            raise
     return current

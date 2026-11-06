@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -157,6 +157,7 @@ beforeEach(() => {
   window.location.hash = "#/w/groupe-nordis/comparaison";
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.mocked(openExternal).mockClear();
 });
@@ -168,6 +169,139 @@ describe("seuils de la matrice", () => {
 });
 
 describe("comparaison", () => {
+  it("[S-0015-08] un double clic ne lance qu'une requête", async () => {
+    const server = comparisonServer(({ method, path }) => method === "POST" && path === API ? { json: { id: 8 } } : undefined);
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    const button = await launchButton();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(starts(server.calls)).toHaveLength(1));
+  });
+
+  it("[S-0015-08] deux clics dans le même tick sont protégés avant le rendu", async () => {
+    const server = comparisonServer(({ method, path }) => method === "POST" && path === API ? { json: { id: 8 } } : undefined);
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    const button = await launchButton();
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(starts(server.calls)).toHaveLength(1);
+  });
+
+  it("[S-0015-09] cinq erreurs de suivi espacées affichent l'échec et débloquent le lancement", async () => {
+    const server = comparisonServer(({ method, path }) => {
+      if (method === "POST" && path === API) return { json: { id: 8 } };
+      if (path === `${API}/8`) return { status: 500, json: { detail: { code: "oops", message: "Suivi impossible" } } };
+      return undefined;
+    });
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    const button = await launchButton();
+    vi.useFakeTimers();
+    await act(async () => button.click());
+    const reads = () => server.calls.filter((c) => c.path === `${API}/8`);
+    for (const [index, delay] of [400, 400, 800, 1600, 3200].entries()) {
+      await act(async () => vi.advanceTimersByTimeAsync(delay - 1));
+      expect(reads()).toHaveLength(index);
+      expect(screen.queryByText("Suivi impossible")).not.toBeInTheDocument();
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      await act(async () => vi.advanceTimersByTimeAsync(1));
+      expect(reads()).toHaveLength(index + 1);
+    }
+    expect(screen.getByText("Suivi impossible")).toBeInTheDocument();
+    expect(button).not.toHaveAttribute("aria-disabled", "true");
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(reads()).toHaveLength(5);
+    await act(async () => button.click());
+    expect(starts(server.calls)).toHaveLength(2);
+  });
+
+  it("[S-0015-09] une comparaison inconnue termine immédiatement le suivi", async () => {
+    const server = comparisonServer(({ method, path }) => {
+      if (method === "POST" && path === API) return { json: { id: 8 } };
+      if (path === `${API}/8`) return { status: 404, json: { detail: { code: "not_found", message: "Comparaison introuvable" } } };
+      return undefined;
+    });
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    await userEvent.click(await launchButton());
+    expect(await screen.findByText("Comparaison introuvable")).toBeInTheDocument();
+    expect(server.calls.filter((c) => c.path === `${API}/8`)).toHaveLength(1);
+    expect(await launchButton()).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("[S-0015-10] affiche l'échec de l'annulation", async () => {
+    comparisonServer(({ method, path }) => {
+      if (method === "POST" && path === API) return { json: { id: 8 } };
+      if (path === `${API}/8/cancel`) return { status: 500, json: { detail: { code: "oops", message: "Annulation impossible" } } };
+      return undefined;
+    });
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    await userEvent.click(await launchButton());
+    await userEvent.click(await screen.findByRole("button", { name: "Annuler" }));
+    expect(await screen.findByText("Annulation impossible")).toBeInTheDocument();
+  });
+
+  it.each(["oops", "not_running"])("[S-0015-10] une annulation refusée (%s) ne laisse pas d'erreur après la fin", async (code) => {
+    let finished = false;
+    comparisonServer(({ method, path }) => {
+      if (method === "POST" && path === API) return { json: { id: 8 } };
+      if (path === `${API}/8/cancel`) return { status: code === "not_running" ? 409 : 500, json: { detail: { code, message: "Annulation impossible" } } };
+      if (path === `${API}/8`) return { json: { ...RUN, id: 8, status: finished ? "done" : "running" } };
+      return undefined;
+    });
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    await userEvent.click(await launchButton());
+    const cancel = await screen.findByRole("button", { name: "Annuler" });
+    await act(async () => cancel.click());
+    if (code === "not_running") expect(screen.queryByText("Annulation impossible")).not.toBeInTheDocument();
+    else expect(screen.getByText("Annulation impossible")).toBeInTheDocument();
+    finished = true;
+    await screen.findByRole("button", { name: "Relancer" });
+    expect(screen.queryByText("Annulation impossible")).not.toBeInTheDocument();
+  });
+
+  it("[S-0015-11] une tolérance de 8 % reste affichée et envoyée", async () => {
+    const server = comparisonServer(({ method, path }) => {
+      if (path.startsWith(`${API}/setup`)) return { json: { ...SETUP, tolerance: { kpi: 8, workspace: 1 } } };
+      if (path === `${API}/preview`) return { json: { ...PREVIEW, tolerance: 8 } };
+      if (method === "POST" && path === API) return { json: { id: 8 } };
+      return undefined;
+    });
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    const slider = screen.getByRole("slider", { name: /Tolérance/ });
+    expect(slider).toHaveValue("8");
+    expect(slider).toHaveAttribute("max", "8");
+    fireEvent.change(slider, { target: { value: "7" } });
+    fireEvent.change(slider, { target: { value: "8" } });
+    await userEvent.click(await launchButton());
+    await waitFor(() => expect(starts(server.calls)[0].body).toMatchObject({ tolerance: 8 }));
+  });
+
+  it("[S-0015-11] une tolérance de 7,25 % donne une borne à 7,3 et envoie la valeur choisie", async () => {
+    const server = comparisonServer(({ method, path }) => {
+      if (path.startsWith(`${API}/setup`)) return { json: { ...SETUP, tolerance: { kpi: 7.25, workspace: 1 } } };
+      if (path === `${API}/preview`) return { json: { ...PREVIEW, tolerance: 7.25 } };
+      if (method === "POST" && path === API) return { json: { id: 8 } };
+      return undefined;
+    });
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    const slider = screen.getByRole("slider", { name: /Tolérance/ });
+    expect(slider).toHaveAttribute("max", "7.3");
+    fireEvent.change(slider, { target: { value: "7.3" } });
+    expect(slider).toHaveValue("7.3");
+    expect(slider).toHaveAttribute("aria-valuetext", "7,3 %");
+    await userEvent.click(await launchButton());
+    expect(starts(server.calls)[0].body).toMatchObject({ tolerance: 7.3 });
+  });
+
   it("matrice : couleurs, écart max, cellule jamais comparée, filtre de domaine (critère 1)", async () => {
     comparisonServer();
     render(<Harness />);
