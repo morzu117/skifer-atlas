@@ -72,6 +72,48 @@ describe("Mes connexions : dépôt GitHub de l'espace (plan 0025)", () => {
     expect(within(github).getByRole("button", { name: "Se connecter à GitHub" })).toBeEnabled();
   });
 
+  it("[S-0025-07] quelques sondages en échec de suite ne perdent pas le code ; le troisième échec l'abandonne", async () => {
+    // Deux coupures brèves, puis la réponse : la connexion aboutit.
+    const outage = vi.fn();
+    let polls = 0;
+    fakeServer((call: Call) => {
+      if (call.path === `${API}/github` && call.method === "GET") return { json: status() };
+      if (call.path === `${API}/connections` || call.path === `${API}/connections/platforms`) return { json: [] };
+      if (call.path === "/api/github/device") return { json: DEVICE };
+      if (call.path === "/api/github/device/f1") {
+        polls += 1;
+        if (polls <= 2) {
+          outage();
+          return { status: 503, json: { detail: { code: "git_missing", message: "coupure" } } };
+        }
+        return { json: { status: "connected", interval: 0, account: "anna-k" } };
+      }
+      return undefined;
+    });
+    screenOf();
+    const github = await section();
+    await userEvent.click(within(github).getByRole("button", { name: "Se connecter à GitHub" }));
+    expect(await within(github).findByText("WDJB-MJHT")).toBeInTheDocument();
+    await waitFor(() => expect(polls).toBe(3), { timeout: 6000 });
+    expect(outage).toHaveBeenCalledTimes(2);
+    expect(within(github).queryByRole("alert")).toBeNull();
+    await waitFor(() => expect(within(github).queryByText("WDJB-MJHT")).toBeNull(), { timeout: 3000 });
+
+    // Trois échecs de suite : le flux passe en échec, le bouton revient.
+    polls = -10;
+    await userEvent.click(within(github).getByRole("button", { name: "Se connecter à GitHub" }));
+    expect(await within(github).findByRole("alert", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(within(github).getByRole("button", { name: "Se connecter à GitHub" })).toBeEnabled();
+  }, 20000);
+
+  it("[S-0025-07] un statut inconnu donne un texte par défaut, jamais un message vide", async () => {
+    server(() => status(), ["revoked"]);
+    screenOf();
+    const github = await section();
+    await userEvent.click(within(github).getByRole("button", { name: "Se connecter à GitHub" }));
+    expect(await within(github).findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent("La connexion à GitHub a échoué : recommencer.");
+  });
+
   it("explique un échec d'écriture au coffre et permet de recommencer", async () => {
     server(() => status(), ["store_failed"]);
     screenOf();

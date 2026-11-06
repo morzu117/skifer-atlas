@@ -133,3 +133,14 @@ Recherche : sous-chaîne insensible à la casse et aux accents (`strip_accents` 
   - banc d'essai : 1 000 documents reconstruits en 1,3 s environ (MacBook, Apple Silicon). Le test échoue au-delà de 5 s.
 - **Démonstration** : `examples/espace-nordis/` (voir son README) contient sept concepts et KPI et trois variantes de Revenu net, avec des surcharges et une variante `from_scratch`.
 - **À la main** : `skifer-atlas-server` sans token sort en 2. Avec un token, l'adhésion au dépôt nu, la recherche « ca net », les dépendances et les versions ont été vérifiées avec `curl`. Le comportement de Git derrière un proxy ou des certificats d'entreprise reste à éprouver sur un poste client.
+
+### Suivi de la revue globale (#146, 6 novembre 2026)
+
+La revue de `b6af799` a relevé trois défauts sur le registre des espaces et les clones, tous liés au partage du dossier de données entre l'app et la CLI (plan 0028). Décisions : ADR 0039.
+
+- **Registre atomique** : `save_registry` écrit dans un fichier temporaire du même dossier, `fsync`, puis `os.replace` ; un échec supprime le temporaire et laisse l'ancien registre. Test : `core/tests/test_registry_lock.py::test_an_interrupted_write_keeps_the_old_registry`.
+- **Registre sous verrou** : `workspaces.yaml.lock`, verrou de fichier du système (`fcntl` ou `msvcrt`, bibliothèque standard), réentrant ; attente de 10 s, puis `registry_busy` (503, message dans l'app, S-0005-12). Un processus mort rend son verrou seul. Tests : deux threads sans mise à jour perdue, deux processus, processus tué.
+- **Clone sous verrou entre processus** : `clone_lock` et `clone_lock_if_free` utilisent `workspace_dir(id)/repo.lock`, hors du dépôt Git ; attente de 150 s, puis `clone_busy` (503). **Ordre des verrous : le clone, puis le registre, jamais l'inverse.**
+- **Clone orphelin** : `create_workspace` supprime le clone aussi quand `add_workspace` échoue, et tient le verrou du clone pendant toute la création. Test : `core/tests/repo/test_clone_lock.py::test_the_clone_is_removed_when_the_registry_refuses_the_workspace`.
+- **Création et adhésion concurrentes** : `join_workspace` prend le verrou du clone autour de `_ensure_new`, du déplacement et de `add_workspace` ; aucune opération ne supprime un `repo` qu'elle n'a pas posé. Test : `core/tests/repo/test_clone_lock.py::test_a_concurrent_create_and_join_of_one_identifier_keep_the_winner`.
+- **Front** : le panneau de création ou d'adhésion ne se ferme pas pendant l'envoi (`Drawer` `busy`, S-0005-13) ; le flux d'appareil GitHub tolère trois sondages en échec de suite (S-0025-07).

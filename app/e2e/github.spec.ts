@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { expect } from "@playwright/test";
+import { expect, type Route } from "@playwright/test";
 import { AUTH_API, isolatedDemo, python, relay, test } from "./isolation";
 
 // Le dépôt reste local : seule son adresse déclarée devient GitHub. Aucun clone privé,
@@ -91,4 +91,60 @@ test("[S-0025-04] Rejoindre après échec du clone passe par le faux GitHub et r
   expect(calls).toHaveLength(2);
   expect(calls[0]).toEqual({ remote_url: remote });
   expect(calls[1]).toEqual({ remote_url: remote, github_flow: expect.stringMatching(/\S+/) });
+});
+
+// Sondages du flux d'appareil retenus par `page.route` ; les autres passent au vrai serveur
+// et au faux GitHub. Les coupures sont simulées côté app : le code reste valide chez GitHub.
+test("[S-0025-07] GitHub : deux sondages en échec puis un succès connectent ; trois échecs de suite et un statut inconnu s'expliquent", async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const ws = await isolatedDemo(request, AUTH_API);
+  python(`import os,sys
+from skifer_atlas.workspaces import get_workspace,update_workspace
+os.environ['ATLAS_DATA_DIR']=sys.argv[1]
+w=get_workspace(sys.argv[2])
+update_workspace(w.model_copy(update={'git_remote':'https://github.com/nordis/'+sys.argv[2]+'.git'}))`, join(process.env.ATLAS_E2E_DATA!, "auth"), ws.id);
+  await relay(page, AUTH_API);
+  let polls: (route: Route) => Promise<void> = async route => route.fallback();
+  await page.route("**/api/github/device/*", route => polls(route));
+  const outage = (route: Route) => route.fulfill({ status: 503, json: { detail: { code: "git_missing", message: "coupure" } } });
+
+  await page.goto(`${ws.root}/connexions`);
+  const section = page.getByRole("region", { name: "Dépôt de l'espace" });
+  const connect = section.getByRole("button", { name: "Se connecter à GitHub" });
+  const code = section.getByRole("group", { name: "Connexion à GitHub" });
+  const authorize = async () => {
+    const opened = page.waitForEvent("popup");
+    await section.getByRole("button", { name: "Ouvrir GitHub" }).click();
+    const popup = await opened;
+    await popup.getByRole("link", { name: "Autoriser", exact: true }).click();
+    await expect(popup.getByText("Autorisation enregistrée")).toBeVisible();
+    await popup.close();
+  };
+
+  // Un statut que l'app ne connaît pas : le texte par défaut, jamais un message vide.
+  polls = route => route.fulfill({ json: { status: "revoked", interval: 1 } });
+  await connect.click();
+  await expect(section.getByRole("alert")).toHaveText("La connexion à GitHub a échoué : recommencer.");
+  await expect(connect).toBeEnabled();
+
+  // Trois sondages en échec de suite : le flux est abandonné et la connexion se relance.
+  let attempts = 0;
+  polls = async route => { attempts += 1; await outage(route); };
+  await connect.click();
+  await expect(section.getByRole("alert")).toBeVisible();
+  expect(attempts).toBe(3);
+  await expect(connect).toBeEnabled();
+
+  // En dernier, car une connexion réussie retire le bouton : deux coupures de suite, puis le
+  // serveur répond, et la connexion aboutit sans alerte.
+  let failed = 0;
+  polls = async route => {
+    if (failed < 2) { failed += 1; await outage(route); } else await route.fallback();
+  };
+  await connect.click();
+  await expect(code).toContainText(/code sur GitHub/);
+  await authorize();
+  await expect(section.getByRole("status")).toHaveText("Connecté à GitHub en tant que @julien.h.");
+  expect(failed).toBe(2);
+  await expect(section.getByRole("alert")).toHaveCount(0);
 });

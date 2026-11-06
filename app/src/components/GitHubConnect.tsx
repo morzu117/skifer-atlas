@@ -10,8 +10,12 @@ import { explain } from "../messages";
 type State =
   | { kind: "idle" }
   | { kind: "starting" }
-  | { kind: "waiting"; device: GitHubDevice; interval: number; polls: number }
+  | { kind: "waiting"; device: GitHubDevice; interval: number; polls: number; failures: number; startedAt: number }
   | { kind: "failed"; text: string };
+
+// Sondages en échec de suite (coupure brève) tolérés avant d'abandonner : le code reste valide.
+const MAX_POLL_FAILURES = 3;
+const DEFAULT_FAILURE = "La connexion à GitHub a échoué : recommencer.";
 
 const FAILURES: Record<string, string> = {
   denied: "La connexion a été refusée sur GitHub.",
@@ -51,12 +55,20 @@ export function GitHubConnect({
           setState({ kind: "idle" });
           latest.current(flow, polled.account ?? null);
         } else if (polled.status === "pending") {
-          setState((s) => (s.kind === "waiting" ? { ...s, interval: polled.interval, polls: s.polls + 1 } : s));
+          setState((s) => (s.kind === "waiting" ? { ...s, interval: polled.interval, polls: s.polls + 1, failures: 0 } : s));
         } else {
-          setState({ kind: "failed", text: FAILURES[polled.status] });
+          setState({ kind: "failed", text: FAILURES[polled.status] ?? DEFAULT_FAILURE });
         }
       } catch (reason) {
-        if (alive) setState({ kind: "failed", text: explain(reason).text });
+        if (!alive) return;
+        // Une coupure passagère ne perd pas le code : on réessaie, sauf s'il a expiré ou si
+        // les échecs s'enchaînent.
+        setState((s) => {
+          if (s.kind !== "waiting") return s;
+          if (Date.now() - s.startedAt >= s.device.expires_in * 1000) return { kind: "failed", text: FAILURES.expired };
+          if (s.failures + 1 >= MAX_POLL_FAILURES) return { kind: "failed", text: explain(reason).text };
+          return { ...s, polls: s.polls + 1, failures: s.failures + 1 };
+        });
       }
     }, Math.max(interval, 1) * 1000);
     return () => {
@@ -70,7 +82,7 @@ export function GitHubConnect({
     setCopied(false);
     try {
       const device = await api.startGitHub(workspace);
-      setState({ kind: "waiting", device, interval: device.interval, polls: 0 });
+      setState({ kind: "waiting", device, interval: device.interval, polls: 0, failures: 0, startedAt: Date.now() });
     } catch (reason) {
       setState({ kind: "failed", text: explain(reason).text });
     }

@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import shutil
 import tempfile
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -92,23 +93,33 @@ def create_workspace(meta: WorkspaceMeta, creator: str | None = None) -> Workspa
     référent) et un commit initial. Le dépôt distant se rattache ensuite (`set_remote`)."""
     from ..githost.local import local_account
 
-    repo = _ensure_new(meta.id)
-    account = creator or local_account()
-    governance = initial_governance(account, current_user() if creator is None else creator)
-    try:
-        repo.mkdir(parents=True)
-        run_git(["init", "--quiet", f"--initial-branch={meta.main_branch}"], repo)
-        (repo / META_FILE).write_text(_dump(meta.model_dump()), encoding="utf-8")
-        (repo / GOVERNANCE_FILE).write_text(dump_governance(governance), encoding="utf-8")
-        run_git(["add", META_FILE, GOVERNANCE_FILE], repo)
-        run_git(["commit", "--quiet", "-m", f"Création de l'espace {meta.name}"], repo)
-    except BaseException:
-        shutil.rmtree(repo, ignore_errors=True)
-        raise
-    return add_workspace(Workspace(
-        id=meta.id, name=meta.name, sector=meta.sector, account=account,
-        entities=meta.entities, **_profile(governance, account),
-    ))
+    repo = repo_dir(meta.id)
+    # Le verrou du clone (pris avant celui du registre, ADR 0039) exclut un autre processus qui
+    # créerait le même espace : sans lui, le second `mkdir` échouerait, et le nettoyage
+    # ci-dessous effacerait le clone de l'autre.
+    with clone_lock(repo):
+        _ensure_new(meta.id)
+        account = creator or local_account()
+        governance = initial_governance(account, current_user() if creator is None else creator)
+        created = False  # le nettoyage ne supprime que le dossier posé par cet appel
+        try:
+            repo.mkdir(parents=True)
+            created = True
+            run_git(["init", "--quiet", f"--initial-branch={meta.main_branch}"], repo)
+            (repo / META_FILE).write_text(_dump(meta.model_dump()), encoding="utf-8")
+            (repo / GOVERNANCE_FILE).write_text(dump_governance(governance), encoding="utf-8")
+            run_git(["add", META_FILE, GOVERNANCE_FILE], repo)
+            run_git(["commit", "--quiet", "-m", f"Création de l'espace {meta.name}"], repo)
+            # Dans le bloc nettoyé : un registre illisible ou un disque plein ne laisse pas un
+            # clone orphelin, qui ferait refuser toute nouvelle création du même identifiant.
+            return add_workspace(Workspace(
+                id=meta.id, name=meta.name, sector=meta.sector, account=account,
+                entities=meta.entities, **_profile(governance, account),
+            ))
+        except BaseException:
+            if created:
+                shutil.rmtree(repo, ignore_errors=True)
+            raise
 
 
 def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace:
@@ -123,51 +134,62 @@ def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace
     credential = device.pending(github_flow) if github_flow else None
     token = credential.access_token if credential else _token(remote_url)
     staging = Path(tempfile.mkdtemp(prefix="clone-", dir=data_dir()))
-    try:
-        clone = staging / "repo"
-        run_git(["clone", "--quiet", "--no-recurse-submodules", "--", remote_url, str(clone)],
-                error_code="clone_failed", token=token)
-        try:
-            meta = read_meta(clone)
-            governance = read_governance(clone)
-        except (OSError, ValueError, ValidationError) as error:
-            raise RepoError("invalid_workspace", "Ce dépôt n'est pas un espace Atlas : "
-                            f"« {META_FILE} » absent ou invalide.") from error
-        target = _ensure_new(meta.id)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(clone, target)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
+    # Le clonage réseau se fait hors verrou, dans le dossier temporaire. L'identifiant n'est
+    # connu qu'après la lecture d'`atlas.yaml` : le verrou du clone (le même que celui de
+    # `create_workspace`, avant le registre, ADR 0039) est alors pris et tenu jusqu'à
+    # l'enregistrement, pour que `_ensure_new`, le déplacement et `add_workspace` ne se
+    # croisent avec aucune création du même identifiant.
     # Le jeton va au coffre avant de lire le compte, qui s'en sert. Si une étape échoue
     # ensuite, le clone est retiré et l'ancien jeton éventuel est restauré ; le flux
     # garde son nouveau jeton, et l'adhésion se retente sans refaire la connexion.
     stored = False
     previous = None
-    try:
-        if credential is not None:
-            previous = device.stored(meta.id)
-            device.store(meta.id, credential)
-            stored = True
-        account = _host_account(remote_url, meta.main_branch, meta.id)
-        joined = add_workspace(Workspace(
-            id=meta.id, name=meta.name, sector=meta.sector, git_remote=remote_url,
-            account=account, entities=meta.entities, synced_at=_now(),
-            **_profile(governance, account),
-        ))
-    except BaseException:
-        shutil.rmtree(target, ignore_errors=True)
-        if stored:
+    target: Path | None = None
+    ours = False  # `target` a été posé par cet appel : seul ce dossier-là est supprimé en cas d'échec
+    with ExitStack() as locks:
+        try:
+            clone = staging / "repo"
+            run_git(["clone", "--quiet", "--no-recurse-submodules", "--", remote_url, str(clone)],
+                    error_code="clone_failed", token=token)
             try:
-                if previous is None:
-                    device.forget(meta.id)
-                else:
-                    device.store(meta.id, previous)
-            except BaseException as restore_error:  # noqa: BLE001 — préserver l'échec initial
-                # La restauration ne doit jamais masquer l'échec de l'adhésion.
-                # Ne pas journaliser l'exception : elle pourrait contenir un secret.
-                logger.warning("Restauration du coffre GitHub impossible (%s).",
-                               type(restore_error).__name__)
-        raise
+                meta = read_meta(clone)
+                governance = read_governance(clone)
+            except (OSError, ValueError, ValidationError) as error:
+                raise RepoError("invalid_workspace", "Ce dépôt n'est pas un espace Atlas : "
+                                f"« {META_FILE} » absent ou invalide.") from error
+            target = repo_dir(meta.id)
+            locks.enter_context(clone_lock(target))
+            _ensure_new(meta.id)
+            ours = True
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(clone, target)
+            if credential is not None:
+                previous = device.stored(meta.id)
+                device.store(meta.id, credential)
+                stored = True
+            account = _host_account(remote_url, meta.main_branch, meta.id)
+            joined = add_workspace(Workspace(
+                id=meta.id, name=meta.name, sector=meta.sector, git_remote=remote_url,
+                account=account, entities=meta.entities, synced_at=_now(),
+                **_profile(governance, account),
+            ))
+        except BaseException:
+            if ours and target is not None:
+                shutil.rmtree(target, ignore_errors=True)
+            if stored:
+                try:
+                    if previous is None:
+                        device.forget(meta.id)
+                    else:
+                        device.store(meta.id, previous)
+                except BaseException as restore_error:  # noqa: BLE001 — préserver l'échec initial
+                    # La restauration ne doit jamais masquer l'échec de l'adhésion.
+                    # Ne pas journaliser l'exception : elle pourrait contenir un secret.
+                    logger.warning("Restauration du coffre GitHub impossible (%s).",
+                                   type(restore_error).__name__)
+            raise
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
     if github_flow is not None:
         device.release(github_flow)
     return joined
@@ -585,6 +607,7 @@ def _warnings(repo: Path) -> list[dict]:
 def sync_workspace(workspace_id: str) -> dict:
     """`git fetch` puis avance rapide de la branche principale. Un historique divergent
     lève `sync_conflict` sans toucher au clone : aucune résolution automatique."""
+    _workspace(workspace_id)  # `not_found` avant de créer le fichier verrou d'un espace inconnu
     with clone_lock(repo_dir(workspace_id)):
         return _sync(workspace_id)
 

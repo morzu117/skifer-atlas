@@ -26,7 +26,7 @@
 | 0002 | 11 | 8 | 0 | 3 | 0 |
 | 0003 | 10 | 8 | 0 | 2 | 0 |
 | 0004 | 8 | 2 | 0 | 6 | 0 |
-| 0005 | 11 | 7 | 0 | 4 | 0 |
+| 0005 | 13 | 9 | 0 | 4 | 0 |
 | 0006 | 13 | 9 | 0 | 4 | 0 |
 | 0007 | 9 | 4 | 0 | 5 | 0 |
 | 0008 | 9 | 5 | 0 | 4 | 0 |
@@ -46,7 +46,7 @@
 | 0022 | 6 | 6 | 0 | 0 | 0 |
 | 0023 | 4 | 4 | 0 | 0 | 0 |
 | 0024 | 4 | 2 | 2 | 0 | 0 |
-| 0025 | 6 | 6 | 0 | 0 | 0 |
+| 0025 | 7 | 7 | 0 | 0 | 0 |
 | 0026 | 9 | 9 | 0 | 0 | 0 |
 | 0028 | 3 | 2 | 0 | 1 | 0 |
 | 0029 | 4 | 2 | 0 | 2 | 0 |
@@ -55,7 +55,7 @@
 | 0033 | 9 | 8 | 0 | 1 | 0 |
 | 0034 | 10 | 6 | 3 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **253** | **187** | **8** | **58** | **0** |
+| **Total** | **256** | **190** | **8** | **58** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1175,6 +1175,14 @@ Plan 0025, critère 6 · Test : `app/e2e/github.spec.ts` › `[S-0025-06]`
 - **Quand** je clique « Déconnecter GitHub »
 - **Alors** « Jeton retiré du coffre » s'affiche, et l'API annonce `state: absent`
 
+### S-0025-07 — Une coupure brève pendant la connexion ne perd pas le code
+Plan 0025, suivi de la revue globale (#146) · Test : `app/e2e/github.spec.ts` › `[S-0025-07]`
+- **Étant donné** une connexion GitHub en attente de l'autorisation (le code est affiché)
+- **Quand** deux sondages de suite échouent (coupure brève), puis le troisième aboutit
+- **Alors** le code reste affiché, aucune alerte ne paraît, et la connexion se termine
+- **Et** au troisième échec de suite, l'alerte apparaît et « Se connecter à GitHub » revient ; un statut inconnu donne « La connexion à GitHub a échoué : recommencer. » plutôt qu'un message vide
+- Limite : les sondages en échec sont simulés par `page.route` (503 renvoyé à l'app, le serveur n'est pas touché) ; le statut inconnu est lui aussi une réponse simulée. Le test finit par la connexion réussie, car elle retire le bouton. Les mêmes cas sont rendus en Vitest : `app/src/screens/GitHub.test.tsx` › `[S-0025-07]`.
+
 ## Administration
 
 julien.h, seul référent de Groupe Nordis, a son serveur (port 8795) et son dépôt de démonstration ; les requêtes de l'app y sont relayées. Les tests qui écrivent dans le dépôt travaillent sur un espace isolé. Ceux de `app/e2e/depot-testables.spec.ts` le font sur le serveur 8793, où julien.h est aussi seul référent : ils modifient le dépôt par git, du côté du dépôt nu ou du clone, puis cliquent « Synchroniser ».
@@ -1188,6 +1196,22 @@ Plan 0005, critère 11 · Test : `app/e2e/depot-testables.spec.ts` › `[S-0005-
 - **Alors** l'alerte de la région « Dépôt Git de l'espace » dit « Le dépôt local a divergé du dépôt distant »
 - **Et** le clone garde son commit de tête, sans modification en cours ; le fichier distant n'y est pas, le fichier local est intact
 - Limite : le code `sync_conflict` n'est pas lu par l'e2e ; le test Vitest `app/src/screens/Administration.test.tsx` › `[S-0005-11]` simule la réponse 409, et `core/tests/repo/test_catalog_api.py::test_sync_conflict` la vérifie. Ce scénario a révélé un défaut : l'écran n'affichait que la conduite à tenir, sans la cause.
+
+### S-0005-12 — Liste des espaces ou dépôt tenus par un autre processus : l'app dit quoi faire
+Plan 0005, suivi de la revue globale (#146, ADR 0039) · Test : `app/e2e/accueil.spec.ts` › `[S-0005-12]`
+- **Étant donné** que l'app et la ligne de commande modifient en même temps le registre des espaces ou le clone d'un espace, et que l'un tient son verrou au-delà du délai ; le test fait répondre 503 aux requêtes de création et d'adhésion (`page.route`)
+- **Quand** je crée un espace (`registry_busy`), puis j'en rejoins un (`clone_busy`)
+- **Alors** le panneau affiche « Liste des espaces occupée » avec « Réessayez dans un instant », puis « Espace en cours d'utilisation » avec « Réessayez quand elle aura fini »
+- **Et** le bouton d'envoi redevient actif : le panneau reste utilisable
+- Limite : la réponse 503 est simulée ; le verrou réellement tenu par un autre processus, l'attente bornée et le statut 503 sont vérifiés par `core/tests/test_registry_lock.py` et `core/tests/repo/test_clone_lock.py`. Le message seul est aussi vérifié en Vitest : `app/src/messages.test.ts` › `[S-0005-12]`.
+
+### S-0005-13 — Le panneau de création ou d'adhésion ne se ferme pas pendant l'envoi
+Plan 0005, suivi de la revue globale (#146) · Test : `app/e2e/accueil.spec.ts` › `[S-0005-13]` (deux tests)
+- **Étant donné** le panneau « Créer un espace » (ou « Rejoindre un espace ») dont l'envoi est en vol : « Création… » désactivé (ou « Clonage du dépôt… »)
+- **Quand** j'appuie sur Échap ou je clique « Fermer »
+- **Alors** le panneau reste ouvert, « Fermer » est inactif (`aria-disabled`) mais garde le focus dans le panneau, Tab ne l'en fait pas sortir, et la réponse du serveur ouvre l'espace comme prévu
+- **Et** hors envoi, ou après un échec de l'envoi, Échap et « Fermer » ferment le panneau
+- Limite : la requête est retenue par `page.route` puis résolue à la main avec un espace qui existe déjà, pour ne rien créer sur le serveur partagé ; le dernier « Et » est vérifié en Vitest : `app/src/screens/EnvoiEnCours.test.tsx` › `[S-0005-13]`.
 
 **Plan 0006**
 
