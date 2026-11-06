@@ -13,6 +13,7 @@ import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from fractions import Fraction
 from typing import Any
 
 from ..repo.git import RepoError
@@ -47,20 +48,23 @@ def dimension_value(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, Decimal):
-        return int(value) if value == value.to_integral_value() else float(value)
+        if value == value.to_integral_value():
+            return int(value)
+        converted = float(value)
+        return converted if Decimal(str(converted)) == value else format(value, "f").rstrip("0").rstrip(".")
     if isinstance(value, float) and value.is_integer():
         return int(value)
     return value
 
 
-def _number(value: Any) -> float | None:
-    return None if value is None else float(value)
+def _number(value: Any) -> int | Decimal | float | None:
+    return value if value is None or isinstance(value, (int, Decimal, float)) else float(value)
 
 
 def keyed(rows: list[tuple], positions: list[int], value: int,
-          side: str) -> dict[str, float | None]:
+          side: str) -> dict[str, int | Decimal | float | None]:
     """Valeur par cellule ; la clé est la forme JSON des valeurs de dimensions."""
-    found: dict[str, float | None] = {}
+    found: dict[str, int | Decimal | float | None] = {}
     for row in rows:
         key = json.dumps([dimension_value(row[p]) for p in positions], ensure_ascii=False,
                          default=str)
@@ -72,26 +76,37 @@ def keyed(rows: list[tuple], positions: list[int], value: int,
     return found
 
 
-def gap(canonical: float | None, variant: float | None) -> float | None:
+def gap(canonical: Decimal | float | None,
+        variant: Decimal | float | None) -> Fraction | float | None:
     if canonical is None or variant is None:
         return 0.0 if canonical is None and variant is None else None
     if canonical == 0:
         return 0.0 if variant == 0 else None
-    return (variant - canonical) / abs(canonical) * 100
+    if any(isinstance(value, float) or
+           (isinstance(value, Decimal) and not value.is_finite())
+           for value in (canonical, variant)):
+        return (float(variant) - float(canonical)) / abs(float(canonical)) * 100
+    return (Fraction(variant) - Fraction(canonical)) / abs(Fraction(canonical)) * 100
 
 
-def reconcile(dimensions: list[str], canonical: dict[str, float | None],
-              variant: dict[str, float | None], tolerance: float) -> list[Cell]:
+def reconcile(dimensions: list[str], canonical: dict[str, Any],
+              variant: dict[str, Any], tolerance: float) -> list[Cell]:
     cells = []
     for key in sorted(canonical.keys() | variant.keys()):
         values = dict(zip(dimensions, json.loads(key), strict=True))
         if key not in canonical or key not in variant:
-            cells.append(Cell(values, canonical.get(key), variant.get(key), None, False,
+            left, right = canonical.get(key), variant.get(key)
+            cells.append(Cell(values, float(left) if left is not None else None,
+                              float(right) if right is not None else None, None, False,
                               "canonical" if key not in canonical else "variant"))
             continue
         found = gap(canonical[key], variant[key])
-        cells.append(Cell(values, canonical[key], variant[key], found,
-                          found is not None and abs(found) <= tolerance, None))
+        left, right = canonical[key], variant[key]
+        limit = Fraction(str(tolerance)) if isinstance(found, Fraction) else tolerance
+        cells.append(Cell(values, float(left) if left is not None else None,
+                          float(right) if right is not None else None,
+                          float(found) if found is not None else None,
+                          found is not None and abs(found) <= limit, None))
     return cells
 
 

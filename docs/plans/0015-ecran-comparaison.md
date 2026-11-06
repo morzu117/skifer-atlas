@@ -25,11 +25,19 @@ Brief 7.2, 8.3, 8.4, 10.5 ; guide 3.7, 5 (10.5), 7 (historique complet) ; `scree
 5. Annuler arrête la progression et l'historique montre « annulée ».
 6. Les valeurs ne sont arrondies qu'à l'affichage (la valeur exacte est visible en infobulle).
 7. L'historique complet liste toutes les comparaisons de l'espace, et seulement celles-ci.
+8. Un double clic sur le lancement ne produit qu'une demande de comparaison.
+9. Après cinq erreurs consécutives de suivi, l'écran affiche l'erreur et permet un nouveau lancement. La première lecture arrive après 400 ms, puis les reprises après erreur attendent 400, 800, 1 600 puis 3 200 ms (plafond). Une réponse réussie rétablit le rythme de 400 ms et remet le compteur à zéro ; un 404 arrête le suivi dès sa réception.
+10. Si l'annulation échoue, l'écran affiche l'erreur renvoyée, sauf `not_running` ; une réponse terminale du suivi efface l'erreur d'annulation.
+11. Avec une tolérance de 8 %, le curseur indique 8 % et la comparaison utilise cette valeur. Avec 7,25 %, la borne haute est arrondie au pas supérieur (7,3 %) et la demande envoie la valeur choisie, sans l'arrondir de nouveau.
 
 ## Tests
 - Composants : matrice (seuils et couleurs), détail, panneau de lancement.
 - Bout en bout : comparaison entièrement locale.
 - À la main : une comparaison réelle sur Databricks (une fois 0008 livré).
+
+## Suivi de la revue globale (#149)
+
+6 novembre 2026 : protection synchrone du lancement, refus d'une exécution identique en cours (ADR 0042), arrêt du suivi après cinq échecs consécutifs avec délais de reprise progressifs, ou dès un 404. Les erreurs d'annulation sont effacées à la fin du suivi et `not_running` reste silencieux. La borne haute du curseur est adaptée à la tolérance courante et arrondie au pas supérieur. La réconciliation conserve la précision des entiers et décimaux jusqu'à la restitution (plan 0009).
 
 ## Dépendances
 0009, 0010 (0016 pour l'authentification depuis l'écran).

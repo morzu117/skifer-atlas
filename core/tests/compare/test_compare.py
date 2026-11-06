@@ -5,6 +5,7 @@ import shutil
 import threading
 from datetime import date, datetime
 from decimal import Decimal
+from math import isnan
 from pathlib import Path
 
 import duckdb
@@ -106,6 +107,84 @@ def test_dimension_values_compare_across_platforms():
     with pytest.raises(RepoError) as error:
         keyed([("FR", 1), ("FR", 2)], [0], 1, "du canonique")
     assert error.value.code == "duplicate_dimensions"
+
+
+def test_exact_numeric_reconciliation():
+    for left, right in [(9007199254740992, 9007199254740993),
+                        (Decimal("1.00000000000000000001"),
+                         Decimal("1.00000000000000000002"))]:
+        [cell] = reconcile([], keyed([(left,)], [], 0, "a"),
+                           keyed([(right,)], [], 0, "b"), 0)
+        assert not cell.within and cell.gap_pct > 0
+    [cell] = reconcile([], keyed([(1.0,)], [], 0, "a"),
+                       keyed([(1.0000000000000002,)], [], 0, "b"), 0)
+    assert cell.gap_pct == (1.0000000000000002 - 1.0) * 100
+    assert not cell.within
+
+
+def test_precise_decimal_dimensions_do_not_collapse():
+    left = Decimal("1.00000000000000000001")
+    right = Decimal("1.00000000000000000002")
+    rows = keyed([(left, 1), (right, 2)], [0], 1, "a")
+    assert len(rows) == 2
+    assert dimension_value(left) == dimension_value(Decimal("1.000000000000000000010"))
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity"])
+@pytest.mark.parametrize("side", ["canonical", "variant"])
+def test_nonfinite_decimals_keep_float_gap_behavior(value, side):
+    left, right = (Decimal(value), 1) if side == "canonical" else (1, Decimal(value))
+    expected = gap(float(left), float(right))
+    actual = gap(left, right)
+    assert isnan(actual) if isnan(expected) else actual == expected
+    [cell] = reconcile([], {"[]": left}, {"[]": right}, 0)
+    assert not cell.within
+
+
+@pytest.mark.parametrize("separate_preparation", [False, True])
+def test_identical_running_comparison_is_refused(db, separate_preparation):
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking(plan, compiled, cancel):
+        started.set()
+        release.wait(5)
+        raise RepoError("query_canceled", "Requête annulée.")
+
+    prepared = prepare_in(EXAMPLE, request(), None, True)
+    repeated = prepare_in(EXAMPLE, request(), None, True) if separate_preparation else prepared
+    assert repeated == prepared
+    assert (repeated is not prepared) == separate_preparation
+    job = orchestrate.start(db, None, prepared, blocking)
+    try:
+        assert started.wait(5)
+        with pytest.raises(RepoError) as error:
+            orchestrate.start(db, None, repeated, blocking)
+        assert error.value.code == "comparison_running"
+    finally:
+        job.cancel.set()
+        release.set()
+        for _ in range(250):
+            if orchestrate.job(db, job.number) is None:
+                break
+            threading.Event().wait(0.02)
+
+
+def test_thread_start_failure_allows_an_identical_retry(db, monkeypatch):
+    prepared = prepare_in(EXAMPLE, request(), None, True)
+
+    def broken_start(thread):
+        raise RuntimeError("Thread indisponible")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(threading.Thread, "start", broken_start)
+        with pytest.raises(RuntimeError, match="Thread indisponible"):
+            orchestrate.start(db, None, prepared, LocalRunner(DATA))
+    assert orchestrate.job(db, 1) is None
+    assert store.get(db, 1)["status"] == "failed"
+    retried = orchestrate.start(db, None, prepared, LocalRunner(DATA), wait=True)
+    assert retried.number == 2
+    assert store.get(db, retried.number)["status"] == "done"
 
 
 def test_divergent_node_prefers_critical_then_undeclared_nodes():
