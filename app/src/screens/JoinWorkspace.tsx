@@ -38,7 +38,7 @@ export function JoinWorkspace({ onClose, onJoined }: { onClose: () => void; onJo
   }
 
   return (
-    <Drawer title="Rejoindre un espace" onClose={onClose}>
+    <Drawer title="Rejoindre un espace" onClose={onClose} busy={pending}>
       <form className="form" onSubmit={submit} noValidate>
         <Field
           label="Adresse du dépôt"

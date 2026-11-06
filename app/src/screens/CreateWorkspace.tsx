@@ -92,7 +92,7 @@ export function CreateWorkspace({ onClose, onCreated }: { onClose: () => void; o
   }
 
   return (
-    <Drawer title="Créer un espace" onClose={onClose}>
+    <Drawer title="Créer un espace" onClose={onClose} busy={pending}>
       <form className="form" onSubmit={submit} noValidate>
         <Field label="Nom" required error={errors.name} id="ws-name">
           <input value={name} onChange={(e) => changeName(e.target.value)} />

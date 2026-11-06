@@ -12,12 +12,13 @@ import os
 import re
 import shutil
 import subprocess
-import threading
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from functools import cache
 from pathlib import Path
 from urllib.parse import urlsplit
+
+from ..filelock import LockTimeout, file_lock, file_lock_if_free
 
 MIN_VERSION = (2, 30)
 TIMEOUT = 120  # secondes ; un clone d'annuaire reste petit
@@ -96,35 +97,46 @@ def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
     return result.stdout
 
 
-_clone_locks: dict[Path, threading.RLock] = {}
-_clone_locks_guard = threading.Lock()
+# Attente d'un clone tenu par une autre opération avant `clone_busy` : un fetch ou une
+# synchronisation dure au plus `TIMEOUT` (120 s) par commande git, plus les tags. Lu à chaque
+# appel, pour qu'un test le raccourcisse.
+CLONE_WAIT_SECONDS = 150.0
+
+
+def clone_lock_path(repo: Path) -> Path:
+    """Fichier verrou d'un clone : à côté de `repo/`, dans le dossier de l'espace, donc hors de
+    l'arbre de travail Git (il ne salit ni `git status` ni un `git clean`)."""
+    repo = Path(repo).resolve()
+    return repo.parent / f"{repo.name}.lock"
 
 
 @contextmanager
 def clone_lock(repo: Path) -> Iterator[None]:
-    """Un seul fetch ou une seule synchronisation à la fois par clone, dans ce processus.
-    Deux `git fetch` concurrents se disputent le verrou des références distantes, et le
-    second échoue (« cannot lock ref 'refs/remotes/origin/main' »). Réentrant : une
-    synchronisation peut suivre un fetch sous le même verrou."""
-    with _clone_locks_guard:
-        lock = _clone_locks.setdefault(Path(repo).resolve(), threading.RLock())
-    with lock:
+    """Un seul fetch ou une seule synchronisation à la fois par clone, dans ce processus et
+    entre processus (l'app et la CLI, plan 0028 ; ADR 0035 puis 0039). Deux `git fetch`
+    concurrents se disputent le verrou des références distantes, et le second échoue (« cannot
+    lock ref 'refs/remotes/origin/main' »). Réentrant : une synchronisation peut suivre un
+    fetch sous le même verrou. Au-delà de `CLONE_WAIT_SECONDS`, `clone_busy`.
+
+    Ordre de prise (ADR 0039) : le verrou d'un clone se prend AVANT celui du registre
+    (`workspaces.registry_lock`), jamais l'inverse ; un seul clone à la fois."""
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(file_lock(clone_lock_path(repo), CLONE_WAIT_SECONDS))
+        except LockTimeout as error:
+            raise RepoError("clone_busy", "Une autre opération (dans l'application ou dans la "
+                            "ligne de commande) tient le dépôt de l'espace. Réessayer quand "
+                            "elle aura fini.") from error
         yield
 
 
 @contextmanager
 def clone_lock_if_free(repo: Path) -> Iterator[bool]:
-    """Comme `clone_lock`, sans attendre : rend `False` quand une autre opération tient déjà le
-    clone. Sert aux lectures d'état qui ne doivent ni bloquer ni voir un état à mi-chemin."""
-    with _clone_locks_guard:
-        lock = _clone_locks.setdefault(Path(repo).resolve(), threading.RLock())
-    if not lock.acquire(blocking=False):
-        yield False
-        return
-    try:
-        yield True
-    finally:
-        lock.release()
+    """Comme `clone_lock`, sans attendre : rend `False` quand une autre opération, de ce
+    processus ou d'un autre, tient déjà le clone. Sert aux lectures d'état qui ne doivent ni
+    bloquer ni voir un état à mi-chemin."""
+    with file_lock_if_free(clone_lock_path(repo)) as free:
+        yield free
 
 
 def check_remote_url(url: str) -> None:

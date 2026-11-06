@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { relay } from "./isolation";
 import { API, demoRemote, seriousViolations } from "./demo";
 
@@ -124,4 +124,103 @@ test("[S-0010-05] serveur arrêté : bandeau, puis Réessayer après redémarrag
   await banner.getByRole("button", { name: "Réessayer" }).click();
   await expect(banner).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Catalogue" })).toBeVisible();
+});
+
+// Suivi de la revue globale (issue 146). Ces scénarios ne créent rien sur le serveur : la requête
+// d'envoi est retenue par `page.route`, puis résolue à la main avec un espace qui existe déjà.
+const SERVER = "http://127.0.0.1:8791";
+
+async function holdPost(page: Page, request: APIRequestContext, path: string, space: string) {
+  let release!: () => void;
+  let reached!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const arrived = new Promise<void>((resolve) => { reached = resolve; });
+  await page.route(`${API}${path}`, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    reached();
+    await gate;
+    const spaces = await (await request.get(`${SERVER}/api/workspaces`)).json();
+    return route.fulfill({ status: 201, json: spaces.find((s: { id: string }) => s.id === space) });
+  });
+  return { arrived, release };
+}
+
+// Pendant l'envoi : « Fermer » est inactif (`aria-disabled`) mais focalisable, Échap et un clic
+// ne ferment pas, et Tab reste dans le panneau (le focus ne passe pas à la page dessous).
+async function expectSealed(page: Page, dialog: Locator) {
+  const close = dialog.getByRole("button", { name: "Fermer" });
+  await expect(close).toHaveAttribute("aria-disabled", "true");
+  await page.keyboard.press("Escape");
+  await close.click({ force: true }); // Playwright attend un bouton `aria-disabled` : on passe outre
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate((panel) => panel.contains(document.activeElement))).toBe(true);
+}
+
+test("[S-0005-13] créer un espace : Échap et « Fermer » sont sans effet pendant l'envoi, puis l'espace s'ouvre", async ({ page, request }) => {
+  const sending = await holdPost(page, request, "/api/workspaces", "maison-perrault");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Créer un espace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Créer un espace" });
+  const name = dialog.getByLabel(/^Nom/);
+  await name.fill("Atelier Bleu");
+  await dialog.getByRole("button", { name: "Créer l'espace" }).click();
+  await sending.arrived;
+  await expect(dialog.getByRole("button", { name: "Création…" })).toBeDisabled();
+
+  await expectSealed(page, dialog);
+  await name.press("Escape"); // la touche part du champ, qui n'est pas désactivé
+  await expectSealed(page, dialog);
+
+  sending.release();
+  await expect(page).toHaveURL(/#\/w\/maison-perrault\/catalogue$/);
+  await expect(page.getByRole("heading", { name: "Catalogue" })).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+});
+
+test("[S-0005-13] rejoindre un espace : Échap et « Fermer » sont sans effet pendant le clonage, puis l'espace s'ouvre", async ({ page, request }) => {
+  const sending = await holdPost(page, request, "/api/workspaces/join", "groupe-nordis");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Rejoindre un espace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Rejoindre un espace" });
+  await dialog.getByLabel(/^Adresse du dépôt/).fill(bare);
+  await dialog.getByRole("button", { name: "Cloner et ouvrir" }).click();
+  await sending.arrived;
+  await expect(dialog.getByText("Clonage du dépôt…")).toBeVisible();
+
+  // Champ et bouton d'envoi désactivés : « Fermer » garde le focus dans le panneau.
+  await expect(dialog.getByRole("button", { name: "Fermer" })).toBeFocused();
+  await expectSealed(page, dialog);
+
+  sending.release();
+  await expect(page).toHaveURL(/#\/w\/groupe-nordis\/catalogue$/);
+  await expect(dialog).toHaveCount(0);
+});
+
+test("[S-0005-12] registre ou dépôt tenus par un autre processus : le panneau l'explique et reste utilisable", async ({ page }) => {
+  const busy = (code: string, message: string) => (route: import("@playwright/test").Route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 503, json: { detail: { code, message } } })
+      : route.fallback();
+  await page.route(`${API}/api/workspaces`, busy("registry_busy", "La liste des espaces est en cours de modification par un autre processus Atlas."));
+  await page.route(`${API}/api/workspaces/join`, busy("clone_busy", "Une autre opération tient le dépôt de l'espace."));
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Créer un espace" }).click();
+  const create = page.getByRole("dialog", { name: "Créer un espace" });
+  await create.getByLabel(/^Nom/).fill("Atelier Bleu");
+  await create.getByRole("button", { name: "Créer l'espace" }).click();
+  await expect(create).toContainText("Liste des espaces occupée");
+  await expect(create).toContainText("Réessayez dans un instant");
+  await expect(create.getByRole("button", { name: "Créer l'espace" })).toBeEnabled();
+  await create.getByRole("button", { name: "Fermer" }).click();
+
+  await page.getByRole("button", { name: "Rejoindre un espace" }).click();
+  const join = page.getByRole("dialog", { name: "Rejoindre un espace" });
+  await join.getByLabel(/^Adresse du dépôt/).fill(bare);
+  await join.getByRole("button", { name: "Cloner et ouvrir" }).click();
+  await expect(join).toContainText("Espace en cours d'utilisation");
+  await expect(join).toContainText("Réessayez quand elle aura fini");
+  await expect(join.getByRole("button", { name: "Cloner et ouvrir" })).toBeEnabled();
 });

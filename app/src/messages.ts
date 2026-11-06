@@ -12,6 +12,14 @@ const KNOWN: Record<string, Explained> = {
     title: "Base de l'espace occupée",
     text: "Un autre processus Atlas (la ligne de commande, par exemple) utilise la base de cet espace. Réessayez quand il aura fini.",
   },
+  registry_busy: {
+    title: "Liste des espaces occupée",
+    text: "Un autre processus Atlas (la ligne de commande, par exemple) modifie la liste des espaces. Réessayez dans un instant.",
+  },
+  clone_busy: {
+    title: "Espace en cours d'utilisation",
+    text: "Une autre opération (une synchronisation dans la ligne de commande, par exemple) utilise le dépôt de cet espace. Réessayez quand elle aura fini.",
+  },
   git_timeout: {
     title: "Git ne répond pas",
     text: "Le dépôt met trop de temps à répondre. Vérifiez la connexion, puis réessayez.",

@@ -119,6 +119,8 @@ ERROR_STATUS = {
     "query_failed": 502,
     "git_missing": 503,
     "index_busy": 503,
+    "registry_busy": 503,
+    "clone_busy": 503,
     "index_unavailable": 503,
     "vault_unavailable": 503,
     "git_timeout": 504,

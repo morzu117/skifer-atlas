@@ -124,7 +124,8 @@ def test_join_refuses_a_repository_that_is_not_a_workspace(atlas_env, tmp_path):
         join_workspace(str(other))
     assert error.value.code == "invalid_workspace"
     assert list_workspaces() == []
-    assert [p.name for p in atlas_env.iterdir()] == []
+    # Ni dossier d'étape ni clone ne reste ; seul le fichier verrou du registre (vide) est là.
+    assert [p.name for p in atlas_env.iterdir()] == ["workspaces.yaml.lock"]
 
 
 def test_join_with_an_unreachable_remote(atlas_env, tmp_path):
