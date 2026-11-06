@@ -113,6 +113,8 @@ describe("réinitialiser le rattachement (plan 0034)", () => {
     const cancel = within(dialog).getByRole("button", { name: "Annuler" });
     expect(cancel).toHaveFocus(); // le choix sans effet reçoit le focus
     expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).toHaveAttribute("aria-controls", dialog.id);
+    expect(document.getElementById(dialog.getAttribute("aria-describedby")!)?.tagName).toBe("P");
     expect(within(dialog).getByRole("button", { name: "Confirmer la réinitialisation" })).toHaveClass("btn-danger");
     // Le reste du groupe est inerte tant que la confirmation est ouverte.
     expect(form.getByLabelText(/^Adresse du dépôt vide/)).toBeDisabled();
@@ -121,7 +123,10 @@ describe("réinitialiser le rattachement (plan 0034)", () => {
     await userEvent.tab();
     expect(within(dialog).getByRole("button", { name: "Confirmer la réinitialisation" })).toHaveFocus();
 
+    const restore = vi.spyOn(trigger, "focus");
     await userEvent.click(cancel);
+    expect(restore).toHaveBeenCalledTimes(1);
+    restore.mockRestore();
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(trigger).toHaveFocus(); // rendu au bouton qui l'avait ouverte
     expect(form.getByLabelText(/^Adresse du dépôt vide/)).toHaveValue("/depots/x.git");

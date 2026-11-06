@@ -52,7 +52,9 @@ export function Catalogue({
 
   const [text, setText] = useState(filters.q);
   const [rows, setRows] = useState<CatalogRow[] | null>(null);
+  const [retry, setRetry] = useState(0);
   const [error, setError] = useState<Explained | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
   const [facets, setFacets] = useState<Facets | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -82,11 +84,13 @@ export function Catalogue({
     return () => {
       alive = false;
     };
-  }, [ws.id]);
+  }, [ws.id, retry]);
 
   const { q, domain, owner, status, kind } = filters;
   useEffect(() => {
     let alive = true;
+    setUnavailable(false);
+    setError(null);
     api
       .catalog(ws.id, { q, domain, owner, status, kind })
       .then((found) => {
@@ -96,13 +100,14 @@ export function Catalogue({
         setRebuilding(false);
       })
       .catch((reason) => {
-        // Serveur injoignable : le bandeau de la coque suffit.
-        if (alive && !(reason instanceof UnreachableError)) setError(explain(reason));
+        if (!alive) return;
+        if (reason instanceof UnreachableError) setUnavailable(true);
+        else setError(explain(reason));
       });
     return () => {
       alive = false;
     };
-  }, [ws.id, q, domain, owner, status, kind]);
+  }, [ws.id, q, domain, owner, status, kind, retry]);
 
   const shown = rows !== null && rows.some((row) => row.id === selected) ? selected : "";
   useEffect(() => {
@@ -186,14 +191,16 @@ export function Catalogue({
       </div>
 
       {error && (
-        <Banner tone="bad" title={error.title}>
+        <Banner tone="bad" title={error.title} action={
+          <button type="button" className="btn btn-neutral btn-dense" onClick={() => setRetry((n) => n + 1)}>Réessayer</button>
+        }>
           {error.text}
         </Banner>
       )}
 
       <div className="catalogue">
         <div className="table-wrap">
-          <table className="table" aria-label="Concepts et KPI" aria-busy={rows === null}>
+          <table className="table" aria-label="Concepts et KPI" aria-busy={rows === null && !error && !unavailable}>
             <thead>
               <tr>
                 <th scope="col">Nom</th>
@@ -205,7 +212,7 @@ export function Catalogue({
               </tr>
             </thead>
             <tbody>
-              {rows === null &&
+              {rows === null && !error && !unavailable &&
                 Array.from({ length: SKELETON_ROWS }, (_, index) => (
                   <tr key={index} className="skeleton" aria-hidden="true">
                     {Array.from({ length: 6 }, (_, cell) => (
@@ -263,7 +270,8 @@ export function Catalogue({
               })}
             </tbody>
           </table>
-          {rows === null && (
+          {unavailable && <p className="table-status muted" role="status">Catalogue indisponible.</p>}
+          {rows === null && !error && !unavailable && (
             <p className="table-status muted" role="status">
               {rebuilding ? "Reconstruction de l'index de l'espace depuis le dépôt…" : "Chargement du catalogue…"}
             </p>

@@ -6,6 +6,7 @@ import type { CatalogRow, DocumentSummary, Workspace } from "../api";
 import { useRoute } from "../router";
 import { fakeServer, workspace, type Call } from "../test/fakeServer";
 import { Catalogue } from "./Catalogue";
+import App from "../App";
 
 const WS = "/api/workspaces/groupe-nordis";
 
@@ -244,6 +245,48 @@ describe("catalogue", () => {
     release();
     await screen.findByRole("link", { name: "Revenu net" });
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("[S-0013-17] laisse la relance du serveur à la coque et remplace le squelette par un état indisponible", async () => {
+    let attempts = 0;
+    catalogServer(({ path }) => {
+      if (path === WS) return { json: workspace() };
+      if (path.endsWith("/proposals?status=open&for_me=true")) return { json: [] };
+      if (path === `${WS}/catalog` && attempts++ === 0) return "down";
+      return undefined;
+    });
+    render(<App startup={{ attempts: 1, delayMs: 1 }} />);
+    expect(await screen.findByText("Catalogue indisponible.")).toBeInTheDocument();
+    expect(document.querySelectorAll("tr.skeleton")).toHaveLength(0);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Réessayer" })).toHaveLength(1);
+    expect(within(screen.getByRole("main")).queryByRole("alert")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Réessayer" }));
+    expect(await screen.findByRole("link", { name: "Revenu net" })).toBeInTheDocument();
+  });
+
+  it("[S-0013-17] relance les facettes et l'index avec l'action du bandeau d'erreur API", async () => {
+    let attempts = 0;
+    let release!: (value: { json: CatalogRow[] }) => void;
+    const pending = new Promise<{ json: CatalogRow[] }>((resolve) => { release = resolve; });
+    const { calls } = catalogServer(({ path }) => {
+      if (path === `${WS}/index`) return { json: { fresh: attempts === 0 } };
+      if (path === `${WS}/catalog/facets`) return { json: attempts === 0 ? { ...FACETS, domain: [] } : FACETS };
+      if (path === `${WS}/catalog`) return ++attempts === 1 ? { status: 500, json: { detail: "Index illisible." } } : pending;
+      return undefined;
+    });
+    catalogue();
+    const alert = await screen.findByRole("alert");
+    const retry = within(alert).getByRole("button", { name: "Réessayer" });
+    expect(retry).toHaveClass("btn-dense");
+    expect(retry.parentElement).toBe(alert); // prop action, hors du texte du bandeau
+    await userEvent.click(retry);
+    expect(await screen.findByText("Reconstruction de l'index de l'espace depuis le dépôt…")).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "Finance" })).toBeInTheDocument();
+    expect(calls.filter((c) => c.path === `${WS}/index`)).toHaveLength(2);
+    expect(calls.filter((c) => c.path === `${WS}/catalog/facets`)).toHaveLength(2);
+    release({ json: ROWS });
+    await screen.findByRole("link", { name: "Revenu net" });
   });
 
   it("aucun résultat, et catalogue vide", async () => {

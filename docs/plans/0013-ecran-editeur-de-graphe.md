@@ -34,6 +34,30 @@ Brief 3.3, 3.5, 3.6, 4.1, 10.3 ; guide 1.2, 3.2, 3.3, 4 (nœud en édition, arê
 10. La soumission crée la proposition (vérifiée via 0006 sur `LocalHost`).
 11. Validation incrémentale < 150 ms sur un graphe de 50 nœuds (mesure notée).
 
+12. Après modification, la soumission reste bloquée jusqu'à la validation de ce document ; la proposition contient le YAML correspondant à l'aperçu. Un clic pendant les 300 ms de temporisation lance la validation et affiche « Validation lancée : réessayer dans un instant. », sans annoncer d'échec.
+13. Une validation indisponible affiche son erreur, bloque la soumission et conserve le brouillon ; un nouveau clic sur « Soumettre la proposition » relance effectivement la validation et annonce cette tentative. « Validation en cours » apparaît seulement pendant une requête.
+14. Quitter l'écran ou masquer la page pendant le délai d'enregistrement déclenche la sauvegarde du brouillon ; le texte YAML inachevé est repris à la réouverture.
+15. « Repartir de la vN » demande confirmation, donne le focus à « Annuler » et se ferme avec Échap. Pendant l'attente des écritures et de la suppression, les vues canevas et YAML portent `aria-busy` et une zone de statut toujours montée annonce l'édition suspendue. Le canevas et les Propriétés sont inertes ; la confirmation reste hors de ces zones. Une suppression échouée conserve la session, affiche l'erreur et rétablit l'édition.
+16. Une erreur d'entrée ou de sortie de la vue YAML est affichée et laisse l'éditeur utilisable.
+17. Si le premier chargement du catalogue échoue, le squelette disparaît. Pour un serveur injoignable, la page affiche « Catalogue indisponible. » et seul le bandeau de la coque propose « Réessayer ». Pour les autres erreurs, l'action du bandeau de la page recharge le catalogue, les facettes et l'état de l'index.
+18. Reprendre un brouillon YAML illisible affiche le bandeau de reprise et « Repartir de la vN » ; Annuler ou Échap rend le focus au déclencheur via sa référence explicite, même si le clic souris a laissé `activeElement` sur `body`. Confirmer permet de retrouver le canevas sans réparer le YAML ; après réussite, le titre de l'éditeur reçoit le focus.
+19. Si une sauvegarde se termine après une soumission ou pendant « Repartir », la suppression attend sa fin ; un échec tardif et Ctrl/Cmd+Z ne recréent pas l'ancien brouillon. La nouvelle session issue de « Repartir » reste modifiable.
+20. Sous Tauri, fermer la fenêtre empêche d'abord la fermeture, attend la sauvegarde en cours ou en attente au plus deux secondes, puis détruit la fenêtre ; la navigation retire l'écouteur. Une double demande ne déclenche qu'une destruction ; un échec de `destroy()` affiche une notice et permet de redemander la fermeture. Dans le navigateur, `pagehide` reste actif. Le passage à `hidden` déclenche aussi une sauvegarde. Cmd+Q et « Quitter » du Dock macOS restent une limite documentée dans l'ADR 0040.
+21. Un corps JSON de moins de 60 Kio UTF-8 peut utiliser `keepalive` au départ ; les limites exactes sont testées : 61 439 octets avec `keepalive`, 61 440 octets sans.
+22. Saisir du YAML ne désactive pas « Revenir au canevas » pendant la validation. Une saisie arrivée pendant l'analyse de retour, ou un remplacement refusé, conserve la vue YAML, le dernier texte et un avis explicite.
+
+23. Si la proposition est créée mais que la suppression du brouillon échoue, un avis non bloquant l'indique ; les liens vers la proposition et la fiche restent accessibles, sans nouvelle sauvegarde du brouillon.
+
+## Suivi de la revue globale (#150) — 6 novembre 2026
+
+La validation est associée au document exact et ses échecs sont visibles avant toute soumission. Le dernier échec est associé à son document : un clic pendant la temporisation annonce simplement le lancement, et seul un échec réel du document courant annonce une nouvelle tentative. L'aperçu et la proposition partagent le même instantané validé.
+
+L'[ADR 0040 — Brouillon YAML et écriture au départ](../decisions/0040-brouillon-yaml-et-ecriture-au-depart.md) précise le champ facultatif `yaml_text`, l'ordre de reprise et les limites de la sauvegarde au départ : démontage, `visibilitychange`, `pagehide` dans le navigateur, et interception de la fermeture Tauri avec une attente maximale de deux secondes. `keepalive` est réservé aux corps de moins de 60 Kio UTF-8. Les écritures sont ordonnées et terminées avant une suppression ; une session fermée ne réarme pas une sauvegarde à la suite d'un échec tardif.
+
+La reprise du texte YAML brut, même vide ou illisible, évite une confirmation à chaque navigation. Le bandeau de reprise et la confirmation de « Repartir » sont communs aux vues YAML et canevas. La confirmation est partagée avec le rattachement, avec focus sur Annuler, retour au déclencheur et styles fondés sur les tokens. L'attente de suppression est annoncée explicitement dans les deux vues ; un refus rétablit l'édition. Après une soumission réussie, un échec de nettoyage est signalé sans bloquer la navigation. Une opération de retour au canevas refusée conserve le texte et son avis.
+
+Le catalogue réserve le message de serveur injoignable et sa relance à la coque ; la page montre seulement son indisponibilité. Les autres erreurs ont une action « Réessayer » dans le bandeau, qui recharge aussi les facettes et l'état de reconstruction de l'index.
+
 ## Tests
 - Composants : formulaires par type (dix cas), opérations sur le document (tests purs), pile d'annulation.
 - Bout en bout : Playwright pour la construction complète de la fixture, le mode surcharge et la soumission.

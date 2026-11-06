@@ -98,6 +98,7 @@ const NODE_TYPES = { card: Card };
 const nodeColor = (node: Node) => `var(--atlas-node-${typeInfo((node.data as CardData).node.type).family})`;
 
 export type CanvasProps = {
+  inert?: boolean;
   nodes: NodeRaw[];
   positions: Positions;
   selected: string | null;
@@ -186,7 +187,7 @@ export function Canvas(props: CanvasProps) {
   };
 
   return (
-    <div className={`canvas tool-${tool}`} onDragOver={onDragOver} onDrop={onDrop} aria-label={props.label} role="group">
+    <div className={`canvas tool-${tool}`} onDragOver={onDragOver} onDrop={onDrop} aria-label={props.label} role="group" {...(props.inert ? { inert: "" } : {})}>
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}

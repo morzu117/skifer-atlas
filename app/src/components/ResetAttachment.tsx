@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, ApiError, type RemoteReset, type Workspace } from "../api";
 import { explain, type Explained } from "../messages";
 import { Banner } from "./Banner";
+import { Confirmation } from "./Confirmation";
 
 // « Réinitialiser le rattachement » (plan 0034, ADR 0038) : le bouton, sa confirmation explicite et
 // la requête, partagés par le formulaire de rattachement (AttachRemote) et la bannière de la coque
@@ -23,15 +24,13 @@ export function useAttachmentReset(wsId: string, { onPending, onDone }: Options)
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState<Explained | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const cancel = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
-  const confirmId = useId();
+  const confirmationId = useId();
 
-  // Focus : la confirmation reçoit le focus à l'ouverture (sur « Annuler », le choix sans effet),
-  // et le rend au bouton qui l'a ouverte à la fermeture.
+  // Confirmation place le focus sur Annuler. Ce hook reste seul responsable du retour :
+  // après réussite, l'appelant place le focus sur le nouveau formulaire.
   useEffect(() => {
-    if (confirming) cancel.current?.focus();
-    else if (restoreFocus.current) {
+    if (!confirming && restoreFocus.current) {
       restoreFocus.current = false;
       trigger.current?.focus();
     }
@@ -62,13 +61,7 @@ export function useAttachmentReset(wsId: string, { onPending, onDone }: Options)
     }
   }
 
-  function onKeyDown(event: KeyboardEvent) {
-    if (event.key !== "Escape") return;
-    event.stopPropagation(); // dans le panneau de création, Échap ne ferme que la confirmation
-    if (!resetting) close();
-  }
-
-  return { confirming, resetting, resetError, trigger, cancel, confirmId, open: () => setConfirming(true), close, run, onKeyDown };
+  return { confirming, resetting, resetError, trigger, confirmationId, open: () => setConfirming(true), close, run };
 }
 
 export type AttachmentReset = ReturnType<typeof useAttachmentReset>;
@@ -81,7 +74,7 @@ export function ResetButton({ reset, disabled }: { reset: AttachmentReset; disab
       type="button"
       className="btn btn-secondary btn-sm"
       aria-expanded={reset.confirming}
-      aria-controls={reset.confirming ? reset.confirmId : undefined}
+      aria-controls={reset.confirming ? reset.confirmationId : undefined}
       disabled={disabled}
       onClick={reset.open}
     >
@@ -93,39 +86,12 @@ export function ResetButton({ reset, disabled }: { reset: AttachmentReset; disab
 /** La confirmation en ligne (`alertdialog`), rendue sous le bouton quand elle est ouverte. */
 export function ResetConfirmation({ reset }: { reset: AttachmentReset }) {
   if (!reset.confirming) return null;
-  const { confirmId, resetting, resetError } = reset;
+  const { resetting, resetError } = reset;
   return (
-    <div
-      id={confirmId}
-      className="attach-reset"
-      role="alertdialog"
-      aria-labelledby={`${confirmId}-title`}
-      aria-describedby={`${confirmId}-text`}
-      onKeyDown={reset.onKeyDown}
-    >
-      <h3 id={`${confirmId}-title`}>Réinitialiser le rattachement ?</h3>
-      <p id={`${confirmId}-text`}>
-        Seule la copie locale de l'espace est réinitialisée : elle revient à l'état d'un espace sans dépôt distant, sans perdre aucun de vos commits. Le dépôt distant n'est pas modifié : s'il a gardé une publication partielle, il faudra peut-être le vider avant de le réutiliser.
-      </p>
-      {resetting && (
-        <div className="progress" role="status">
-          <span className="progress-bar" aria-hidden="true" />
-          Réinitialisation de la copie locale…
-        </div>
-      )}
-      {resetError && (
-        <Banner tone="bad" title={resetError.title}>
-          {resetError.text}
-        </Banner>
-      )}
-      <div className="attach-reset-actions">
-        <button ref={reset.cancel} type="button" className="btn btn-neutral btn-sm" disabled={resetting} onClick={reset.close}>
-          Annuler
-        </button>
-        <button type="button" className="btn btn-danger btn-sm" disabled={resetting} onClick={() => void reset.run()}>
-          Confirmer la réinitialisation
-        </button>
-      </div>
-    </div>
+    <Confirmation id={reset.confirmationId} title="Réinitialiser le rattachement ?" action="Confirmer la réinitialisation" busy={resetting} restoreFocus={false} onCancel={reset.close} onConfirm={() => void reset.run()}
+      description="Seule la copie locale de l'espace est réinitialisée : elle revient à l'état d'un espace sans dépôt distant, sans perdre aucun de vos commits. Le dépôt distant n'est pas modifié : s'il a gardé une publication partielle, il faudra peut-être le vider avant de le réutiliser.">
+      {resetting && <div className="progress" role="status"><span className="progress-bar" aria-hidden="true" />Réinitialisation de la copie locale…</div>}
+      {resetError && <Banner tone="bad" title={resetError.title}>{resetError.text}</Banner>}
+    </Confirmation>
   );
 }

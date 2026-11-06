@@ -1,12 +1,31 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CheckResult, EditorDocument, Workspace } from "../api";
+import { api, type CheckResult, type EditorDocument, type Workspace } from "../api";
+import * as model from "../editor/model";
 import { useRoute } from "../router";
 import { fakeServer, workspace, type Call } from "../test/fakeServer";
 import { mockReactFlow } from "../test/reactFlow";
 import { Editor } from "./Editor";
+
+vi.mock("../editor/YamlView", () => ({ YamlView: ({ initial, onChange, label }: { initial: string; onChange: (s: string) => void; label: string }) => <textarea aria-label={label} defaultValue={initial} onChange={(e) => onChange(e.target.value)} /> }));
+
+const tauri = vi.hoisted(() => ({
+  enabled: false,
+  onCloseRequested: vi.fn(),
+  destroy: vi.fn(),
+  unlisten: vi.fn(),
+}));
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => tauri.enabled }));
+vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => tauri }));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
 
 const EDITOR = "/api/workspaces/groupe-nordis/editor";
 
@@ -92,10 +111,14 @@ const panel = () => screen.getByRole("complementary", { name: "Propriétés" });
 const bottom = () => screen.getByRole("region", { name: "Validation du document" });
 
 beforeEach(() => {
+  tauri.enabled = false;
+  tauri.onCloseRequested.mockReset().mockResolvedValue(tauri.unlisten);
+  tauri.destroy.mockReset().mockResolvedValue(undefined);
+  tauri.unlisten.mockReset();
   mockReactFlow();
   window.location.hash = "#/w/groupe-nordis/editeur?from=revenu-net";
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("éditeur", () => {
   it.each([
@@ -180,7 +203,9 @@ describe("éditeur", () => {
     expect(await screen.findByText("Brouillon local repris")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Revenu net corrigé : v5 · brouillon" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Repartir de la v4" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Supprimer le brouillon" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Revenu net : v5 · brouillon" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Revenu net : v5 · brouillon" })).toHaveFocus();
     expect(calls.some((c) => c.method === "DELETE" && c.path.endsWith("/draft"))).toBe(true);
   });
 
@@ -205,6 +230,441 @@ describe("éditeur", () => {
     const created = calls.find((c) => c.path === "/api/workspaces/groupe-nordis/proposals")!;
     expect(created.body).toEqual({ document_yaml: "label: Revenu net\n# 2 nœuds\n", justification: "Nouvelle source de factures.", base_version: 4 });
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path.endsWith("/draft"))).toBe(true));
+  });
+
+  it("[S-0013-12] bloque la soumission après modification puis soumet le YAML du document validé", async () => {
+    const info = opened();
+    (info.document.graph as { nodes: Nodes }).nodes[1].nulls = "drop";
+    const { calls } = server(info, (call) => {
+      if (call.path === `${EDITOR}/check`) {
+        const doc = (call.body as { document: typeof DOCUMENT }).document;
+        return { json: { ...checked(doc), yaml: `label: ${doc.label}\n# ${doc.graph.nodes.length} nœuds\n` } };
+      }
+      if (call.path === `${EDITOR}/preview`) return { json: { nature: "new_version", domain: null, required: 1, mention: null, diff: null } };
+      if (call.path.endsWith("/proposals")) return { json: { id: 12, title: "OK", branch: "test" } };
+      return undefined;
+    });
+    editor();
+    await screen.findByText("Compilable Databricks, Snowflake");
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    await userEvent.click(screen.getByRole("button", { name: "Soumettre la proposition" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Validation lancée : réessayer dans un instant.");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Soumettre la proposition" })).not.toHaveAttribute("aria-disabled"));
+    await userEvent.click(screen.getByRole("button", { name: "Soumettre la proposition" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("Nouvelle version");
+    await userEvent.type(within(dialog).getByLabelText(/Justification/), "Modification");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Soumettre" }));
+    await waitFor(() => expect(calls.find((c) => c.path.endsWith("/proposals"))?.body).toMatchObject({ document_yaml: "label: Revenu net\n# 3 nœuds\n" }));
+    expect((calls.find((c) => c.path.endsWith("/preview"))!.body as { document: typeof DOCUMENT }).document.graph.nodes).toHaveLength(3);
+  });
+
+  it("[S-0013-13] affiche l'échec de validation et bloque la soumission sans supprimer le brouillon", async () => {
+    const { calls } = server(opened(), (call) => call.path === `${EDITOR}/check` ? { status: 500, json: { detail: "Validation impossible." } } : undefined);
+    editor();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Validation impossible.");
+    expect(screen.getByRole("button", { name: "Soumettre la proposition" })).toHaveAttribute("aria-disabled", "true");
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+  });
+
+  it("[S-0013-14] enregistre une modification en attente au démontage", async () => {
+    const { calls } = server();
+    const view = editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    view.unmount();
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    expect((calls.find((c) => c.method === "PUT")!.body as { document: typeof DOCUMENT }).document.graph.nodes).toHaveLength(3);
+  });
+
+  it("[S-0013-14] [S-0013-21] déclenche l'enregistrement keepalive sur pagehide", async () => {
+    const { calls } = server();
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    fireEvent(window, new Event("pagehide"));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    const request = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(request?.[1]?.keepalive).toBe(true);
+  });
+
+  it("[S-0013-14] conserve et reprend le texte YAML inachevé au départ", async () => {
+    const { calls } = server();
+    const view = editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Éditer en YAML" }));
+    const input = await screen.findByRole("textbox", { name: "YAML de Revenu net" });
+    fireEvent.change(input, { target: { value: "label: [inachevé" } });
+    view.unmount();
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    const draft = calls.find((c) => c.method === "PUT")!.body as NonNullable<EditorDocument["draft"]>;
+    expect(draft.yaml_text).toBe("label: [inachevé");
+    server(opened({ draft: { ...draft, saved_at: "2026-10-30T09:00:00Z" } }));
+    editor();
+    expect(await screen.findByRole("textbox", { name: "YAML de Revenu net" })).toHaveValue("label: [inachevé");
+  });
+
+  it("[S-0013-15] confirme la reprise, permet d'annuler et conserve la session si la suppression échoue", async () => {
+    const draft = { document: { ...structuredClone(DOCUMENT), label: "Corrigé" }, positions: {}, highest: 7, base_version: 4, saved_at: "2026-10-30T09:00:00Z" };
+    const { calls } = server(opened({ draft }), (call) => call.method === "DELETE" ? { status: 500, json: { detail: "Suppression impossible." } } : undefined);
+    editor();
+    await userEvent.click(await screen.findByRole("button", { name: "Repartir de la v4" }));
+    expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Annuler" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Repartir de la v4" })).toHaveFocus();
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Repartir de la v4" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Supprimer le brouillon" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Suppression impossible.");
+    expect(screen.getByRole("heading", { name: "Corrigé : v5 · brouillon" })).toBeInTheDocument();
+  });
+
+  it("[S-0013-16] affiche l'échec de retour depuis YAML", async () => {
+    server(opened(), (call) => call.path === `${EDITOR}/parse` ? { status: 500, json: { detail: "Analyse impossible." } } : undefined);
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Éditer en YAML" }));
+    await screen.findByRole("textbox", { name: "YAML de Revenu net" });
+    await userEvent.click(screen.getByRole("button", { name: "Revenir au canevas" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Analyse impossible.");
+  });
+
+  it("[S-0013-13] relance une validation échouée et distingue une requête en cours", async () => {
+    const info = opened();
+    (info.document.graph as { nodes: Nodes }).nodes[1].nulls = "drop";
+    const retry = deferred<CheckResult>();
+    server(info);
+    const validate = vi.spyOn(api, "editorCheck")
+      .mockRejectedValueOnce(new Error("Validation indisponible."))
+      .mockReturnValueOnce(retry.promise);
+    editor();
+    await screen.findByText(/Validation indisponible/);
+    await userEvent.click(screen.getByRole("button", { name: "Soumettre la proposition" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("La validation a échoué : nouvelle tentative lancée.");
+    expect(validate).toHaveBeenCalledTimes(2);
+    await userEvent.click(screen.getByRole("button", { name: "Soumettre la proposition" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Validation en cours : réessayer dans un instant.");
+    expect(validate).toHaveBeenCalledTimes(2);
+    await act(async () => retry.resolve(checked(info.document)));
+    expect(screen.getByRole("button", { name: "Soumettre la proposition" })).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("[S-0013-18] écarte un brouillon YAML illisible, puis permet de modifier la nouvelle session", async () => {
+    const draft = { document: structuredClone(DOCUMENT), yaml_text: "label: [ouvert", positions: {}, highest: 7, base_version: 4, saved_at: "2026-10-30T09:00:00Z" };
+    const { calls } = server(opened({ draft }), (call) => call.path === `${EDITOR}/parse` ? { json: { document: null, issues: [] } } : undefined);
+    const view = editor();
+    await screen.findByRole("textbox", { name: "YAML de Revenu net" });
+    expect(screen.getByText("Brouillon local repris")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Repartir de la v4" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Annuler" }));
+    expect(screen.getByRole("button", { name: "Repartir de la v4" })).toHaveFocus();
+    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: "Repartir de la v4" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Supprimer le brouillon" }));
+    await screen.findByRole("region", { name: "Graphe" });
+    expect(screen.getByRole("heading", { level: 1, name: "Revenu net : v5 · brouillon" })).toHaveFocus();
+    expect(screen.queryByRole("textbox", { name: "YAML de Revenu net" })).toBeNull();
+    fireEvent(window, new Event("pagehide"));
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    view.unmount();
+    await waitFor(() => expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1));
+    expect(calls.find((c) => c.method === "PUT")!.body).toMatchObject({ yaml_text: null });
+  });
+
+  it("[S-0013-22] garde Revenir au canevas actif pendant la frappe et conserve une saisie arrivée pendant l'analyse", async () => {
+    server();
+    const parsing = deferred<Awaited<ReturnType<typeof api.editorParse>>>();
+    vi.spyOn(api, "editorParse").mockReturnValue(parsing.promise);
+    const { unmount } = editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Éditer en YAML" }));
+    const input = await screen.findByRole("textbox", { name: "YAML de Revenu net" });
+    fireEvent.change(input, { target: { value: "label: première saisie" } });
+    const back = screen.getByRole("button", { name: "Revenir au canevas" });
+    expect(back).not.toHaveAttribute("aria-disabled");
+    await userEvent.click(back);
+    fireEvent.change(input, { target: { value: "label: deuxième saisie" } });
+    await act(async () => parsing.resolve({ document: { ...DOCUMENT, label: "première saisie" }, issues: [] }));
+    expect(input).toHaveValue("label: deuxième saisie");
+    expect(screen.getByRole("alert")).toHaveTextContent("Le YAML a changé pendant l'analyse");
+    const save = vi.spyOn(api, "saveDraft");
+    unmount();
+    expect(save).toHaveBeenCalledWith(expect.any(String), expect.any(String), expect.objectContaining({ yaml_text: "label: deuxième saisie" }), false);
+  });
+
+  it("[S-0013-22] reste en YAML avec le texte et l'avis quand l'opération replace est refusée", async () => {
+    const apply = model.apply;
+    vi.spyOn(model, "apply").mockImplementation((doc, op) => {
+      if (op.kind === "replace") throw new model.OpError("Remplacement refusé.");
+      return apply(doc, op);
+    });
+    server();
+    vi.spyOn(api, "editorParse").mockResolvedValue({ document: { ...DOCUMENT, label: "Modifié" }, issues: [] });
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Éditer en YAML" }));
+    const input = await screen.findByRole("textbox", { name: "YAML de Revenu net" });
+    fireEvent.change(input, { target: { value: "label: Modifié" } });
+    await userEvent.click(screen.getByRole("button", { name: "Revenir au canevas" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Remplacement refusé.");
+    expect(input).toHaveValue("label: Modifié");
+  });
+
+  it.each(["soumission", "repartir"])("[S-0013-19] une sauvegarde échouée tardivement ne recrée pas le brouillon après %s", async (action) => {
+    const info = opened();
+    (info.document.graph as { nodes: Nodes }).nodes[1].nulls = "drop";
+    info.draft = { document: info.document, positions: {}, highest: 7, base_version: 4, saved_at: "2026-10-30T09:00:00Z" };
+    const { calls } = server(info, (call) => {
+      if (call.path === `${EDITOR}/preview`) return { json: { nature: "new_version", domain: null, required: 1, mention: null, diff: null } };
+      if (call.path.endsWith("/proposals")) return { json: { id: 12, title: "OK", branch: "test" } };
+      return undefined;
+    });
+    const writing = deferred<{ saved_at: string }>();
+    const save = vi.spyOn(api, "saveDraft").mockReturnValueOnce(writing.promise);
+    const view = editor();
+    await screen.findByText("Compilable Databricks, Snowflake");
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    fireEvent(window, new Event("pagehide"));
+    expect(save).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Soumettre la proposition" })).not.toHaveAttribute("aria-disabled"));
+    if (action === "soumission") {
+      await userEvent.click(screen.getByRole("button", { name: "Soumettre la proposition" }));
+      const dialog = await screen.findByRole("dialog");
+      await within(dialog).findByText("Nouvelle version");
+      await userEvent.type(within(dialog).getByLabelText(/Justification/), "Modification");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Soumettre" }));
+      await screen.findByRole("heading", { name: "Proposition n° 12 créée" });
+    } else {
+      await userEvent.click(screen.getByRole("button", { name: "Repartir de la v4" }));
+      await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Supprimer le brouillon" }));
+    }
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false); // attend le PUT déjà lancé
+    await act(async () => writing.reject(new Error("Écriture interrompue.")));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+    if (action === "soumission") {
+      fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+      fireEvent.keyDown(window, { key: "z", metaKey: true });
+    }
+    expect(screen.getByText(action === "soumission" ? "schéma 1 · 3 nœuds · 1 arête" : "schéma 1 · 2 nœuds · 1 arête")).toBeInTheDocument();
+    fireEvent(window, new Event("pagehide"));
+    view.unmount();
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("[S-0013-14] [S-0013-20] [S-0013-21] enregistre sur visibilitychange hidden et réserve keepalive aux corps de moins de 60 Kio", async () => {
+    server();
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Éditer en YAML" }));
+    const input = await screen.findByRole("textbox", { name: "YAML de Revenu net" });
+    // Moins de 60 000 caractères, mais plus de 60 Kio en UTF-8.
+    fireEvent.change(input, { target: { value: "é".repeat(31_000) } });
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    fireEvent(document, new Event("visibilitychange"));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "PUT")).toBe(true));
+    const request = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(request?.[1]?.keepalive).toBe(false);
+  });
+
+  it.each(["succès", "délai dépassé"])("[S-0013-20] intercepte la fermeture Tauri, attend la sauvegarde puis détruit la fenêtre : %s", async (outcome) => {
+    tauri.enabled = true;
+    server();
+    const writing = deferred<{ saved_at: string }>();
+    const save = vi.spyOn(api, "saveDraft").mockReturnValueOnce(writing.promise);
+    const view = editor();
+    await screen.findByText("Schéma invalide");
+    await waitFor(() => expect(tauri.onCloseRequested).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    fireEvent(window, new Event("pagehide"));
+    expect(save).not.toHaveBeenCalled(); // pagehide est le repli navigateur
+    if (outcome === "succès") {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      fireEvent(document, new Event("visibilitychange"));
+      expect(save).toHaveBeenCalledTimes(1); // la fermeture attend aussi un PUT déjà lancé
+    }
+    vi.useFakeTimers();
+    const event = { preventDefault: vi.fn() };
+    let closing!: Promise<void>;
+    act(() => { closing = tauri.onCloseRequested.mock.calls[0][0](event); });
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(tauri.destroy).not.toHaveBeenCalled();
+    if (outcome === "succès") {
+      await act(async () => { writing.resolve({ saved_at: "2026-11-06T10:00:00Z" }); await closing; });
+    } else {
+      await act(async () => vi.advanceTimersByTimeAsync(1999));
+      expect(tauri.destroy).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); await closing; });
+      await act(async () => writing.resolve({ saved_at: "2026-11-06T10:00:00Z" }));
+    }
+    expect(tauri.destroy).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(tauri.unlisten).toHaveBeenCalledTimes(1);
+  });
+
+  it("[S-0013-12] lance la validation pendant les 300 ms sans annoncer un échec", async () => {
+    server();
+    editor();
+    await screen.findByText("Schéma invalide");
+    const pending = deferred<CheckResult>();
+    const validate = vi.spyOn(api, "editorCheck").mockReturnValueOnce(pending.promise);
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    expect(validate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Soumettre la proposition" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Validation lancée : réessayer dans un instant.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("échoué");
+    expect(validate).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve(checked(DOCUMENT)));
+  });
+
+  it.each(["canevas", "YAML"])("[S-0013-15] annonce le gel pendant Repartir en vue %s et rétablit l'édition si la suppression échoue", async (view) => {
+    const draft = { document: structuredClone(DOCUMENT), positions: {}, highest: 7, base_version: 4, saved_at: "2026-11-06T10:00:00Z",
+      yaml_text: view === "YAML" ? "label: Revenu net" : null };
+    server(opened({ draft }));
+    const writing = deferred<{ saved_at: string }>();
+    const deleting = deferred<null>();
+    const save = vi.spyOn(api, "saveDraft").mockReturnValueOnce(writing.promise);
+    const remove = vi.spyOn(api, "deleteDraft").mockReturnValueOnce(deleting.promise);
+    const { container, unmount } = editor();
+    const trigger = await screen.findByRole("button", { name: "Repartir de la v4" });
+    const status = screen.getByRole("status", { name: "Reprise du brouillon" });
+    expect(status).toBeEmptyDOMElement();
+    if (view === "YAML") {
+      fireEvent.change(await screen.findByRole("textbox", { name: "YAML de Revenu net" }), { target: { value: "label: avant reprise" } });
+    } else {
+      await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    }
+    fireEvent(window, new Event("pagehide"));
+    expect(save).toHaveBeenCalledTimes(1);
+    await userEvent.click(trigger);
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Supprimer le brouillon" }));
+    const zone = container.querySelector(view === "YAML" ? ".editor-yaml" : ".editor-body")!;
+    expect(zone).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status", { name: "Reprise du brouillon" })).toBe(status);
+    expect(status).toHaveTextContent("Reprise en cours : l'édition est suspendue");
+    expect(screen.getByRole("alertdialog").closest("[inert]")).toBeNull();
+    if (view === "canevas") {
+      expect(container.querySelector(".canvas")).toHaveAttribute("inert");
+      expect(container.querySelector(".props")).toHaveAttribute("inert");
+      expect(container.querySelector(".editor-center")).not.toHaveAttribute("inert");
+    }
+    expect(remove).not.toHaveBeenCalled();
+    await act(async () => writing.resolve({ saved_at: "2026-11-06T10:01:00Z" }));
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(zone).toHaveAttribute("aria-busy", "true");
+    await act(async () => deleting.reject(new Error("Suppression refusée.")));
+    expect(zone).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByRole("status", { name: "Reprise du brouillon" })).toBe(status);
+    expect(status).toBeEmptyDOMElement();
+    if (view === "canevas") {
+      expect(container.querySelector(".canvas")).not.toHaveAttribute("inert");
+      expect(container.querySelector(".props")).not.toHaveAttribute("inert");
+    }
+    expect(screen.queryByText(/Reprise en cours : l'édition est suspendue/)).toBeNull();
+    expect(trigger).not.toBeDisabled();
+    if (view === "YAML") {
+      fireEvent.change(screen.getByRole("textbox", { name: "YAML de Revenu net" }), { target: { value: "label: après échec" } });
+    } else {
+      await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    }
+    unmount();
+    expect(save).toHaveBeenCalledTimes(2);
+    const saved = save.mock.calls[1][2];
+    if (view === "YAML") expect(saved.yaml_text).toBe("label: après échec");
+    else expect((saved.document.graph as { nodes: Nodes }).nodes).toHaveLength(4);
+  });
+
+  it("[S-0013-18] rend le focus au déclencheur même si le clic laisse activeElement sur body", async () => {
+    server(opened({ draft: { document: structuredClone(DOCUMENT), positions: {}, highest: 7, base_version: 4, saved_at: "2026-11-06T10:00:00Z" } }));
+    editor();
+    const trigger = await screen.findByRole("button", { name: "Repartir de la v4" });
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.click(trigger);
+    expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Annuler" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+  });
+
+  it("[S-0013-20] affiche un échec de destroy et permet une nouvelle demande de fermeture", async () => {
+    tauri.enabled = true;
+    tauri.destroy.mockRejectedValueOnce(new Error("Fermeture refusée."));
+    server();
+    editor();
+    await screen.findByText("Schéma invalide");
+    await waitFor(() => expect(tauri.onCloseRequested).toHaveBeenCalledTimes(1));
+    const close = tauri.onCloseRequested.mock.calls[0][0];
+    const event = { preventDefault: vi.fn() };
+    await act(async () => close(event));
+    expect(screen.getByRole("alert")).toHaveTextContent("Fermeture refusée.");
+    expect(tauri.destroy).toHaveBeenCalledTimes(1);
+    await act(async () => close(event));
+    expect(tauri.destroy).toHaveBeenCalledTimes(2);
+    expect(event.preventDefault).toHaveBeenCalledTimes(2);
+  });
+
+  it("[S-0013-20] une double demande de fermeture partage la sauvegarde et ne détruit la fenêtre qu'une fois", async () => {
+    tauri.enabled = true;
+    server();
+    const writing = deferred<{ saved_at: string }>();
+    const save = vi.spyOn(api, "saveDraft").mockReturnValueOnce(writing.promise);
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    const close = tauri.onCloseRequested.mock.calls[0][0];
+    const first = { preventDefault: vi.fn() };
+    const second = { preventDefault: vi.fn() };
+    let closing!: Promise<void>;
+    act(() => { closing = close(first); });
+    await act(async () => close(second));
+    expect(first.preventDefault).toHaveBeenCalledTimes(1);
+    expect(second.preventDefault).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(tauri.destroy).not.toHaveBeenCalled();
+    await act(async () => { writing.resolve({ saved_at: "2026-11-06T10:00:00Z" }); await closing; });
+    expect(tauri.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([[61_439, true], [61_440, false]] as const)("[S-0013-21] un corps de %i octets utilise keepalive=%s", async (size, expected) => {
+    server();
+    const draft = { document: {}, positions: {}, highest: 0, base_version: null, yaml_text: "" };
+    const overhead = new TextEncoder().encode(JSON.stringify(draft)).byteLength;
+    draft.yaml_text = "x".repeat(size - overhead);
+    await api.saveDraft("groupe-nordis", "revenu-net", draft, true);
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(new TextEncoder().encode(String(init?.body)).byteLength).toBe(size);
+    expect(init?.keepalive).toBe(expected);
+  });
+
+  it("[S-0013-10] une suppression échouée après soumission laisse la proposition créée et ses liens accessibles", async () => {
+    const info = opened();
+    (info.document.graph as { nodes: Nodes }).nodes[1].nulls = "drop";
+    server(info, (call) => {
+      if (call.path === `${EDITOR}/preview`) return { json: { nature: "new_version", domain: null, required: 1, mention: null, diff: null } };
+      if (call.path.endsWith("/proposals")) return { json: { id: 12, title: "OK", branch: "test" } };
+      if (call.method === "DELETE") return { status: 500, json: { detail: "Suppression refusée." } };
+      return undefined;
+    });
+    const save = vi.spyOn(api, "saveDraft");
+    const { unmount } = editor();
+    await screen.findByText("Compilable Databricks, Snowflake");
+    await userEvent.click(screen.getByRole("button", { name: "Soumettre la proposition" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("Nouvelle version");
+    await userEvent.type(within(dialog).getByLabelText(/Justification/), "Modification");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Soumettre" }));
+    const notice = await screen.findByText("La proposition est créée, mais le brouillon local n'a pas pu être supprimé.");
+    expect(notice).toHaveAttribute("role", "status");
+    expect(notice.parentElement?.closest('[role="status"]')).toBeNull();
+    expect(notice.previousElementSibling).toHaveClass("card");
+    expect(screen.getByRole("heading", { name: "Proposition n° 12 créée" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Voir les propositions" })).toHaveAttribute("href", "#/w/groupe-nordis/propositions");
+    expect(screen.getByRole("link", { name: "Retour à la fiche" })).toBeInTheDocument();
+    expect(screen.queryByText(/Le brouillon local est supprimé/)).toBeNull();
+    fireEvent(window, new Event("pagehide"));
+    unmount();
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("mode surcharge : seuls les nœuds se remplacent, hors points déclarés signalés (critère 7)", async () => {

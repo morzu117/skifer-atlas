@@ -69,6 +69,7 @@ class DraftRequest(BaseModel):
     positions: dict[str, Any] = Field(default_factory=dict)
     highest: int = 0
     base_version: int | None = None
+    yaml_text: str | None = None
 
 
 class PreviewRequest(BaseModel):
