@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
   api,
+  ApiError,
   UnreachableError,
   type ProposalDetail,
   type ProposalGraphs,
@@ -29,6 +30,9 @@ const STATUSES: { value: ProposalStatus; label: string }[] = [
   { value: "closed", label: "Fermées" },
   { value: "all", label: "Toutes" },
 ];
+
+// Refus qui disent que l'écran est périmé : les messages annoncent la relecture.
+const RELOAD_ON = ["head_changed", "not_ready"];
 
 const MINE = "mes-domaines";
 // Une valeur vide sort de l'adresse : « Tous » a donc la sienne.
@@ -86,8 +90,17 @@ export function Proposals({ ws, params, heading: title }: { ws: Workspace; param
   const [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState<{ title: string; text: string; link?: { href: string; label: string } } | null>(null);
 
+  // Clé de la file affichée : un autre espace ou un autre statut vide la liste le temps du
+  // chargement. Une relecture du même filtre (après une revue, une fusion) garde la liste,
+  // pour ne pas démonter la proposition ouverte ni son bandeau.
+  const loadedKey = useRef("");
   useEffect(() => {
     let alive = true;
+    const key = `${ws.id}|${status}`;
+    if (loadedKey.current !== key) {
+      loadedKey.current = key;
+      setQueue({ kind: "loading" });
+    }
     api
       .proposalQueue(ws.id, status)
       .then((value) => alive && setQueue({ kind: "ready", value }))
@@ -301,6 +314,8 @@ function Detail({
       return true;
     } catch (reason) {
       setFailure(explain(reason));
+      // La proposition a bougé depuis l'affichage : relire le détail, sans effacer le message.
+      if (reason instanceof ApiError && RELOAD_ON.includes(reason.code)) onChanged();
       return false;
     } finally {
       setBusy(false);

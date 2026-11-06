@@ -15,6 +15,7 @@ Brief 5, 10.7 ; guide 5 (10.7), 7 ; `screens/10.7-administration.html` ; ADR 000
 - Sections en grille de 2 colonnes : Domaines métier (liste, « + Domaine », alerte orange si un domaine n'a pas de référent) ; Validateurs requis (canonique et déclinaisons, min 1, surcharges par domaine, rappel « une surcharge hors des points déclarés exige toujours le nombre canonique ») ; Utilisateurs et rôles (tableau Nom / Entité / Rôle / Domaines, « + Inviter ») ; Dépôt Git (URL en mono, branche principale, dernière synchronisation, « Synchroniser ») ; Plateformes autorisées (cases avec le mode d'auth).
 - « Enregistrer les paramètres » calcule le nouveau `governance.yaml` (et `allowed_platforms`), le valide, puis crée une proposition « Gouvernance » (1 référent requis, 0006). Bouton libellé « Enregistrer et créer la proposition », conformément au guide 3.2. « Annuler » restaure l'état lu.
 - Renommer un domaine change son `label`, jamais son `id` (aucun fichier déplacé).
+- Quitter l'écran (onglet de la coque, sélecteur d'espace) tant que le brouillon diffère de la gouvernance lue et n'a pas été enregistré demande confirmation : « Quitter l'Administration ? », « Annuler » ou « Quitter sans enregistrer » (ADR 0043). Une proposition créée ou un brouillon annulé ne demande rien.
 - Référent seul (ADR 0008) :
   - tant que la branche principale ne compte qu'un référent, un bandeau permanent indique que ses modifications de gouvernance sont fusionnées sans revue. Le bouton devient « Enregistrer et fusionner », avec la même mention sur la proposition créée ;
   - le rappel « Require review from Code Owners » n'apparaît qu'à partir de deux référents.
@@ -28,6 +29,8 @@ Brief 5, 10.7 ; guide 5 (10.7), 7 ; `screens/10.7-administration.html` ; ADR 000
 6. Aucun champ ni texte de token sur l'écran.
 7. « Synchroniser » met à jour la date et réindexe.
 8. Avec un seul référent, le bandeau est affiché, l'enregistrement fusionne directement avec la mention, et le bandeau disparaît après l'ajout d'un deuxième référent.
+9. Quitter l'écran avec un brouillon non enregistré demande confirmation ; « Annuler » garde le brouillon, « Quitter sans enregistrer » ouvre la vue demandée.
+10. Sans brouillon à enregistrer, quitter l'écran ne demande rien.
 
 ## Tests
 - Composants : formulaires et validations.

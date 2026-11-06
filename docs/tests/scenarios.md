@@ -35,10 +35,10 @@
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 7 | 7 | 0 | 0 | 0 |
 | 0013 | 22 | 18 | 4 | 0 | 0 |
-| 0014 | 7 | 7 | 0 | 0 | 0 |
+| 0014 | 9 | 9 | 0 | 0 | 0 |
 | 0015 | 11 | 9 | 2 | 0 | 0 |
 | 0016 | 6 | 6 | 0 | 0 | 0 |
-| 0017 | 8 | 8 | 0 | 0 | 0 |
+| 0017 | 10 | 10 | 0 | 0 | 0 |
 | 0018 | 6 | 1 | 0 | 5 | 0 |
 | 0019 | 9 | 1 | 0 | 8 | 0 |
 | 0020 | 4 | 4 | 0 | 0 | 0 |
@@ -55,7 +55,7 @@
 | 0033 | 9 | 8 | 0 | 1 | 0 |
 | 0034 | 10 | 6 | 3 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **279** | **203** | **13** | **63** | **0** |
+| **Total** | **283** | **207** | **13** | **63** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1008,6 +1008,22 @@ Plan 0014, critère 7 · Test : `app/e2e/propositions.spec.ts` › `[S-0014-07]`
 - **Quand** je lis la région « Diff de la proposition »
 - **Alors** elle liste trois écarts en texte, dont celui du fuseau (`timezone`), et axe-core ne relève aucune violation sérieuse
 
+### S-0014-08 — Un refus de fusion dit ce qui s'est passé et quoi faire
+Plan 0014, critère 8 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0014-08]` ; `app/src/messages.test.ts` › `[S-0014-08]` (un cas par code) ; `app/src/screens/Proposals.test.tsx` › `[S-0014-08]` (trois tests)
+- **Étant donné** DE approuvée par claire.m et marc.d, ouverte chez claire.m avec « Fusionner »
+- **Quand** la fusion répond `merge_conflict` avec le texte brut de GitHub (« Pull Request is not mergeable ») ; puis un commit arrive sur la branche de la proposition et claire.m clique de nouveau « Fusionner »
+- **Alors** le premier refus s'affiche sous le titre « La fusion provoque un conflit » avec sa consigne (demander à l'auteur de reproposer), sans le texte de GitHub ni « L'opération a échoué » ; le second sous « La proposition ne remplit plus les conditions de fusion » (`not_ready`), avec la raison du serveur (« 0 validation(s) sur 2. ») avant la consigne
+- **Et** l'écran se relit sans perdre le message : « Validations : 0 / 2 », plus de « Fusionner », « Approuver (0 / 2) », et la branche principale du dépôt n'a pas bougé
+- Les huit codes (`merge_conflict`, `merge_refused`, `branch_protected`, `head_changed`, `not_ready`, `not_open`, `cannot_review_own`, `comment_required`) ont chacun un titre et une consigne vérifiés par Vitest. `head_changed` relit aussi l'écran, `not_open` non (Vitest).
+- Limite : `merge_refused` et `branch_protected` ne peuvent pas être produits de bout en bout (le premier vient d'un `git push` refusé, le second d'une règle de GitHub : voir S-0006-13) ; leur traduction est vérifiée par le test de `messages.ts`.
+
+### S-0014-09 — Changer de statut ne laisse pas la file du statut précédent
+Plan 0014, critère 9 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0014-09]` ; `app/src/screens/Proposals.test.tsx` › `[S-0014-09]`
+- **Étant donné** la file des propositions ouvertes affichée
+- **Quand** je choisis « Fusionnées » alors que la réponse tarde ; puis « Fermées » alors que le serveur est injoignable
+- **Alors** « Chargement des propositions… » remplace la liste, qui n'est pas affichée sous le filtre choisi, et le filtre reste sur le statut demandé
+- **Et** la réponse tardive d'un ancien filtre n'écrase pas la file du filtre courant (Vitest)
+
 ## Comparaison
 
 Le serveur d'anna.k compare en local dans DuckDB, sur les fichiers de `core/tests/fixtures/compare/revenu-net` (`ATLAS_COMPARE_DATA`). Le serveur 8793 n'a pas ces données : il sert aux scénarios d'authentification et de refus, sur des espaces isolés.
@@ -1451,6 +1467,21 @@ Plan 0017, critère 8 · Test : `app/e2e/administration.spec.ts` › `[S-0017-08
 - **Quand** j'enregistre le domaine Data ; puis nomme Claire M. référente de tout l'espace, enregistre, coche la plateforme BigQuery et enregistre de nouveau
 - **Alors** le premier enregistrement affiche « Paramètres enregistrés : proposition n° N fusionnée sans revue. », Data est relu sur la branche principale ; le deuxième fusionne aussi sans revue
 - **Et** ensuite le bandeau disparaît, « Require review from Code Owners » s'affiche, le bouton devient « Enregistrer et créer la proposition », et le troisième enregistrement ouvre une proposition « Gouvernance de l'espace » qui attend la revue d'un autre référent
+
+### S-0017-09 — Quitter l'Administration avec un brouillon non enregistré demande confirmation
+Plan 0017, critère 9 · Test : `app/e2e/administration.spec.ts` › `[S-0017-09]` (deux tests) ; `app/src/screens/Administration.test.tsx` › `[S-0017-09]` (cinq tests : lien, navigation par le code, Annuler / Quitter, formulaire de domaine, formulaire de membre)
+- **Étant donné** julien.h dans l'Administration, avec une plateforme cochée et non enregistrée
+- **Quand** je clique « Propositions » dans la navigation de l'espace
+- **Alors** la question « Quitter l'Administration ? » s'ouvre (focus sur « Annuler », axe-core sans violation sérieuse) et l'adresse ne change pas
+- **Et** « Annuler » ferme la question, garde le brouillon et rend le focus au lien cliqué ; « Quitter sans enregistrer » ouvre Propositions
+- **Et** une saisie pas encore appliquée dans le formulaire d'un domaine (libellé modifié) ou d'un nouveau membre (nom saisi) retient aussi la sortie ; un formulaire intact ou abandonné par « Annuler » ne retient rien (second test e2e)
+- Limite : le retour arrière du navigateur et la fermeture de la fenêtre Tauri ne sont pas retenus (ADR 0043). L'avertissement `beforeunload` du navigateur est vérifié en Vitest.
+
+### S-0017-10 — Sans brouillon à enregistrer, aucune confirmation
+Plan 0017, critère 10 · Test : `app/e2e/administration.spec.ts` › `[S-0017-10]` ; `app/src/screens/Administration.test.tsx` › `[S-0017-10]` (deux tests)
+- **Étant donné** julien.h dans l'Administration, sans modification ; ou avec une modification annulée par « Annuler » ; ou dont la proposition vient d'être créée (Vitest)
+- **Quand** je clique un onglet de la navigation
+- **Alors** la vue s'ouvre aussitôt, sans question
 
 **Plan 0020**
 

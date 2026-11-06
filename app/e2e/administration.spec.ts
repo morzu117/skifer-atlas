@@ -98,8 +98,16 @@ test("[S-0017-07] Synchroniser met à jour la date et l'index (critère 7)", asy
 
 async function saveAndWait(page: Page) {
   const response = page.waitForResponse(r => r.url().endsWith("/admin/governance") && r.request().method() === "POST");
+  // Une fusion relit les paramètres, ce qui remonte le formulaire : attendre cette relecture,
+  // sinon un formulaire ouvert aussitôt après serait refermé par le remontage.
+  const reread = page.waitForResponse(r => r.url().endsWith("/admin") && r.request().method() === "GET").catch(() => null);
   await save(page).click();
-  expect((await response).status()).toBe(201);
+  const saved = await response;
+  expect(saved.status()).toBe(201);
+  if ((await saved.json()).merged) {
+    await reread;
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  }
   await expect(save(page)).toBeDisabled();
 }
 
@@ -218,4 +226,93 @@ test("[S-0020-01] [S-0020-02] [S-0020-04] Fusion hors Atlas, synchronisation, ta
   await page.getByRole("button", { name: "Synchroniser", exact: true }).click();
   await expect(page.getByText("Déjà à jour avec le dépôt distant.", { exact: true })).toBeVisible();
   expect(git(ws.remote, "tag", "--list")).toBe(tags);
+});
+
+test("[S-0017-09] Quitter l'Administration avec un brouillon non enregistré demande confirmation", async ({ page }) => {
+  await asJulien(page);
+  await page.goto(ADMIN);
+  const bigquery = page.getByRole("checkbox", { name: "BigQuery" });
+  await expect(bigquery).toBeVisible();
+  const before = await bigquery.isChecked();
+  await bigquery.click();
+  const propositions = page.getByRole("navigation", { name: "Navigation de l'espace" }).getByRole("link", { name: /^Propositions/ });
+  await propositions.click();
+
+  const dialog = page.getByRole("alertdialog", { name: "Quitter l'Administration ?" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Les modifications de la gouvernance n'ont pas été enregistrées");
+  await expect(dialog.getByRole("button", { name: "Annuler" })).toBeFocused();
+  await expect(page).toHaveURL(ADMIN);
+  expect(await seriousViolations(page)).toEqual([]);
+
+  // Annuler : on reste, le brouillon est intact et le focus revient au lien cliqué.
+  await dialog.getByRole("button", { name: "Annuler" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(ADMIN);
+  await expect(bigquery.isChecked()).resolves.toBe(!before);
+  await expect(propositions).toBeFocused();
+
+  // Quitter sans enregistrer : la vue demandée s'ouvre.
+  await propositions.click();
+  await dialog.getByRole("button", { name: "Quitter sans enregistrer" }).click();
+  await expect(page).toHaveURL(/\/propositions/);
+  await expect(page.getByRole("heading", { level: 1, name: "Propositions" })).toBeVisible();
+});
+
+test("[S-0017-09] Une saisie pas encore appliquée dans le formulaire d'un domaine ou d'un membre retient aussi la sortie", async ({ page }) => {
+  await asJulien(page);
+  await page.goto(ADMIN);
+  const nav = page.getByRole("navigation", { name: "Navigation de l'espace" });
+  const propositions = nav.getByRole("link", { name: /^Propositions/ });
+  const dialog = page.getByRole("alertdialog", { name: "Quitter l'Administration ?" });
+
+  // Domaine : formulaire ouvert, libellé modifié, rien d'appliqué.
+  await page.getByRole("button", { name: "Modifier le domaine Finance" }).click();
+  const finance = page.getByRole("group", { name: "Domaine Finance" });
+  await propositions.click(); // formulaire intact : on part
+  await expect(page.getByRole("heading", { level: 1, name: "Propositions" })).toBeVisible(); // l'écran a bien changé avant de revenir
+  await page.goto(ADMIN);
+  await page.getByRole("button", { name: "Modifier le domaine Finance" }).click();
+  await finance.getByLabel(/^Libellé/).fill("Finance bis");
+  await propositions.click();
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(ADMIN);
+  await dialog.getByRole("button", { name: "Annuler" }).click();
+  await expect(finance.getByLabel(/^Libellé/)).toHaveValue("Finance bis"); // la saisie est intacte
+
+  // Abandonner le formulaire abandonne la saisie : la sortie est libre.
+  await finance.getByRole("button", { name: "Annuler", exact: true }).click();
+  await propositions.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: "Propositions" })).toBeVisible();
+
+  // Membre : l'invitation à moitié remplie retient aussi la sortie.
+  await page.goto(ADMIN);
+  await page.getByRole("button", { name: "Inviter", exact: true }).click();
+  await page.getByRole("group", { name: "Nouveau membre" }).getByLabel(/^Nom/).fill("Léa M.");
+  await propositions.click();
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(ADMIN);
+});
+
+test("[S-0017-10] Sans brouillon à enregistrer, quitter l'Administration ne demande rien", async ({ page }) => {
+  await asJulien(page);
+  await page.goto(ADMIN);
+  const bigquery = page.getByRole("checkbox", { name: "BigQuery" });
+  await expect(bigquery).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Navigation de l'espace" });
+
+  // Brouillon annulé : l'écran est revenu à l'état lu.
+  await bigquery.click();
+  await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await nav.getByRole("link", { name: /^Catalogue/ }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/catalogue/);
+
+  // Rien de modifié depuis le début.
+  await page.goto(ADMIN);
+  await expect(bigquery).toBeVisible();
+  await nav.getByRole("link", { name: /^Propositions/ }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/propositions/);
 });
