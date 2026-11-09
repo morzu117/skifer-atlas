@@ -84,7 +84,7 @@ function and(values: string[]): string {
   return values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} et ${values[values.length - 1]}`;
 }
 
-export function Proposals({ ws, params, heading: title }: { ws: Workspace; params: Params; heading: RefObject<HTMLHeadingElement> }) {
+export function Proposals({ ws, params, heading: title, onMerged }: { ws: Workspace; params: Params; heading: RefObject<HTMLHeadingElement>; onMerged?: () => void }) {
   const status = (STATUSES.find((s) => s.value === params.status)?.value ?? "open") as ProposalStatus;
   const [queue, setQueue] = useState<Load<ProposalQueue>>({ kind: "loading" });
   const [revision, setRevision] = useState(0);
@@ -247,7 +247,7 @@ export function Proposals({ ws, params, heading: title }: { ws: Workspace; param
           </Banner>
         )}
         {selected ? (
-          <Detail key={selected.id} ws={ws} item={selected} revision={revision} name={name} domainLabel={domainLabel} onChanged={changed} />
+          <Detail key={selected.id} ws={ws} item={selected} revision={revision} name={name} domainLabel={domainLabel} onChanged={changed} onMerged={onMerged} />
         ) : (
           ready && !notice && <p className="muted">Sélectionner une proposition dans la file.</p>
         )}
@@ -263,12 +263,14 @@ function Detail({
   name,
   domainLabel,
   onChanged,
+  onMerged,
 }: {
   ws: Workspace;
   item: ProposalItem;
   revision: number;
   name: (account: string) => string;
   domainLabel: (id: string | null) => string;
+  onMerged?: () => void;
   onChanged: (notice?: { title: string; text: string; link?: { href: string; label: string } } | null) => void;
 }) {
   const [detail, setDetail] = useState<Load<ProposalDetail>>({ kind: "loading" });
@@ -332,7 +334,7 @@ function Detail({
       title: `Proposition n° ${item.id} fusionnée`,
       text: `${labelOf(item)}${item.entity ? ` — ${item.entity}` : ""} passe en v${item.version} sur la branche principale.`,
       link: { href: href.document(ws.id, item.document_id), label: "Voir la fiche" },
-    });
+    }).then((merged) => { if (merged) onMerged?.(); });
   };
 
   const open = shown.state === "open";

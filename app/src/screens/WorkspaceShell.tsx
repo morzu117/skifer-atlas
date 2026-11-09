@@ -44,6 +44,8 @@ export function WorkspaceShell({
 }) {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [waiting, setWaiting] = useState(0);
+  const [refresh, setRefresh] = useState<{ id: string; revision: number } | null>(null);
+  const [replacement, setReplacement] = useState(0);
   // Message de la réinitialisation faite depuis la bannière, qui disparaît avec elle.
   const [resetNotice, setResetNotice] = useState("");
 
@@ -66,6 +68,18 @@ export function WorkspaceShell({
       alive = false;
     };
   }, [wsId, onUnknown]);
+
+  // Une fusion relit l’espace sans démonter la vue courante.
+  useEffect(() => {
+    if (!refresh || refresh.id !== wsId) return;
+    let alive = true;
+    api.workspace(wsId).then((ws) => {
+      if (alive) setLoad({ kind: "ready", ws });
+    }).catch(() => { /* La vue reste utilisable si la relecture échoue. */ });
+    return () => { alive = false; };
+  }, [wsId, refresh]);
+
+  const refreshWorkspace = () => setRefresh((previous) => ({ id: wsId, revision: (previous?.revision ?? 0) + 1 }));
 
   useEffect(() => {
     let alive = true;
@@ -97,9 +111,15 @@ export function WorkspaceShell({
   // Changement de vue : le focus va au titre, comme un chargement de page pour un lecteur
   // d'écran ; Tab repart de là.
   const heading = useRef<HTMLHeadingElement>(null);
+  const workspaceReady = ws !== null;
   useEffect(() => {
-    if (ws) heading.current?.focus();
-  }, [ws, view, doc]);
+    if (workspaceReady) heading.current?.focus();
+  }, [workspaceReady, wsId, view, doc, replacement]);
+
+  const replaceWorkspace = (next: Workspace) => {
+    setLoad({ kind: "ready", ws: next });
+    setReplacement((revision) => revision + 1);
+  };
 
   // Le rattachement interrompu se voit de tout écran et pour tout rôle ; l'espace relu par le serveur
   // remplace l'ancien (plus de bannière, rôle remis).
@@ -109,7 +129,7 @@ export function WorkspaceShell({
         <InterruptedAttachment
           ws={ws}
           adminLink={view !== "administration"}
-          onReset={(next, message) => (setLoad({ kind: "ready", ws: next }), setResetNotice(message))}
+          onReset={(next, message) => (replaceWorkspace(next), setResetNotice(message))}
         />
       )}
       {resetNotice && ws?.attachment !== "interrupted" && (
@@ -204,10 +224,10 @@ export function WorkspaceShell({
         {interrupted}
         {ws && view === "catalogue" && <Catalogue ws={ws} params={params} heading={heading} />}
         {ws && view === "fiche" && doc && <Fiche ws={ws} id={doc} params={params} heading={heading} />}
-        {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} />}
+        {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} onMerged={refreshWorkspace} />}
         {ws && view === "comparaison" && <Comparison ws={ws} params={params} heading={heading} />}
         {ws && view === "connexions" && <Connections ws={ws} heading={heading} />}
-        {ws && view === "administration" && <Administration ws={ws} heading={heading} onWorkspaceChange={(next) => setLoad({ kind: "ready", ws: next })} />}
+        {ws && view === "administration" && <Administration ws={ws} heading={heading} onMerged={refreshWorkspace} onWorkspaceChange={replaceWorkspace} />}
       </main>
     </div>
   );

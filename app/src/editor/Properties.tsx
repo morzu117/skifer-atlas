@@ -158,7 +158,7 @@ function NodePanel(props: PropertiesProps & { node: NodeRaw }) {
   const Form = FORMS[node.type];
   const columns = (id: string | undefined) => (id ? (check?.columns[id] ?? []).map(([n, t]) => [n, t] as [string, string | null]) : []);
   const semantics = isRaw(doc.semantics) ? doc.semantics : isRaw(canonical?.semantics) ? canonical!.semantics as Raw : {};
-  const calendar = isRaw(semantics.calendar) ? `${text(semantics.calendar.key)} ${text(semantics.calendar.version)}` : null;
+  const calendar = isRaw(semantics.calendar) ? [text(semantics.calendar.key), text(semantics.calendar.version)].filter(Boolean).join(" ") : null;
   const index = overrideIndex(doc, node.id);
   const override = index >= 0 && Array.isArray(doc.overrides) ? (doc.overrides[index] as Raw) : null;
 
@@ -270,8 +270,8 @@ function DocumentPanel({ doc, mode, dispatch, info, vocabulary }: PropertiesProp
   const semantics = isRaw(doc.semantics) ? doc.semantics : {};
   const synonyms = Array.isArray(doc.synonyms) ? (doc.synonyms as string[]) : [];
   const concepts = Array.isArray(doc.concepts) ? (doc.concepts as string[]) : [];
-  const calendars = [{ value: "TODO", label: "À déclarer (TODO)" }, ...info.calendars.map((c) => ({ value: `${c.key}@${c.version}`, label: `${c.key} ${c.version}` }))];
-  const calendar = isRaw(semantics.calendar) ? `${text(semantics.calendar.key)}@${text(semantics.calendar.version)}` : text(semantics.calendar);
+  const calendars = [{ value: "TODO", label: "À déclarer (TODO)" }, { value: "civil", label: "civil" }, ...info.calendars.filter((c) => c.key !== "civil").map((c) => ({ value: `${c.key}@${c.version}`, label: `${c.key} ${c.version}` }))];
+  const calendar = isRaw(semantics.calendar) ? (semantics.calendar.key === "civil" ? "civil" : `${text(semantics.calendar.key)}@${text(semantics.calendar.version)}`) : text(semantics.calendar);
   const entity = isRaw(doc.entity) ? doc.entity : null;
   const attributes = Array.isArray(entity?.attributes) ? (entity!.attributes as Raw[]) : [];
   const writeSynonyms = (next: string[]) => set(["synonyms"], next.length > 0 ? next : undefined);
@@ -322,6 +322,7 @@ function DocumentPanel({ doc, mode, dispatch, info, vocabulary }: PropertiesProp
             options={calendars}
             onChange={(v) => {
               if (!v || v === "TODO") return set(["semantics", "calendar"], v);
+              if (v === "civil") return set(["semantics", "calendar"], { key: "civil" });
               const [key, version] = v.split("@");
               set(["semantics", "calendar"], { key, version });
             }}

@@ -201,11 +201,11 @@ function proposalServer({ queue = QUEUE, detail: detailOf, merge }: Overrides = 
   });
 }
 
-function Harness() {
+function Harness({ onMerged }: { onMerged?: () => void } = {}) {
   const route = useRoute();
   const heading = useRef<HTMLHeadingElement>(null);
   if (route.name !== "workspace") return null;
-  return <Proposals ws={workspace()} params={route.params} heading={heading} />;
+  return <Proposals ws={workspace()} params={route.params} heading={heading} onMerged={onMerged} />;
 }
 
 const queueList = () => screen.findByRole("list", { name: "File des propositions" });
@@ -379,13 +379,15 @@ describe("propositions", () => {
     const server = proposalServer({
       detail: (n) => detail(QUEUE.items.find((i) => i.id === n)!, { viewer: { ...VIEWER, can_merge: true, merge_reason: null } }),
     });
-    render(<Harness />);
+    const onMerged = vi.fn();
+    render(<Harness onMerged={onMerged} />);
     expect(await screen.findByRole("heading", { level: 2, name: "Nouvelle version de Taux de service (v3)" })).toBeInTheDocument();
     const merge = await screen.findByRole("button", { name: "Fusionner" });
     expect(screen.queryByRole("button", { name: /Approuver/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Demander des changements" })).not.toBeInTheDocument();
     await userEvent.click(merge);
     expect(await screen.findByText("Proposition n° 2 fusionnée")).toBeInTheDocument();
+    expect(onMerged).toHaveBeenCalledOnce();
     expect(screen.getByText("Taux de service passe en v3 sur la branche principale.")).toBeInTheDocument();
     expect(within(selection()).getAllByRole("link", { name: "Voir la fiche" })[0]).toHaveAttribute(
       "href",
@@ -410,6 +412,19 @@ describe("propositions", () => {
     expect(banner).not.toHaveTextContent("CONFLICT");
     expect(banner).not.toHaveTextContent("git merge");
     expect(screen.queryByText("Proposition n° 2 fusionnée")).not.toBeInTheDocument();
+  });
+
+  it("une fusion échouée ne signale pas de fusion à la coque", async () => {
+    window.location.hash = "#/w/groupe-nordis/propositions?domain=tous&n=2";
+    proposalServer({
+      detail: (n) => detail(QUEUE.items.find((i) => i.id === n)!, { viewer: { ...VIEWER, can_merge: true, merge_reason: null } }),
+      merge: { status: 409, json: { detail: { code: "merge_conflict", message: "Conflit" } } },
+    });
+    const onMerged = vi.fn();
+    render(<Harness onMerged={onMerged} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Fusionner" }));
+    expect(await within(selection()).findByRole("alert")).toHaveTextContent("La fusion provoque un conflit");
+    expect(onMerged).not.toHaveBeenCalled();
   });
 
   it("[S-0014-08] la proposition a bougé depuis l'affichage : le refus relit le détail et garde le message", async () => {

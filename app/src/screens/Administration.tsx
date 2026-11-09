@@ -101,11 +101,13 @@ export function Administration({
   ws,
   heading,
   onWorkspaceChange,
+  onMerged,
 }: {
   ws: Workspace;
   heading: RefObject<HTMLHeadingElement>;
   /** Le rattachement change le compte, le rôle et le dépôt de l'espace : la coque les relit. */
   onWorkspaceChange?: (next: Workspace) => void;
+  onMerged?: () => void;
 }) {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [revision, setRevision] = useState(0);
@@ -235,6 +237,7 @@ export function Administration({
             onWorkspaceChange?.(next);
             setRevision((n) => n + 1);
           }}
+          onMerged={() => { onMerged?.(); setRevision((n) => n + 1); }}
           onReload={() => setRevision((n) => n + 1)}
         />
       )}
@@ -257,6 +260,7 @@ function Settings({
   onAttached,
   onReset,
   onReload,
+  onMerged,
 }: {
   ws: Workspace;
   initial: AdminState;
@@ -270,6 +274,7 @@ function Settings({
   onAttached: (next: Workspace, pending: Carried | null, conflict: boolean) => void;
   onReset: (message: string, pending: { carried: Carried | null; discarded: string | null }, next: Workspace) => void;
   onReload: () => void;
+  onMerged: () => void;
 }) {
   const [draft, setDraft] = useState<Governance>(carried?.governance ?? initial.governance);
   const [levels, setLevels] = useState(
@@ -345,7 +350,7 @@ function Settings({
       const result = await api.saveGovernance(ws.id, proposed, initial.base_digest);
       setSavedKey(submitted);
       setSaved(result);
-      if (result.merged) onReload();
+      if (result.merged) onMerged();
     } catch (reason) {
       const issues = reason instanceof ApiError ? (reason.issues as { message?: string }[]).map((i) => i.message ?? "").filter(Boolean) : [];
       setFailure({ error: explain(reason), issues, stale: reason instanceof ApiError && reason.code === "stale_base" });
