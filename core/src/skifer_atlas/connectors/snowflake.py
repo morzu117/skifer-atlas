@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from ..masking import mask_secrets
 from ..paths import data_dir
 from ..repo.git import RepoError
 from .access_points import AccessPoint
@@ -151,12 +152,13 @@ def _message(error: Exception) -> str:
     return str(getattr(error, "msg", None) or error).strip()
 
 
-def translate(error: Exception) -> Exception:
+def translate(error: Exception, secrets: tuple[str, ...] = ()) -> Exception:
     """Une erreur du connecteur, en `AuthRejected` (identifiants refusés, session
-    expirée) ou en `RepoError`."""
+    expirée) ou en `RepoError`. Les `secrets` envoyés (jetons de session) sont masqués
+    avant toute troncature du message."""
     sf = _snowflake()
     errno = getattr(error, "errno", None) or 0
-    message = _message(error)
+    message = mask_secrets(_message(error), *secrets)
     if 390000 <= errno < 391000:  # codes d'authentification de Snowflake
         return AuthRejected()
     guard = _GUARD.search(message)
@@ -210,7 +212,15 @@ class SnowflakeConnector:
                                                   private_key=self._private_key,
                                                   session=self._session))
         except sf.errors.Error as error:
-            raise translate(error) from None
+            raise translate(error, self._secrets()) from None
+
+    def _secrets(self, connection: Any = None) -> tuple[str, ...]:
+        """Les jetons de session que cette connexion présente à Snowflake. Ceux de
+        `connection` sont lus à l'instant : le pilote a pu les renouveler en cours d'appel,
+        avant que `_release` ne les retienne dans `renewed`."""
+        renewed = self.renewed[:2] if self.renewed else ()
+        current = session_tokens(connection) if connection is not None else None
+        return (*(self._session or ()), *renewed, *(current[:2] if current else ()))
 
     def _release(self, connection: Any) -> None:
         if connection is self._live:
@@ -262,7 +272,7 @@ class SnowflakeConnector:
                                 for d in description],
                                [tuple(row) for row in rows])
         except sf.errors.Error as error:
-            raise translate(error) from None
+            raise translate(error, self._secrets(connection)) from None
         finally:
             close_quietly(cursor)
 
@@ -299,6 +309,9 @@ class SsoFlow:
     status: str = "pending"  # pending | connected | failed | expired
     error: str | None = None
     done: threading.Event = field(default_factory=threading.Event, repr=False)
+    # Tenu de la vérification « encore en attente » à l'enregistrement de la session : une
+    # annulation attend l'enregistrement en cours, ou l'empêche de commencer.
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def finish(self, status: str, error: str | None = None) -> None:
         if self.status == "pending":
@@ -320,7 +333,8 @@ class SsoFlows:
         with self._lock:
             previous = self._last.get(key)
             if previous is not None:
-                previous.finish("failed", "Remplacé par une nouvelle connexion.")
+                with previous.lock:
+                    previous.finish("failed", "Remplacé par une nouvelle connexion.")
             self._last[key] = flow
 
         def run() -> None:
@@ -333,24 +347,40 @@ class SsoFlows:
                 else:
                     flow.finish("failed", _message(error)[:300])
                 return
-            if flow.status != "pending":  # remplacé entre-temps
-                close_quietly(connection)
-                return
-            try:
-                on_success(connection)
-            except RepoError as error:
-                close_quietly(connection)
-                flow.finish("failed", error.message)
-                return
-            except Exception:  # noqa: BLE001 — erreur du coffre ou du registre local
-                close_quietly(connection)
-                flow.finish("failed", "La connexion a réussi, mais son enregistrement "
-                            "local a échoué. Réessayer.")
-                return
-            flow.finish("connected")
+            with flow.lock:
+                if flow.status != "pending":  # annulé ou remplacé entre-temps
+                    close_quietly(connection)
+                    return
+                try:
+                    on_success(connection)
+                except RepoError as error:
+                    close_quietly(connection)
+                    flow.finish("failed", error.message)
+                    return
+                except Exception:  # noqa: BLE001 — erreur du coffre ou du registre local
+                    close_quietly(connection)
+                    flow.finish("failed", "La connexion a réussi, mais son enregistrement "
+                                "local a échoué. Réessayer.")
+                    return
+                flow.finish("connected")
 
         threading.Thread(target=run, daemon=True).start()
         return flow
+
+    def cancel(self, key: tuple[str, str]) -> SsoFlow | None:
+        """Abandonne la connexion SSO en attente : si le navigateur la termine ensuite, la
+        session est refermée sans rien enregistrer. Rend ce flux, ou `None` s'il n'y en
+        avait pas en attente. Le flux est choisi et annulé sous le verrou du registre, comme
+        `start` : un nouveau SSO ne peut pas s'intercaler. Même ordre de verrous (registre,
+        puis flux) ; rien ne prend le registre en tenant le verrou d'un flux (`on_success`
+        n'appelle ni `last` ni `start`)."""
+        with self._lock:
+            flow = self._last.get(key)
+            if flow is None or flow.status != "pending":
+                return None
+            with flow.lock:
+                flow.finish("failed", "Connexion annulée.")
+            return flow
 
     def last(self, key: tuple[str, str]) -> SsoFlow | None:
         with self._lock:

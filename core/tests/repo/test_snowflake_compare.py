@@ -151,8 +151,8 @@ def test_cardinality_check_fails_on_snowflake(client, remote, snow, monkeypatch,
     translated = []
     original_translate = connector.translate
 
-    def capture(error):
-        result = original_translate(error)
+    def capture(error, *args):
+        result = original_translate(error, *args)
         translated.append(str(result))
         return result
 

@@ -23,6 +23,7 @@ Brief 7.1, 7.2, 8.3 ; analyse Q10, §5 risques 3 à 5 ; plans 0007, 0008, 0009, 
 4. Le contrôle de cardinalité échoue bien sur Snowflake avec une table dupliquée.
 5. Le binaire figé s'authentifie et exécute ; sa taille est mesurée (seuil d'alerte : 200 Mo).
 6. Aucun fichier de cache de jeton Snowflake n'est créé sur le poste.
+7. Un jeton de session que Snowflake recopierait dans une erreur du connecteur n'est jamais restitué : il est remplacé par `***` avant toute troncature (ADR 0044).
 
 ## Tests
 - Unitaires : construction des paramètres de connexion, machine d'états.

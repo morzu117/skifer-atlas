@@ -16,7 +16,7 @@ import { GitHubConnect } from "../components/GitHubConnect";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
 import { canPickFile, openExternal, pickFile } from "../external";
-import { explain, type Explained } from "../messages";
+import { explain, translated, type Explained } from "../messages";
 import { href } from "../router";
 
 // Mes connexions (guide 10.6, plan 0016) : les points d'accès de l'espace courant et mon
@@ -99,8 +99,17 @@ function useOAuth(
   start: (user?: string) => Promise<{ authorize_url: string | null }>,
   read: () => Promise<ConnectionStatus>,
   onConnected: () => void,
+  cancel: () => Promise<unknown>,
 ) {
   const [flow, setFlow] = useState<Flow>({ kind: "idle" });
+  // Garde synchrone, posée avant tout rendu, et limitée à la requête qui lance le flux : un
+  // second clic dans le même tick ne relance pas l'autorisation. Une fois le flux lancé, rien
+  // n'est bloqué ici : abandonner (`reset`) puis relancer remplace l'écoute du premier flux
+  // côté serveur, sans `oauth_port_busy`.
+  const starting = useRef(false);
+  const [isStarting, setIsStarting] = useState(false);
+  // Pendant l'annulation, le sondage lirait « Connexion annulée. » : il ne doit pas l'afficher en échec.
+  const abandoning = useRef(false);
   const latest = useRef({ read, onConnected });
   latest.current = { read, onConnected };
 
@@ -115,7 +124,7 @@ function useOAuth(
       }
       try {
         const state = await latest.current.read();
-        if (!alive) return;
+        if (!alive || abandoning.current) return;
         if (state.flow?.status === "connected") {
           setFlow({ kind: "connected" });
           latest.current.onConnected();
@@ -133,16 +142,43 @@ function useOAuth(
   }, [flow.kind]);
 
   async function connect(user?: string) {
+    if (starting.current) return;
+    starting.current = true;
+    setIsStarting(true);
     try {
       const { authorize_url } = await start(user);
       if (authorize_url) await openExternal(authorize_url);
       setFlow({ kind: "waiting" });
     } catch (reason) {
       setFlow({ kind: "failed", error: explain(reason) });
+    } finally {
+      starting.current = false;
+      setIsStarting(false);
     }
   }
 
-  return { flow, connect, reset: () => setFlow({ kind: "idle" }) };
+  /** Abandonne l'attente : le serveur ferme l'écoute (la page d'autorisation déjà ouverte ne
+   * connecte plus rien), puis l'écran relit l'état réel, celui du coffre : le retour du
+   * navigateur a pu aboutir pendant l'annulation. Connecté si l'accès y est, repos sinon. Si
+   * le serveur ne répond pas, l'écran le dit au lieu de laisser croire que c'est annulé. */
+  async function abandon() {
+    abandoning.current = true;
+    try {
+      await cancel();
+      if ((await latest.current.read()).my_access === "connected") {
+        setFlow({ kind: "connected" });
+        latest.current.onConnected();
+      } else {
+        setFlow({ kind: "idle" });
+      }
+    } catch (reason) {
+      setFlow({ kind: "failed", error: explain(reason) });
+    } finally {
+      abandoning.current = false;
+    }
+  }
+
+  return { flow, starting: isStarting, connect, abandon, reset: () => setFlow({ kind: "idle" }) };
 }
 
 /** Repli Databricks (décision Q10) : seulement après un échec de l'OAuth, un champ masqué
@@ -337,8 +373,12 @@ function SnowflakeLogin({
   );
 }
 
-function testMessage(result: ConnectionTest): { text: string; tone: "ok" | "bad" } {
+/** Le résultat d'un test. Un code traduit dit quoi faire ; sinon, le message du serveur.
+ * `reconnect` : l'accès est à refaire, la ligne doit proposer « Reconnecter ». */
+function testMessage(result: ConnectionTest): { text: string; tone: "ok" | "bad"; reconnect?: boolean } {
   if (result.ok) return { text: `Connexion OK · ${result.latency_ms} ms`, tone: "ok" };
+  const known = result.error ? translated(result.error.code) : undefined;
+  if (known) return { text: `${known.title}. ${known.text}`, tone: "bad", reconnect: known.action === "reconnect" };
   return { text: result.error?.message ?? "La connexion a échoué.", tone: "bad" };
 }
 
@@ -538,6 +578,7 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
       setMessage(null);
       onChanged();
     },
+    () => api.cancelAuthorization(ws.id, c.access_point),
   );
   const snowflake = c.platform === "snowflake";
   const mode = c.auth_mode === "keypair" ? "keypair" : "sso";
@@ -549,7 +590,10 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
     setBusy(true);
     setMessage(null);
     try {
-      setMessage(testMessage(await api.testConnection(ws.id, c.access_point)));
+      const result = testMessage(await api.testConnection(ws.id, c.access_point));
+      setMessage(result);
+      // Le test a pu constater l'accès perdu : la liste se relit, la ligne propose « Reconnecter ».
+      if (result.reconnect) onChanged();
     } catch (reason) {
       setMessage({ text: explain(reason).text, tone: "bad" });
     } finally {
@@ -579,9 +623,14 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
     actions = <span className="muted">Bientôt dans Atlas</span>;
   } else if (oauth.flow.kind === "waiting") {
     actions = (
-      <span className="muted" role="status">
-        Terminez la connexion dans le navigateur…
-      </span>
+      <>
+        <span className="muted" role="status">
+          Terminez la connexion dans le navigateur…
+        </span>
+        <button type="button" className="btn btn-neutral btn-sm" aria-label={`Annuler la connexion ${label}`} onClick={() => void oauth.abandon()}>
+          Annuler
+        </button>
+      </>
     );
   } else if (loginOpen) {
     actions = (
@@ -591,6 +640,7 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
         login={c.login}
         keyFile={c.private_key_file}
         asForm
+        disabled={oauth.starting}
         onSso={(user) => {
           setLoginOpen(false);
           void oauth.connect(user);
@@ -622,6 +672,7 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
         type="button"
         className={`btn btn-sm ${again ? "btn-primary" : "btn-secondary"}`}
         aria-label={`${again ? "Reconnecter" : "Se connecter à"} ${label}`}
+        disabled={oauth.starting}
         onClick={() => {
           setMessage(null);
           if (snowflake) setLoginOpen(true);
@@ -758,10 +809,16 @@ function NewAccessPoint({
   const id = idTouched ? draft.id : suggestedId(platform, entity);
   const point = toAccessPoint({ ...draft, platform, entity, id }, ws.account);
   const supported = platforms.find((p) => p.id === platform)?.supported ?? false;
+  // Le point tel qu'il était au lancement : l'identifiant a pu être modifié depuis.
+  const launched = useRef(point);
   const oauth = useOAuth(
-    (user) => api.authorizeDraft(ws.id, point, user),
+    (user) => {
+      launched.current = point;
+      return api.authorizeDraft(ws.id, point, user);
+    },
     () => api.draftStatus(ws.id, point),
     () => setTest(null),
+    () => api.cancelDraftAuthorization(ws.id, launched.current),
   );
   const storedDrafts = useLoad(() => api.draftCredentials(ws.id),
     [ws.id, draftRevision, keyStored, declared?.id, oauth.flow.kind]);
@@ -829,73 +886,77 @@ function NewAccessPoint({
         Nouveau point d'accès
       </h2>
       <form className="form connections-form" onSubmit={(event) => void declare(event)}>
-        <Field label="Plateforme (autorisées par le référent)" id="ap-platform">
-          <Select value={platform} onChange={set("platform")}>
-            {platforms.map((p) => (
-              <option key={p.id} value={p.id} disabled={!p.supported}>
-                {p.label}
-                {p.supported ? "" : " (bientôt)"}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Entité" id="ap-entity">
-          <Select value={entity} onChange={set("entity")}>
-            {ws.entities.map((e) => (
-              <option key={e} value={e}>
-                {e}
-              </option>
-            ))}
-            <option value="">Tout le groupe</option>
-          </Select>
-        </Field>
-        <Field label="Identifiant" id="ap-id" hint="Nom du point d'accès dans access_points.yaml.">
-          <input
-            className="mono"
-            value={id}
-            onChange={(event) => {
-              setIdTouched(true);
-              set("id")(event);
-            }}
-          />
-        </Field>
-        <Field label="Hôte" id="ap-host">
-          <input
-            placeholder={snowflake ? "xy12345.eu-west-1.snowflakecomputing.com" : "adb-xxxx.azuredatabricks.net"}
-            value={draft.host}
-            onChange={set("host")}
-          />
-        </Field>
-        {platform === "databricks" && (
-          <Field label="SQL warehouse" id="ap-warehouse" hint="Identifiant, ou chemin HTTP /sql/1.0/warehouses/…">
-            <input className="mono" value={draft.warehouse} onChange={set("warehouse")} />
+        {/* Verrouillés dès le lancement et le temps de la connexion : le serveur autorise le point tel qu'il était au
+            lancement, un champ modifié ferait suivre une autre connexion que celle en cours. */}
+        <fieldset className="connections-fields" disabled={oauth.starting || oauth.flow.kind === "waiting"}>
+          <Field label="Plateforme (autorisées par le référent)" id="ap-platform">
+            <Select value={platform} onChange={set("platform")}>
+              {platforms.map((p) => (
+                <option key={p.id} value={p.id} disabled={!p.supported}>
+                  {p.label}
+                  {p.supported ? "" : " (bientôt)"}
+                </option>
+              ))}
+            </Select>
           </Field>
-        )}
-        {snowflake && (
-          <>
-            <Field label="Compte" id="ap-account" hint="Seulement si l'hôte n'est pas en …snowflakecomputing.com.">
-              <input className="mono" value={draft.account} onChange={set("account")} />
+          <Field label="Entité" id="ap-entity">
+            <Select value={entity} onChange={set("entity")}>
+              {ws.entities.map((e) => (
+                <option key={e} value={e}>
+                  {e}
+                </option>
+              ))}
+              <option value="">Tout le groupe</option>
+            </Select>
+          </Field>
+          <Field label="Identifiant" id="ap-id" hint="Nom du point d'accès dans access_points.yaml.">
+            <input
+              className="mono"
+              value={id}
+              onChange={(event) => {
+                setIdTouched(true);
+                set("id")(event);
+              }}
+            />
+          </Field>
+          <Field label="Hôte" id="ap-host">
+            <input
+              placeholder={snowflake ? "xy12345.eu-west-1.snowflakecomputing.com" : "adb-xxxx.azuredatabricks.net"}
+              value={draft.host}
+              onChange={set("host")}
+            />
+          </Field>
+          {platform === "databricks" && (
+            <Field label="SQL warehouse" id="ap-warehouse" hint="Identifiant, ou chemin HTTP /sql/1.0/warehouses/…">
+              <input className="mono" value={draft.warehouse} onChange={set("warehouse")} />
             </Field>
-            <Field label="Entrepôt" id="ap-warehouse" hint="Sinon, l'entrepôt par défaut de votre utilisateur.">
-              <input className="mono" placeholder="WH_FINANCE" value={draft.warehouse} onChange={set("warehouse")} />
-            </Field>
-            <Field label="Rôle" id="ap-role">
-              <input className="mono" value={draft.role} onChange={set("role")} />
-            </Field>
-            <Field label="Authentification" id="ap-auth">
-              <Select value={draft.auth} onChange={set("auth")}>
-                <option value="sso">SSO de l'entreprise</option>
-                <option value="keypair">Paire de clés</option>
-              </Select>
-            </Field>
-          </>
-        )}
-        <Field label="Schéma" id="ap-schema">
-          <input className="mono" placeholder={snowflake ? "BASE.SCHEMA" : "catalogue.schema"} value={draft.schema} onChange={set("schema")} />
-        </Field>
-        <Field label="Fraîcheur" id="ap-freshness">
-          <input placeholder="Quotidienne · 06:10" value={draft.freshness} onChange={set("freshness")} />
-        </Field>
+          )}
+          {snowflake && (
+            <>
+              <Field label="Compte" id="ap-account" hint="Seulement si l'hôte n'est pas en …snowflakecomputing.com.">
+                <input className="mono" value={draft.account} onChange={set("account")} />
+              </Field>
+              <Field label="Entrepôt" id="ap-warehouse" hint="Sinon, l'entrepôt par défaut de votre utilisateur.">
+                <input className="mono" placeholder="WH_FINANCE" value={draft.warehouse} onChange={set("warehouse")} />
+              </Field>
+              <Field label="Rôle" id="ap-role">
+                <input className="mono" value={draft.role} onChange={set("role")} />
+              </Field>
+              <Field label="Authentification" id="ap-auth">
+                <Select value={draft.auth} onChange={set("auth")}>
+                  <option value="sso">SSO de l'entreprise</option>
+                  <option value="keypair">Paire de clés</option>
+                </Select>
+              </Field>
+            </>
+          )}
+          <Field label="Schéma" id="ap-schema">
+            <input className="mono" placeholder={snowflake ? "BASE.SCHEMA" : "catalogue.schema"} value={draft.schema} onChange={set("schema")} />
+          </Field>
+          <Field label="Fraîcheur" id="ap-freshness">
+            <input placeholder="Quotidienne · 06:10" value={draft.freshness} onChange={set("freshness")} />
+          </Field>
+        </fieldset>
 
         {snowflake ? (
           <SnowflakeLogin
@@ -905,7 +966,7 @@ function NewAccessPoint({
             login={null}
             keyFile={null}
             asForm={false}
-            disabled={!supported || oauth.flow.kind === "waiting"}
+            disabled={!supported || oauth.flow.kind === "waiting" || oauth.starting}
             onSso={(user) => void oauth.connect(user)}
             onKeyPair={async (keyPair) => {
               await api.keyPairDraft(ws.id, point, keyPair);
@@ -914,7 +975,7 @@ function NewAccessPoint({
             }}
           />
         ) : (
-          <button type="button" className="btn btn-primary" disabled={!supported || oauth.flow.kind === "waiting"} onClick={() => void oauth.connect()}>
+          <button type="button" className="btn btn-primary" disabled={!supported || oauth.flow.kind === "waiting" || oauth.starting} onClick={() => void oauth.connect()}>
             {connected ? "Reconnecter avec OAuth" : "S'authentifier avec OAuth"}
           </button>
         )}
@@ -923,7 +984,15 @@ function NewAccessPoint({
         </button>
         {oauth.flow.kind === "waiting" && (
           <p className="muted" role="status">
-            Terminez la connexion dans le navigateur : l'état se met à jour ici.
+            Terminez la connexion dans le navigateur : l'état se met à jour ici.{" "}
+            <button type="button" className="btn btn-neutral btn-sm" onClick={() => void oauth.abandon()}>
+              Annuler la connexion
+            </button>
+          </p>
+        )}
+        {oauth.flow.kind === "waiting" && (
+          <p className="muted">
+            Les champs sont verrouillés le temps de la connexion : « Annuler la connexion » les libère.
           </p>
         )}
         {connected && (

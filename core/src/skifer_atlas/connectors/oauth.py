@@ -98,7 +98,7 @@ def exchange(endpoints: Endpoints, client_id: str, code: str, verifier: str,
     })
     if reply.status != 200 or not isinstance(reply.body, dict):
         raise RepoError("oauth_failed", f"Échange du code refusé (HTTP {reply.status}) : "
-                        f"{message_of(reply.body)}")
+                        f"{message_of(reply.body, code, verifier)}")
     return _credential(reply.body, client_id)
 
 
@@ -150,6 +150,15 @@ class Flow:
     status: str = "pending"  # pending | connected | failed | expired
     error: str | None = None
     server: ThreadingHTTPServer | None = field(default=None, repr=False)
+    # Tenu par le retour du navigateur de l'échange du code jusqu'à l'enregistrement : abandonner
+    # le flux attend la fin de l'enregistrement en cours, ou l'empêche de commencer.
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def abandon(self, error: str) -> None:
+        """Arrête le flux (annulé ou remplacé) : l'écoute est fermée et un retour tardif du
+        navigateur, état PKCE compris, ne peut plus rien enregistrer."""
+        with self.lock:
+            self.finish("failed", error, wait=True)
 
     def finish(self, status: str, error: str | None = None, wait: bool = False) -> None:
         """Fixe l'issue du flux et ferme l'écoute ; `wait` attend que le port soit libre."""
@@ -186,19 +195,24 @@ def _handler(flow: Flow) -> type[BaseHTTPRequestHandler]:
             if query.get("state") != flow.state:
                 self._reply(400, "Réponse OAuth inattendue : relancer la connexion depuis Atlas.")
                 return
-            if "error" in query:
-                flow.finish("failed", query.get("error_description") or query["error"])
-                self._reply(400, "Connexion refusée. Revenir dans Atlas pour réessayer.")
-                return
-            try:
-                credential = exchange(flow.endpoints, flow.client_id, query.get("code", ""),
-                                      flow.verifier, flow.redirect_uri)
-                flow.on_success(credential)
-            except RepoError as error:
-                flow.finish("failed", error.message)
-                self._reply(502, "La connexion a échoué. Revenir dans Atlas pour réessayer.")
-                return
-            flow.finish("connected")
+            with flow.lock:
+                if flow.status != "pending":  # annulé, remplacé ou expiré : rien ne s'enregistre
+                    self._reply(410, "Cette connexion a été annulée ou remplacée. Revenir dans "
+                                "Atlas et la relancer.")
+                    return
+                if "error" in query:
+                    flow.finish("failed", query.get("error_description") or query["error"])
+                    self._reply(400, "Connexion refusée. Revenir dans Atlas pour réessayer.")
+                    return
+                try:
+                    credential = exchange(flow.endpoints, flow.client_id, query.get("code", ""),
+                                          flow.verifier, flow.redirect_uri)
+                    flow.on_success(credential)
+                except RepoError as error:
+                    flow.finish("failed", error.message)
+                    self._reply(502, "La connexion a échoué. Revenir dans Atlas pour réessayer.")
+                    return
+                flow.finish("connected")
             self._reply(200, "Connexion réussie : vous pouvez fermer cet onglet et revenir "
                         "dans Atlas.")
 
@@ -234,7 +248,7 @@ class Flows:
         with self._lock:
             previous = self._by_port.pop(port, None)
             if previous is not None:
-                previous.finish("failed", "Remplacé par une nouvelle connexion.", wait=True)
+                previous.abandon("Remplacé par une nouvelle connexion.")
             try:
                 # 127.0.0.1 seulement : le retour ne vient que du navigateur de ce poste.
                 server = ThreadingHTTPServer(("127.0.0.1", port), _handler(flow))
@@ -256,6 +270,22 @@ class Flows:
             "scope": SCOPES, "state": flow.state, "code_challenge": challenge,
             "code_challenge_method": "S256",
         })
+
+    def cancel(self, key: tuple[str, str]) -> Flow | None:
+        """Abandonne le flux en cours de ce point d'accès, s'il attend encore : le port est
+        libéré et le retour tardif du navigateur ne connecte rien. Rend ce flux, ou `None` s'il
+        n'y en avait pas en attente : un ancien flux du même identifiant ne compte pas. Un
+        enregistrement déjà en cours est attendu, pas interrompu. Sous le verrou des démarrages,
+        une autre autorisation ne voit jamais le port à moitié libéré."""
+        with self._lock:
+            flow = self._last.get(key)
+            if flow is None or flow.status != "pending":
+                return None
+            flow.abandon("Connexion annulée.")
+            for port, held in list(self._by_port.items()):
+                if held is flow:
+                    del self._by_port[port]
+        return flow
 
     def last(self, key: tuple[str, str]) -> Flow | None:
         with self._lock:

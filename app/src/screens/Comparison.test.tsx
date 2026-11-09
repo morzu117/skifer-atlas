@@ -127,7 +127,7 @@ const HISTORY = [
   entry(5, { user_account: "claire.m", started_at: "2026-09-02T10:00:00", status: "cancelled", results: [] }),
 ];
 
-type Handler = (call: Call) => { status?: number; json?: unknown } | undefined;
+type Handler = (call: Call) => { status?: number; json?: unknown } | Promise<{ status?: number; json?: unknown }> | undefined;
 
 function comparisonServer(extra: Handler = () => undefined) {
   return fakeServer((call) => {
@@ -430,6 +430,82 @@ describe("comparaison", () => {
     await waitFor(() => expect(starts(server.calls)).toHaveLength(2), { timeout: 4000 });
     await waitFor(() => expect(screen.queryByText("Connexion requise")).not.toBeInTheDocument());
     expect(await screen.findByRole("button", { name: "Relancer" }, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("[S-0015-12] un accès perdu pendant le lancement est expliqué, mène à Mes connexions et ressort en « Connexion requise »", async () => {
+    let lost = false;
+    let previews = 0;
+    const server = comparisonServer(({ method, path }) => {
+      if (path === API && method === "POST") {
+        lost = true;
+        return { status: 409, json: { detail: { code: "access_expired", message: "Accès expiré : texte brut du serveur." } } };
+      }
+      if (path === `${API}/preview` && method === "POST") {
+        previews += 1;
+        const missing_access = lost ? [{ access_point: "dbx-de", code: "access_expired", message: "Accès expiré." }] : [];
+        return { json: { ...PREVIEW, missing_access } };
+      }
+      return undefined;
+    });
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    await userEvent.click(await launchButton());
+
+    const banner = await screen.findByText("Accès expiré");
+    expect(banner.closest("[role='alert']")).toHaveTextContent("Reconnectez-vous depuis Mes connexions, puis réessayez.");
+    expect(banner.closest("[role='alert']")).not.toHaveTextContent("texte brut");
+    expect(screen.getByRole("link", { name: "Reconnecter dans Mes connexions" })).toHaveAttribute("href", "#/w/groupe-nordis/connexions");
+    // L'aperçu est relu : le bandeau « Connexion requise » et son bouton existent déjà.
+    expect(await screen.findByText("Connexion requise")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Se connecter à dbx-de" })).toBeInTheDocument();
+    expect(previews).toBeGreaterThanOrEqual(2);
+    expect(starts(server.calls)).toHaveLength(1);
+  });
+
+  it("[S-0015-13] deux clics rapides sur « Se connecter à… » ne lancent qu'une autorisation OAuth", async () => {
+    let release!: () => void;
+    const held = new Promise<{ json: unknown }>((resolve) => {
+      release = () => resolve({ json: { authorize_url: "https://login.example/authorize?state=x" } });
+    });
+    const server = comparisonServer(({ method, path }) => {
+      if (path === `${API}/preview` && method === "POST") {
+        return { json: { ...PREVIEW, missing_access: [{ access_point: "dbx-de", code: "not_connected", message: "Pas d'accès." }] } };
+      }
+      if (path.endsWith("/connections/dbx-de/authorize")) return held;
+      if (path.endsWith("/connections/dbx-de/status")) return { json: { access_point: "dbx-de", my_access: "never", flow: { status: "pending", error: null } } };
+      return undefined;
+    });
+    render(<Harness />);
+    const button = await screen.findByRole("button", { name: "Se connecter à dbx-de" });
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(button).toBeDisabled();
+    release();
+    expect(await screen.findByRole("button", { name: "En attente de dbx-de…" })).toBeInTheDocument();
+    expect(server.calls.filter((c) => c.method === "POST" && c.path.endsWith("/authorize"))).toHaveLength(1);
+    expect(openExternal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Connexion échouée/)).not.toBeInTheDocument();
+  });
+
+  it("[S-0015-13] page d'autorisation abandonnée : « Recommencer la connexion » relance l'autorisation", async () => {
+    const server = comparisonServer(({ method, path }) => {
+      if (path === `${API}/preview` && method === "POST") {
+        return { json: { ...PREVIEW, missing_access: [{ access_point: "dbx-de", code: "not_connected", message: "Pas d'accès." }] } };
+      }
+      if (path.endsWith("/connections/dbx-de/authorize")) return { json: { authorize_url: "https://login.example/authorize?state=x" } };
+      if (path.endsWith("/connections/dbx-de/status")) return { json: { access_point: "dbx-de", my_access: "never", flow: { status: "pending", error: null } } };
+      return undefined;
+    });
+    render(<Harness />);
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à dbx-de" }));
+    // Le flux attend : le bouton d'attente est désactivé et dit pourquoi, la relance reste offerte.
+    expect(await screen.findByRole("button", { name: "En attente de dbx-de…" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Recommencer la connexion à dbx-de" }));
+    await waitFor(() => expect(server.calls.filter((c) => c.method === "POST" && c.path.endsWith("/authorize"))).toHaveLength(2));
+    expect(openExternal).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Connexion échouée/)).not.toBeInTheDocument();
   });
 
   it("[S-0015-05] progression par plateforme, Annuler, statut annulée (critère 5)", async () => {

@@ -1,6 +1,8 @@
 import { ApiError, ServerInfoError, UnreachableError } from "./api";
 
-export type Explained = { title: string; text: string };
+/** `action: "reconnect"` : l'accès à la plateforme est à refaire ; l'écran qui affiche
+ * l'erreur y mène (Mes connexions) au lieu de seulement la décrire. */
+export type Explained = { title: string; text: string; action?: "reconnect" };
 
 // Codes d'erreur du serveur traduits pour l'utilisateur : ce qui s'est passé, et quoi faire.
 const KNOWN: Record<string, Explained> = {
@@ -148,7 +150,45 @@ const KNOWN: Record<string, Explained> = {
     title: "Commentaire manquant",
     text: "Une demande de changements doit dire ce qui doit changer. Écrivez un commentaire, puis envoyez la demande de nouveau.",
   },
+  // Connecteurs et coffre (plans 0008, 0016, 0018).
+  not_connected: {
+    title: "Pas encore connecté",
+    text: "Aucun accès n'est enregistré pour ce point d'accès sur ce poste. Connectez-vous depuis Mes connexions, puis réessayez.",
+    action: "reconnect",
+  },
+  access_expired: {
+    title: "Accès expiré",
+    text: "La session ou le token n'est plus accepté par la plateforme. Reconnectez-vous depuis Mes connexions, puis réessayez.",
+    action: "reconnect",
+  },
+  vault_unavailable: {
+    title: "Trousseau du système indisponible",
+    text: "Atlas ne range un identifiant que dans le trousseau de ce poste, jamais ailleurs. Déverrouillez le trousseau (ou démarrez son service), puis réessayez.",
+  },
+  oauth_port_busy: {
+    title: "Une connexion OAuth est déjà en cours",
+    text: "Le port de retour de la connexion est occupé (l'autre connexion d'Atlas, ou la CLI Databricks). Terminez-la ou fermez-la, puis réessayez.",
+  },
+  query_failed: {
+    title: "La plateforme a refusé la requête",
+    text: "Vérifiez vos droits sur le schéma et l'entrepôt de ce point d'accès, puis réessayez.",
+  },
+  query_timeout: {
+    title: "La requête a dépassé le délai",
+    text: "La plateforme n'a pas répondu à temps et la requête a été interrompue. Vérifiez que l'entrepôt est démarré, puis réessayez.",
+  },
+  host_unreachable: {
+    title: "Hôte injoignable",
+    text: "Atlas n'a pas pu joindre le serveur. Vérifiez l'adresse et la connexion réseau (VPN, proxy), puis réessayez.",
+  },
+  host_rejected: {
+    title: "GitHub a refusé la demande",
+    text: "Elle ne correspond plus à l'état du dépôt (une proposition identique existe peut-être déjà, ou la branche a changé). Rechargez l'écran, puis réessayez ; si le refus persiste, contactez le référent de l'espace.",
+  },
 };
+
+/** L'explication d'un code du serveur, ou `undefined` s'il n'est pas traduit. */
+export const translated = (code: string): Explained | undefined => KNOWN[code];
 
 export function explain(error: unknown): Explained {
   if (error instanceof ServerInfoError) {
@@ -170,7 +210,7 @@ export function explain(error: unknown): Explained {
     if (error.code === "not_ready") {
       return { title: KNOWN.not_ready.title, text: `${error.message} ${KNOWN.not_ready.text}` };
     }
-    return KNOWN[error.code] ?? { title: "L'opération a échoué", text: error.message };
+    return translated(error.code) ?? { title: "L'opération a échoué", text: error.message };
   }
   return { title: "L'opération a échoué", text: String(error) };
 }

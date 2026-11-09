@@ -772,6 +772,11 @@ export const api = {
     request<Connection>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/token`, { method: "PUT", body: JSON.stringify({ token }) }),
   declareAccessPoint: (id: string, accessPoint: AccessPointDraft, justification: string) =>
     request<{ id: number; title: string }>(`${ws(id)}/connections`, post({ access_point: accessPoint, justification })),
+  /** Abandonne la connexion en attente : le serveur ferme l'écoute, la page d'autorisation déjà ouverte ne connecte plus rien. */
+  cancelAuthorization: (id: string, accessPoint: string) =>
+    request<{ cancelled: boolean }>(`${ws(id)}/connections/${encodeURIComponent(accessPoint)}/authorize/cancel`, post({})),
+  cancelDraftAuthorization: (id: string, accessPoint: AccessPointDraft) =>
+    request<{ cancelled: boolean }>(`${ws(id)}/access-point-draft/authorize/cancel`, post({ access_point: accessPoint })),
   authorizeDraft: (id: string, accessPoint: AccessPointDraft, user?: string) =>
     request<{ authorize_url: string | null }>(`${ws(id)}/access-point-draft/authorize`, post({ access_point: accessPoint, ...(user ? { user } : {}) })),
   keyPairDraft: (id: string, accessPoint: AccessPointDraft, keyPair: KeyPair) =>

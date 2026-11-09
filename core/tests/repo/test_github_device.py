@@ -283,6 +283,7 @@ def test_two_simultaneous_polls_make_one_request(github, monkeypatch):
     first = threading.Thread(target=lambda: statuses.update(first=device.poll(flow)["status"]))
     first.start()
     assert asking.wait(5)
+
     def second_poll():
         statuses["second"] = device.poll(flow)["status"]
         second_done.set()
@@ -379,6 +380,18 @@ def test_refused_expired_and_unconfigured(github, monkeypatch):
     monkeypatch.delenv("ATLAS_GITHUB_CLIENT_ID")
     refused = client.post("/api/github/device", json={})
     assert (refused.status_code, refused.json()["detail"]["code"]) == (422, "github_not_configured")
+
+
+def test_a_device_code_echoed_by_github_is_masked(github):
+    """GitHub qui recopie le `device_code` dans sa description d'erreur ne le renvoie pas."""
+    client = TestClient(create_app(token="secret"), headers=AUTH)
+    github["answers"][:] = [{"error": "unauthorized_client",
+                             "error_description": "device_code dc-secret inconnu"}]
+    started = client.post("/api/github/device", json={}).json()
+    refused = client.post(f"/api/github/device/{started['flow']}")
+    detail = refused.json()["detail"]
+    assert detail["code"] == "device_flow_failed"
+    assert "dc-secret" not in refused.text and "***" in detail["message"]
 
 
 def test_polling_respects_the_interval(github, monkeypatch):

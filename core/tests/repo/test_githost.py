@@ -175,6 +175,17 @@ def test_merge_errors(github, status, message, expected):
     assert TOKEN not in str(error.value)
 
 
+def test_a_token_echoed_by_github_is_masked(github):
+    """GitHub qui recopie le jeton reçu dans son message d'erreur ne le renvoie pas à l'API."""
+    host, state = github
+    host.create_pull_request("prop/x-canonical-1", "x", "")
+    state["merge_error"] = (403, {"message": f"Bearer {TOKEN} sans droit d'écriture"})
+    with pytest.raises(RepoError) as error:
+        host.merge(1, "a" * 40, "Fusion", "")
+    assert error.value.code == "host_forbidden"
+    assert TOKEN not in error.value.message and "***" in error.value.message
+
+
 def test_bad_token(github):
     host, _ = github
     host._token = "faux"

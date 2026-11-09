@@ -29,33 +29,34 @@
 | 0005 | 13 | 9 | 0 | 4 | 0 |
 | 0006 | 13 | 9 | 0 | 4 | 0 |
 | 0007 | 9 | 4 | 0 | 5 | 0 |
-| 0008 | 9 | 5 | 0 | 4 | 0 |
+| 0008 | 10 | 6 | 0 | 4 | 0 |
 | 0009 | 13 | 6 | 1 | 6 | 0 |
 | 0010 | 12 | 10 | 1 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 7 | 7 | 0 | 0 | 0 |
 | 0013 | 22 | 18 | 4 | 0 | 0 |
 | 0014 | 9 | 9 | 0 | 0 | 0 |
-| 0015 | 11 | 9 | 2 | 0 | 0 |
-| 0016 | 6 | 6 | 0 | 0 | 0 |
+| 0015 | 13 | 9 | 4 | 0 | 0 |
+| 0016 | 9 | 8 | 1 | 0 | 0 |
 | 0017 | 10 | 10 | 0 | 0 | 0 |
-| 0018 | 6 | 1 | 0 | 5 | 0 |
+| 0018 | 7 | 1 | 0 | 6 | 0 |
 | 0019 | 9 | 1 | 0 | 8 | 0 |
 | 0020 | 4 | 4 | 0 | 0 | 0 |
 | 0021 | 7 | 5 | 0 | 2 | 0 |
 | 0022 | 6 | 6 | 0 | 0 | 0 |
 | 0023 | 4 | 4 | 0 | 0 | 0 |
-| 0024 | 4 | 2 | 2 | 0 | 0 |
+| 0024 | 5 | 2 | 3 | 0 | 0 |
 | 0025 | 7 | 7 | 0 | 0 | 0 |
 | 0026 | 9 | 9 | 0 | 0 | 0 |
 | 0028 | 3 | 2 | 0 | 1 | 0 |
 | 0029 | 4 | 2 | 0 | 2 | 0 |
 | 0030 | 4 | 3 | 0 | 1 | 0 |
+| 0031 | 4 | 2 | 0 | 2 | 0 |
 | 0032 | 2 | 2 | 0 | 0 | 0 |
 | 0033 | 9 | 8 | 0 | 1 | 0 |
 | 0034 | 10 | 6 | 3 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **283** | **207** | **13** | **63** | **0** |
+| **Total** | **295** | **212** | **17** | **66** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1159,6 +1160,22 @@ Plan 0015, critère 11 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-11]`
 - **Et** la demande de lancement porte `tolerance: 8` ; axe-core ne relève aucune violation sérieuse
 - Limite : le setup et l'aperçu sont les vraies réponses du serveur, modifiées pour annoncer 8 % ; le suivi et le lancement sont simulés. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-11]` couvrent aussi la borne haute pour une tolérance de 7,25 % et l'envoi de la valeur choisie.
 
+### S-0015-12 — Un accès perdu pendant le lancement est expliqué et mène à la reconnexion
+Plan 0015, critère 12 · Test : `app/src/screens/Comparison.test.tsx` › `[S-0015-12]` (Vitest)
+- **Étant donné** une comparaison dont le lancement est refusé par le serveur avec `access_expired` (409), l'accès ayant expiré entre l'aperçu et le clic
+- **Quand** je clique « Lancer la comparaison »
+- **Alors** le bandeau « Accès expiré » donne la consigne (se reconnecter depuis Mes connexions) sans recopier le texte brut du serveur, et son lien « Reconnecter dans Mes connexions » ouvre `#/w/groupe-nordis/connexions`
+- **Et** l'aperçu est relu : le bandeau « Connexion requise » et son bouton « Se connecter à dbx-de » (le mécanisme de S-0015-04) apparaissent, sans second lancement
+- Limite : le serveur est simulé. Le parcours réel d'une connexion perdue est S-0016-08 (e2e), sur l'écran Mes connexions.
+
+### S-0015-13 — Deux clics rapides sur « Se connecter à… » ne lancent qu'une autorisation
+Plan 0015, critère 13 · Test : `app/src/screens/Comparison.test.tsx` › `[S-0015-13]` (Vitest)
+- **Étant donné** un aperçu qui signale l'accès manquant à dbx-de et une autorisation dont la réponse tarde
+- **Quand** je clique deux fois, dans le même tick, « Se connecter à dbx-de »
+- **Alors** une seule demande d'autorisation part, le bouton est désactivé pendant le lancement, puis devient « En attente de dbx-de… » et aucun échec de connexion ne s'affiche
+- **Et** si la page d'autorisation est abandonnée, le bouton d'attente reste désactivé (il dit « En attente de dbx-de… ») et « Recommencer la connexion à dbx-de » relance l'autorisation : la garde ne couvre que le lancement
+- Limite : le serveur est simulé ; le même garde-fou sur l'écran Mes connexions est S-0016-07 (e2e). Le remplacement du premier flux côté serveur, dont le retour tardif refusé, est couvert par `core/tests/connections/test_connections.py::test_relaunching_replaces_the_flow_still_listening` et `::test_a_replaced_flow_cannot_connect_late`.
+
 **Plan 0022**
 
 ### S-0022-01 — ES à 75 %, DE à 94 %, FR à 100 %
@@ -1226,7 +1243,7 @@ Plan 0029, critère 2 · Test : `app/e2e/sources-communes.spec.ts` › `[S-0029-
 
 Les tests de `app/e2e/connexions.spec.ts` se suivent sur Groupe Nordis (anna.k, coffre en mémoire). dbx-fr pointe vers le faux Databricks, dont l'OAuth s'ouvre dans une fenêtre du navigateur et revient sur le serveur local (port 8020) ; snow-de (SSO) et snow-es (paire de clés) vers le faux Snowflake. `app/e2e/github.spec.ts` utilise le serveur 8793 et un faux GitHub (port 8792).
 
-Les tests de `app/e2e/connexions-testables.spec.ts` travaillent chacun sur un espace isolé du serveur 8793 (julien.h). Ils pilotent le faux Databricks par sa route de test `/__test__/configure` (OAuth refusé, jeton expiré, rafraîchissement refusé), remise à zéro après chaque test.
+Les tests de `app/e2e/connexions-testables.spec.ts` travaillent chacun sur un espace isolé du serveur 8793 (julien.h). Ils pilotent le faux Databricks par sa route de test `/__test__/configure` (OAuth refusé, jeton expiré, rafraîchissement refusé, erreur qui recopie le jeton reçu), remise à zéro après chaque test.
 
 **Plan 0008**
 
@@ -1268,6 +1285,14 @@ Plan 0008, critère 7 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0
 - **Alors** la ligne dbx-fr affiche « Plateforme retirée par le référent »
 - **Et** l'API répond 422 `invalid_access_point`, avec le problème `platform_not_allowed`
 - Limite : la déclaration passe par l'API, le panneau ne proposant plus Databricks (S-0016-06). `core/tests/connections/test_connections.py::test_platform_removed_from_allowed_platforms_cannot_be_used`.
+
+### S-0008-10 — Un jeton recopié par la plateforme dans son erreur n'arrive jamais à l'écran
+Plan 0008, critère 10 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-10]`
+- **Étant donné** un espace isolé, un token personnel factice rangé par l'API, et le faux Databricks réglé pour répondre 403 en recopiant le jeton reçu (`echo_token` de `/__test__/configure`)
+- **Quand** je clique « Tester Databricks · dbx-fr »
+- **Alors** le statut de la ligne affiche « Accès refusé par Databricks » et `***` à la place du jeton
+- **Et** le jeton n'apparaît ni dans le HTML ni dans aucune réponse de l'API relevée pendant le test
+- Limite : un seul canal est visible à l'écran (l'erreur 403 du test). Le message d'une réponse d'erreur, le corps brut hors JSON, une requête terminée en échec et un jeton coupé par la troncature (300 et 500 caractères) sont vérifiés par `core/tests/connections/test_connections.py::test_a_token_echoed_by_databricks_is_masked` et `::test_an_echoed_token_does_not_reach_the_test_route` ; `message_of`, le masquage et l'échange du code OAuth par `core/tests/connections/test_connector_security.py` ; Snowflake est à S-0018-07 ; l'hébergeur GitHub (message d'erreur de l'API, `device_code` du flux de connexion) par `core/tests/repo/test_githost.py::test_a_token_echoed_by_github_is_masked` et `core/tests/repo/test_github_device.py::test_a_device_code_echoed_by_github_is_masked`.
 
 **Plan 0016**
 
@@ -1311,6 +1336,31 @@ Plan 0016, critère 6 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0
 - **Quand** je clique « Ajouter un point d'accès »
 - **Alors** la liste Plateforme du panneau « Nouveau point d'accès » propose Snowflake, et pas Databricks
 - Limite : les plateformes à venir, désactivées, sont vérifiées en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0016-06]`.
+
+### S-0016-07 — Un double clic sur « Se connecter » ne lance qu'un flux OAuth
+Plan 0016, critère 7 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0016-07]`
+- **Étant donné** un espace isolé, dbx-fr jamais connecté, et une autorisation dont la réponse est retardée de 700 ms
+- **Quand** je double-clique « Se connecter à Databricks · dbx-fr »
+- **Alors** une seule demande d'autorisation part et une seule fenêtre s'ouvre ; la ligne affiche « Terminez la connexion dans le navigateur… » puis « Connecté · session OAuth »
+- **Et** aucune alerte d'échec (ni `oauth_port_busy`) ne s'affiche
+- **Et** si la page d'autorisation est abandonnée (premier flux lancé, jamais terminé), « Annuler » arrête le flux côté serveur : la page tardive ne connecte rien (après rechargement, la ligne reste « Jamais connecté »), puis « Se connecter » relance sans `oauth_port_busy` et la ligne passe à « Connecté · session OAuth »
+- Limite : les clics dans le même tick, les boutons désactivés pendant le lancement, le panneau « Nouveau point d'accès » et le code `oauth_port_busy` traduit (titre et consigne) sont rendus en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0016-07]` (l'abandon appelle la route d'annulation, y compris pour le brouillon du panneau, son échec est affiché, après l'annulation la ligne montre l'état du coffre (connecté si le navigateur a abouti avant, ligne ou brouillon du panneau), le brouillon du panneau est verrouillé dès le lancement et le temps de la connexion ; la relance y est aussi vérifiée). L'annulation côté serveur, le retour tardif sans effet et la réponse 410 de la page de retour sont couverts par `core/tests/connections/test_connections.py` (`test_cancelling_stops_the_flow_and_a_late_callback_connects_nothing`, `test_a_callback_for_a_flow_no_longer_pending_answers_410_and_stores_nothing`, `test_a_replaced_flow_cannot_connect_late`, `test_cancelling_requires_the_session_token`, `test_cancelling_while_the_callback_is_registering_waits_and_the_vault_holds_the_access`, `test_a_start_during_a_cancellation_finds_the_port_free`, `test_cancelling_stops_the_pending_flow_and_ignores_an_old_one_of_the_same_id`, `test_cancelling_without_a_pending_flow_is_harmless`) et, pour le SSO Snowflake, par `test_cancelled_sso_flow_registers_nothing_when_the_browser_finishes_late` et `test_cancelling_an_sso_flow_that_just_registered_reports_connected` (l'annulation attend l'enregistrement).
+
+### S-0016-08 — Un test refusé pour accès expiré est expliqué, et « Reconnecter » ramène à la connexion
+Plan 0016, critère 8 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0016-08]`
+- **Étant donné** un espace isolé et un token personnel que le faux Databricks ne reconnaît pas
+- **Quand** je clique « Tester Databricks · dbx-fr »
+- **Alors** le statut de la ligne dit « Accès expiré. » et donne la consigne (se reconnecter depuis Mes connexions), la cellule passe à « Token expiré » et le bouton « Reconnecter Databricks · dbx-fr » apparaît sans recharger
+- **Et** « Reconnecter » mène à l'OAuth : la ligne revient à « Connecté · session OAuth » et « Tester » donne « Connexion OK · N ms »
+- Limite : le test d'un brouillon jamais connecté (`not_connected` : « Pas encore connecté. … Connectez-vous depuis Mes connexions ») et un code du serveur non traduit, qui garde son message, sont rendus en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0016-08]`.
+
+### S-0016-09 — Chaque code des connecteurs et du coffre a un titre et une consigne
+Plan 0016, critère 9 · Test : `app/src/messages.test.ts` › `[S-0016-09]` (Vitest)
+- **Étant donné** les codes `not_connected`, `access_expired`, `vault_unavailable`, `oauth_port_busy`, `query_failed`, `query_timeout`, `host_unreachable` et `host_rejected`, avec un texte brut du serveur
+- **Quand** l'application les explique
+- **Alors** chacun donne un titre propre et une consigne, jamais « L'opération a échoué » ni le texte brut du serveur
+- **Et** seuls `not_connected` et `access_expired` portent l'action de reconnexion
+- Limite : le texte propre au rattachement d'un dépôt (`host_unreachable` : « Dépôt injoignable ») reste prioritaire dans le formulaire de rattachement : `app/src/screens/Rattachement.test.tsx` › `[S-0033-02]`. Les autres codes émis par les routes de connexion (`platform_forbidden`, `platform_not_found`, `oauth_unavailable`, `oauth_failed`, les clés Snowflake) gardent le message du serveur, qui dit déjà la cause et la suite.
 
 **Plan 0018**
 
@@ -1878,6 +1928,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0018-04 | Le contrôle de cardinalité échoue sur Snowflake avec une table dupliquée | Exécution sur Snowflake | `core/tests/repo/test_snowflake_compare.py::test_cardinality_check_fails_on_snowflake` |
 | S-0018-05 | Le binaire figé s'authentifie et exécute ; taille sous 200 Mo | CI de release, binaire PyInstaller | `core/tests/test_sidecar.py::test_frozen_binary_authenticates_and_runs` |
 | S-0018-06 | Aucun cache de jeton Snowflake sur le poste | Disque du poste, hors du DOM | `core/tests/connections/test_snowflake.py::test_connection_params_never_cache_tokens`, `::test_sso_stores_the_session_in_the_vault_and_no_token_cache` |
+| S-0018-07 | Un jeton de session Snowflake recopié par une erreur du connecteur n'est jamais restitué, même coupé par la troncature | Le faux Snowflake ne recopie pas les jetons ; aucun écran ne montre ce canal (le Databricks l'est par S-0008-10) | `core/tests/connections/test_snowflake.py::test_session_tokens_echoed_in_an_error_are_masked`, `::test_connector_translates_with_its_session_tokens` |
 | S-0019-01 | Trois installateurs signés ; notarisation macOS | CI de release, certificats réels | `.github/workflows/release.yml` |
 | S-0019-02 | Test de fumée du binaire sur chaque plateforme, `_selftest` compris | CI de release | `core/tests/test_sidecar.py::test_frozen_binary_smoke` ; `core/tests/test_release.py::test_selftest_route_is_protected_and_checks_dynamic_imports` ; `.github/workflows/release.yml` |
 | S-0019-03 | L'app release démarre en moins de 10 s et ne laisse aucun serveur après fermeture | Fenêtre native Tauri, mesure sur machine de référence | `core/tests/test_sidecar.py::test_frozen_binary_stops_when_the_app_disappears` ; `core/tests/test_release.py::test_server_stops_when_its_parent_disappears` (le temps de démarrage reste une mesure manuelle) |
