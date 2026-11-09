@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
 import { API, FAKE_DATABRICKS, seriousViolations } from "./demo";
-import { git, relay, test, trackWorkspace } from "./isolation";
+import { git, python, relay, test, trackWorkspace } from "./isolation";
 
 // Plan 0033 de bout en bout : un espace créé dans Atlas se rattache à un dépôt vide, sans CLI
 // ni YAML à la main.
@@ -280,4 +280,110 @@ test("[S-0033-05] Créer un espace avec une adresse GitHub : la connexion et le 
   const attached = await (await request.get(`${RATTACHEMENT}/api/workspaces/${id}`)).json();
   expect(attached).toMatchObject({ git_remote: url, account: "julien.h", role: "referent" });
   expect(git(target, "log", "--format=%s", "main").split("\n")).toHaveLength(2);
+});
+
+test("[S-0033-10] espace neuf : rattacher un dépôt vide, ajouter un domaine, créer puis publier son premier KPI", async ({ page }) => {
+  test.setTimeout(240_000);
+  const id = `rattachement-${unique()}`;
+  const root = mkdtempSync(join(tmpdir(), "atlas-rattachement-"));
+  trackWorkspace(id, root);
+  const empty = join(root, "vide.git");
+  bareRepository(empty);
+  const kpi = { id: "chiffre-affaires", label: "Chiffre d'affaires" };
+  const nav = page.getByRole("navigation", { name: "Navigation de l'espace" });
+  const props = page.getByRole("complementary", { name: "Propriétés" });
+  const palette = page.getByRole("complementary", { name: "Palette des nœuds" });
+
+  // Un espace neuf, rattaché à un dépôt vide : ni domaine ni calendrier, seulement l'espace.
+  await createSpace(page, id, "perrault-fr");
+  await expect(page).toHaveURL(new RegExp(`#/w/${id}/catalogue$`));
+  await nav.getByRole("link", { name: "Administration" }).click();
+  await attach(page, empty);
+  await expect(repository(page).getByText(`Dépôt rattaché : l'espace est publié sur ${empty}, sous le compte anna.k.`)).toBeVisible();
+
+  // Le domaine passe par l'Administration : seul référent, la proposition est fusionnée aussitôt.
+  await page.getByRole("button", { name: "Domaine", exact: true }).click();
+  const form = page.getByRole("group", { name: "Nouveau domaine" });
+  await form.getByRole("textbox", { name: /Libellé/ }).fill("Finance");
+  await expect(form.getByRole("textbox", { name: /Identifiant/ })).toHaveValue("finance");
+  await form.getByRole("button", { name: "Ajouter le domaine" }).click();
+  expect(await seriousViolations(page)).toEqual([]);
+  await expect(save(page)).toHaveText("Enregistrer et fusionner");
+  await save(page).click();
+  await expect(page.getByText(/Paramètres enregistrés : proposition n° \d+ fusionnée sans revue\./)).toBeVisible();
+  expect(git(empty, "show", "main:governance.yaml")).toContain("id: finance");
+
+  // Le menu Domaine propose le nouveau domaine sans recharger l'app : le trajet reste dans l'app.
+  await nav.getByRole("link", { name: "Catalogue" }).click();
+  await page.getByRole("link", { name: "Nouveau concept ou KPI" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Nouveau concept ou KPI" })).toBeFocused();
+  await page.getByLabel(/^Libellé/).fill(kpi.label);
+  await page.getByLabel(/^Identifiant/).fill(kpi.id);
+  await expect(page.getByLabel(/^Propriétaire/)).toHaveValue("anna.k");
+  const domain = page.getByLabel(/^Domaine/);
+  await expect(domain.locator('option[value="finance"]')).toHaveCount(1);
+  await domain.selectOption("finance");
+  expect(await seriousViolations(page)).toEqual([]);
+  await page.getByRole("button", { name: "Créer et ouvrir l'éditeur" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: `${kpi.label} : v1 · brouillon` })).toBeVisible();
+
+  // Un KPI minimal : calendrier civil et fuseau, une source et une agrégation (la sortie d'un KPI est agrégée).
+  const civil = props.getByLabel(/^Calendrier/).locator("option", { hasText: /civil/i });
+  await expect(civil).toHaveCount(1); // un espace neuf n'a aucun fichier de calendrier : le civil doit tout de même s'offrir
+  await props.getByLabel(/^Calendrier/).selectOption("civil");
+  await props.getByLabel(/^Fuseau horaire/).fill("Europe/Paris");
+
+  await palette.getByRole("button", { name: "Source", exact: true }).click();
+  await expect(props.getByText("n01", { exact: true })).toBeVisible();
+  await props.getByLabel("Libellé").fill("Factures");
+  await props.getByLabel(/^Plateforme/).selectOption("databricks");
+  await props.getByLabel(/^Table/).fill("gold.finance.fact_facturation");
+  await props.getByLabel(/^Propriétaire/).fill("anna.k");
+  for (const [index, [name, type]] of [["entite", "string"], ["montant_ttc", "decimal"]].entries()) {
+    await props.getByRole("button", { name: "Ajouter une colonne" }).click();
+    await props.getByLabel(`Nom de la colonne ${index + 1}`).fill(name);
+    await props.getByLabel(`Type de la colonne ${index + 1}`).selectOption(type);
+  }
+
+  await palette.getByRole("button", { name: "Agrégation", exact: true }).click();
+  await expect(props.getByText("n02", { exact: true })).toBeVisible();
+  await props.getByRole("button", { name: "Ajouter une mesure" }).click();
+  await props.getByLabel("Colonne source de la mesure 1").selectOption("montant_ttc");
+  await props.getByLabel("Colonne produite par la mesure 1").fill("chiffre_affaires");
+  await props.getByLabel("Fonction de la mesure 1").selectOption("sum");
+  await props.getByRole("checkbox", { name: "entite" }).check();
+  await expect(page.getByText("schéma 1 · 2 nœuds · 1 arête")).toBeVisible();
+  const bottom = page.getByRole("region", { name: "Validation du document" });
+  await expect(bottom.getByText("Compilable Databricks, Snowflake")).toBeVisible();
+  await expect(bottom.getByRole("listitem").filter({ hasText: "ERREUR" })).toHaveCount(0);
+  expect(await seriousViolations(page)).toEqual([]);
+
+  // Soumettre : la proposition s'ouvre, et le référent seul la fusionne sans revue.
+  await page.getByRole("button", { name: "Soumettre la proposition" }).click();
+  const dialog = page.getByRole("dialog", { name: "Soumettre la proposition" });
+  await dialog.getByLabel(/Justification/).fill("Premier KPI de l'espace.");
+  await dialog.getByRole("button", { name: "Soumettre" }).click();
+  await expect(page.getByRole("heading", { name: /Proposition n° \d+ créée/ })).toBeVisible();
+  await page.getByRole("link", { name: "Voir les propositions" }).click();
+  await expect(page.getByText("Fusionnée sans revue : aucun autre compte habilité")).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+  await page.getByRole("button", { name: "Fusionner", exact: true }).click();
+  await expect(page.getByText(/Proposition n° \d+ fusionnée/)).toBeVisible();
+  expect(git(empty, "ls-tree", "-r", "--name-only", "main").split("\n")).toContain(`kpis/${kpi.id}.yaml`);
+  expect(git(empty, "show", `main:kpis/${kpi.id}.yaml`)).toContain("domain: finance");
+
+  // Catalogue, puis fiche : le KPI y est, avec son domaine et son propriétaire.
+  await nav.getByRole("link", { name: "Catalogue" }).click();
+  const table = page.getByRole("table", { name: "Concepts et KPI" });
+  await expect(table.getByRole("row", { name: new RegExp(kpi.label) })).toContainText("Finance");
+  expect(await seriousViolations(page)).toEqual([]);
+  await table.getByRole("link", { name: kpi.label }).click();
+  await expect(page).toHaveURL(new RegExp(`#/w/${id}/fiche/${kpi.id}$`));
+  await expect(page.getByRole("heading", { level: 1, name: kpi.label })).toBeVisible();
+  await expect(page.getByText("Finance", { exact: true })).toBeVisible();
+  // Le nom du créateur vient de la machine (git config user.name) : on le relit dans la gouvernance du dépôt.
+  const owner = python("import sys,yaml; print(next(m['name'] for m in yaml.safe_load(sys.argv[1])['members'] if m['account']=='anna.k'))", git(empty, "show", "main:governance.yaml")).trim();
+  expect(owner).not.toBe("");
+  await expect(page.getByText(`Propriétaire : ${owner} ·`)).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
 });

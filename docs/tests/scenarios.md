@@ -53,10 +53,10 @@
 | 0030 | 4 | 3 | 0 | 1 | 0 |
 | 0031 | 4 | 2 | 0 | 2 | 0 |
 | 0032 | 2 | 2 | 0 | 0 | 0 |
-| 0033 | 9 | 8 | 0 | 1 | 0 |
+| 0033 | 12 | 9 | 2 | 1 | 0 |
 | 0034 | 10 | 6 | 3 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **295** | **212** | **17** | **66** | **0** |
+| **Total** | **298** | **213** | **19** | **66** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1593,7 +1593,7 @@ Plan 0023, critère 4 · Test : `app/e2e/administration.spec.ts` › `[S-0023-04
 
 **Plan 0033**
 
-Les scénarios 1 à 4 passent par le formulaire « Rattacher un dépôt distant » de l'Administration, le 5 par le panneau de création ; ils partagent trois tests e2e dans `app/e2e/rattachement.spec.ts`. Les dépôts sont des dépôts nus locaux ; les adresses `https://github.com/e2e-atlas/…` sont redirigées vers eux par `url.<dossier>.insteadOf`, et le faux GitHub (serveur 8790) répond au device flow, à `/user` et à `/repos/…`.
+Les scénarios 1 à 4 passent par le formulaire « Rattacher un dépôt distant » de l'Administration, le 5 par le panneau de création ; ils partagent quatre tests e2e dans `app/e2e/rattachement.spec.ts`, dont le dernier est le parcours complet du scénario 10. Les dépôts sont des dépôts nus locaux ; les adresses `https://github.com/e2e-atlas/…` sont redirigées vers eux par `url.<dossier>.insteadOf`, et le faux GitHub (serveur 8790) répond au device flow, à `/user` et à `/repos/…`.
 
 ### S-0033-01 — Un dépôt vide reçoit l'espace
 Plan 0033, critère 1 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-01]`
@@ -1664,6 +1664,33 @@ Plan 0033, critère 8 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-08]`
 - **Étant donné** en Vitest seulement, un brouillon qui a déjà ajouté un membre au compte du login GitHub
 - **Alors** après le rattachement, le brouillon est abandonné, l'avertissement « Vos modifications non enregistrées n'ont pas été reprises : le compte <login> figurait déjà dans le brouillon. Refaites-les à partir de la gouvernance du dépôt. » s'affiche, et le créateur est référent sous le login GitHub, sans rien à enregistrer
 - Limite : le compte du créateur réécrit dans le brouillon, la valeur des validateurs et la base relue envoyée à l'enregistrement sont vérifiés en Vitest, comme la suspension ci-dessus : `app/src/screens/Rattachement.test.tsx` › `[S-0033-08]` (cinq tests). Les refus `workspace_dirty` (gouvernance modifiée dans le clone, y compris quand elle retire le compte local) et `wrong_branch` (autre branche extraite), hors écran, sont des tests core : `core/tests/repo/test_set_remote.py::test_another_checked_out_branch_is_refused_before_any_remote_write`. Le refus `workspace_dirty` (gouvernance modifiée dans le clone, hors écran) est un test core : `core/tests/repo/test_set_remote.py::test_unsaved_changes_to_the_governance_are_refused_before_any_remote_write`.
+
+### S-0033-10 — Un espace neuf publie son premier KPI
+Plan 0033, critère 10 · Test : `app/e2e/rattachement.spec.ts` › `[S-0033-10]`
+- **Étant donné** un espace créé sans adresse, rattaché à un dépôt nu vide (pas de S-0033-01), dont je suis le seul référent ; il n'a ni domaine ni fichier de calendrier
+- **Quand** j'ajoute le domaine « Finance » dans l'Administration et clique « Enregistrer et fusionner »
+- **Alors** « Paramètres enregistrés : proposition n° … fusionnée sans revue. » s'affiche et `governance.yaml` du dépôt contient `id: finance`
+- **Quand** j'ouvre « Nouveau concept ou KPI » depuis le catalogue, sans recharger l'app
+- **Alors** le menu « Domaine » propose `finance` ; je crée le KPI « Chiffre d'affaires » dans ce domaine, propriétaire anna.k
+- **Quand** je déclare un calendrier civil, le fuseau Europe/Paris, une source Databricks à deux colonnes et une agrégation (somme par entité)
+- **Alors** le panneau de validation dit « Compilable Databricks, Snowflake », sans erreur ; la proposition se soumet
+- **Quand** j'ouvre « Voir les propositions » et clique « Fusionner »
+- **Alors** la mention « Fusionnée sans revue : aucun autre compte habilité » est affichée, `kpis/chiffre-affaires.yaml` est sur la branche principale du dépôt nu, avec `domain: finance`
+- **Et** le catalogue liste le KPI avec « Finance », et sa fiche s'ouvre avec ce domaine et son propriétaire ; axe-core ne relève aucune violation sérieuse ou critique aux étapes clés
+- Limite : les enregistrements de gouvernance sans dépôt distant (issue 160) ne sont pas couverts.
+
+### S-0033-11 — Calendrier civil intégré dans l’éditeur
+Plan 0033, critère 11 · Test : `app/src/editor/Properties.test.tsx` › `[S-0033-11]`
+- **Étant donné** un KPI dans un espace sans fichier de calendrier
+- **Alors** le menu propose « civil » et sa sélection écrit une référence sans version
+- **Et** une référence civile existante est relue, un fichier homonyme ne crée pas de doublon, les autres calendriers gardent leur version et un nœud temporel affiche « civil ».
+
+### S-0033-12 — Relecture de l’espace après une fusion
+Plan 0033, critère 12 · Test : `app/src/screens/WorkspaceShell.test.tsx` › `[S-0033-12]`
+- **Étant donné** une fusion réussie depuis l’Administration ou les propositions, y compris un KPI
+- **Alors** la coque relit l’espace et les domaines actualisés sont proposés dans l’éditeur
+- **Et** la relecture ne déplace pas le focus pendant une saisie.
+- Limite : `app/src/screens/Administration.test.tsx` vérifie l'appel après fusion de gouvernance et son absence pour une proposition ouverte ; `app/src/screens/Proposals.test.tsx` vérifie l'appel après fusion d'un KPI et son absence en cas d'échec.
 
 **Plan 0034**
 

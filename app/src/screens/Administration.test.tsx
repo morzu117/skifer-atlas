@@ -140,7 +140,8 @@ describe("administration", () => {
       }
       return undefined;
     });
-    render(screenFor());
+    const onMerged = vi.fn();
+    render(<Administration ws={workspace()} heading={createRef()} onMerged={onMerged} />);
     await userEvent.click(await screen.findByRole("button", { name: "Domaine" }));
     const form = within(screen.getByRole("group", { name: "Nouveau domaine" }));
     await userEvent.type(form.getByRole("textbox", { name: /Libellé/ }), "Data");
@@ -151,6 +152,7 @@ describe("administration", () => {
     await userEvent.click(saveButton());
     expect(await screen.findByText(/Paramètres enregistrés : proposition n° 12 fusionnée sans revue\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Voir la proposition" })).toHaveAttribute("href", "#/w/groupe-nordis/propositions?n=12&status=merged&domain=tous");
+    expect(onMerged).toHaveBeenCalledOnce();
     expect(saves(api.calls)[0].body).toMatchObject({ base_digest: "d1" });
     expect(savedGovernance(api.calls).domains.at(-1)).toEqual({ id: "data", label: "Data", referents: [], validators: [], validators_required: null });
     await waitFor(() => expect(api.calls.filter((c) => c.path === `${API}/admin`)).toHaveLength(2));
@@ -377,7 +379,8 @@ describe("administration", () => {
       if (path === `${API}/admin/governance` && method === "POST") return { status: 201, json: { id: 13, title: "Gouvernance de l'espace", merged: false, mention: null, changes: [] } };
       return undefined;
     });
-    render(screenFor());
+    const onMerged = vi.fn();
+    render(<Administration ws={workspace()} heading={createRef()} onMerged={onMerged} />);
     await screen.findByRole("heading", { level: 1 });
     expect(await screen.findByText(/Require review from Code Owners/)).toBeInTheDocument();
     expect(screen.queryByText("Vous êtes le seul référent de l'espace")).not.toBeInTheDocument();
@@ -386,6 +389,7 @@ describe("administration", () => {
     await userEvent.click(saveButton());
     expect(await screen.findByText(/Proposition n° 13 ouverte : elle attend la revue d'un autre référent\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Voir la proposition" })).toHaveAttribute("href", "#/w/groupe-nordis/propositions?n=13&status=open&domain=tous");
+    expect(onMerged).not.toHaveBeenCalled();
     expect(saveButton()).toBeDisabled(); // pas de doublon tant que rien ne change
   });
 
