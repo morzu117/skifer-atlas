@@ -47,6 +47,7 @@ Proposé seulement si l'OAuth échoue ou est indisponible pour ce point d'accès
 7. Une plateforme non autorisée est refusée à la déclaration.
 8. Aucune route ne renvoie de champ contenant un secret (test sur toutes les réponses).
 9. Le binaire figé démarre et répond sur les routes de connexion ; sa taille est notée dans le rapport de plan.
+10. Un jeton envoyé à la plateforme n'est jamais restitué ni conservé, même si elle le recopie dans une erreur (message, corps brut, requête terminée en échec) : le jeton connu est remplacé par `***` avant toute troncature (ADR 0044).
 ## Tests
 - Unitaires : coffre sur un backend keyring de test en mémoire ; machine d'états des tokens ; PKCE.
 - Intégration : serveur OAuth factice local (autorisation, échange, rafraîchissement) ; faux warehouse pour l'exécution (connecteur simulé à l'interface).

@@ -15,6 +15,7 @@ import time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from ..masking import mask_secrets
 from ..repo.git import RepoError
 from .access_points import AccessPoint
 from .base import MAX_ROWS, QUERY_TIMEOUT, AuthRejected, QueryResult
@@ -58,15 +59,16 @@ class DatabricksConnector:
                         json_body=body, timeout=timeout)
         if reply.status == 401:
             raise AuthRejected
-        if reply.status == 403:
-            raise RepoError("platform_forbidden", f"Accès refusé par Databricks : "
-                            f"{message_of(reply.body)}")
-        if reply.status == 404:
-            raise RepoError("platform_not_found", f"Introuvable sur Databricks (warehouse "
-                            f"{self.point.warehouse()} ?) : {message_of(reply.body)}")
         if reply.status >= 300:
+            # Le jeton envoyé est masqué dans ce que Databricks renvoie, avant de le restituer.
+            detail = message_of(reply.body, self._token)
+            if reply.status == 403:
+                raise RepoError("platform_forbidden", f"Accès refusé par Databricks : {detail}")
+            if reply.status == 404:
+                raise RepoError("platform_not_found", f"Introuvable sur Databricks (warehouse "
+                                f"{self.point.warehouse()} ?) : {detail}")
             raise RepoError("query_failed", f"Databricks a répondu HTTP {reply.status} : "
-                            f"{message_of(reply.body)}")
+                            f"{detail}")
         return reply.body if isinstance(reply.body, dict) else {}
 
     def test(self) -> None:
@@ -100,8 +102,9 @@ class DatabricksConnector:
         status = reply["status"]
         if status["state"] != "SUCCEEDED":
             error = status.get("error") or {}
+            text = error.get("message", "") if isinstance(error, dict) else ""
             raise RepoError("query_failed", f"Requête en échec ({status['state']}) : "
-                            f"{error.get('message', '')[:500]}")
+                            f"{mask_secrets(str(text), self._token)[:500]}")
         manifest = reply.get("manifest") or {}
         total = manifest.get("total_row_count") or 0
         if total > max_rows or manifest.get("truncated"):

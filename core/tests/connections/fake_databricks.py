@@ -32,6 +32,7 @@ class State:
         self.refresh_tokens: set[str] = set()
         self.refuse_refresh = False
         self.refuse_authorize = False
+        self.echo_token = False  # répond 403 en recopiant le jeton reçu, avant toute authentification
         self.expires_in = 3600
         self.revoked: list[str] = []
         self.statements: dict[str, dict] = {}
@@ -55,12 +56,14 @@ def _handler(state: State, base: list[str]):
         def log_message(self, *args):
             pass
 
-        def _send(self, status, payload=None, headers=None):
-            body = b"" if payload is None else json.dumps(payload).encode()
+        def _send(self, status, payload=None, headers=None, raw=None):
+            body = raw.encode() if raw is not None else (
+                b"" if payload is None else json.dumps(payload).encode())
             self.send_response(status)
             for key, value in (headers or {}).items():
                 self.send_header(key, value)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "text/plain" if raw is not None
+                             else "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -119,6 +122,7 @@ def _handler(state: State, base: list[str]):
                 form = self._form()
                 state.refuse_authorize = bool(form.get("refuse_authorize", False))
                 state.refuse_refresh = bool(form.get("refuse_refresh", False))
+                state.echo_token = bool(form.get("echo_token", False))
                 state.expires_in = int(form.get("expires_in", 3600))
                 self._send(200, {"configured": True})
             elif url.path == "/oidc/v1/token":
@@ -143,9 +147,14 @@ def _handler(state: State, base: list[str]):
                 state.revoked.append(form["token"])
                 state.valid.discard(form["token"])
                 self._send(200, {})
+            elif url.path == "/api/2.0/sql/statements" and state.echo_token:
+                token = (self.headers.get("Authorization") or "").removeprefix("Bearer ")
+                self._send(403, {"message": f"Jeton {token} sans droit sur ce warehouse"})
             elif url.path == "/api/2.0/sql/statements":
                 if self._authorized():
-                    self._send(200, self._execute(self._form()))
+                    body = self._form()
+                    token = (self.headers.get("Authorization") or "").removeprefix("Bearer ")
+                    self._send(*self._execute(body, token))
             elif url.path.endswith("/cancel"):
                 if self._authorized():
                     state.canceled.append(url.path.split("/")[5])
@@ -153,17 +162,32 @@ def _handler(state: State, base: list[str]):
             else:
                 self._send(404, {"message": "inconnu"})
 
-        def _execute(self, body):
+        def _execute(self, body, token):
+            """(statut, charge utile, en-têtes, texte brut) de la réponse."""
             sql = body["statement"]
             state.seen_sql.append(sql)
             statement_id = f"st-{next(state.counter)}"
+            # Un serveur qui recopie le jeton reçu dans son erreur : les tests vérifient
+            # qu'Atlas ne le restitue jamais (message, corps brut, requête en échec).
+            if sql.startswith("ECHO_HTTP"):
+                return 500, {"message": f"Bearer {token} refusé"}, None, None
+            if sql.startswith("ECHO_LATE"):
+                return 500, {"message": "x" * 295 + f" {token} fin"}, None, None
+            if sql.startswith("ECHO_RAW"):
+                return 502, None, None, f"<html>passerelle : Bearer {token}</html>"
+            if sql.startswith("ECHO_STATEMENT"):
+                padding = "y" * 490 if sql.endswith("LATE") else ""
+                return 200, {"statement_id": statement_id, "status": {
+                    "state": "FAILED", "error": {"message": f"{padding}near {token} fin"}}}, \
+                    None, None
             if sql == "SELECT pg_sleep":
                 reply = {"statement_id": statement_id, "status": {"state": "RUNNING"}}
                 state.statements[statement_id] = {"reply": reply, "chunks": []}
-                return reply
+                return 200, reply, None, None
             if sql.startswith("BROKEN"):
-                return {"statement_id": statement_id, "status": {
-                    "state": "FAILED", "error": {"message": "[PARSE_SYNTAX_ERROR] near BROKEN"}}}
+                return 200, {"statement_id": statement_id, "status": {
+                    "state": "FAILED", "error": {"message": "[PARSE_SYNTAX_ERROR] near BROKEN"}}}, \
+                    None, None
             if sql == "SELECT 1 AS ok":
                 columns = [{"name": "ok", "type_name": "INT", "position": 0}]
                 data = [["1"]]
@@ -188,7 +212,7 @@ def _handler(state: State, base: list[str]):
                                   "total_chunk_count": len(chunks), "truncated": truncated},
                      "result": rendered[0]}
             state.statements[statement_id] = {"reply": reply, "chunks": rendered}
-            return reply
+            return 200, reply, None, None
 
     return Handler
 

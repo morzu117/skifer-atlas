@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from ..filelock import LockTimeout, file_lock, file_lock_if_free
+from ..masking import mask_secrets
 
 MIN_VERSION = (2, 30)
 TIMEOUT = 120  # secondes ; un clone d'annuaire reste petit
@@ -90,9 +91,8 @@ def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
         detail = (result.stderr or result.stdout).strip().splitlines()
         message = detail[-1] if detail else "?"
         output = (result.stderr or result.stdout).strip()
-        if token:
-            message = message.replace(token, "***")
-            output = output.replace(token, "***")
+        message = mask_secrets(message, token)
+        output = mask_secrets(output, token)
         raise RepoError(error_code, f"git {args[0]} a échoué : {message}", output=output)
     return result.stdout
 

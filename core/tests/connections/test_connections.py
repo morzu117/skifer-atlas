@@ -1,5 +1,6 @@
 """Coffre, OAuth et connecteur Databricks (plan 0008), contre un faux Databricks local."""
 
+import contextlib
 import os
 import shutil
 import socket
@@ -148,6 +149,256 @@ def test_busy_redirect_port_is_reported(client, fake):
         squatter.listen()
         response = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize")
     assert (response.status_code, response.json()["detail"]["code"]) == (409, "oauth_port_busy")
+
+
+def test_relaunching_replaces_the_flow_still_listening(client, fake):
+    """Page d'autorisation abandonnée : relancer remplace l'écoute du premier flux, sans port occupé."""
+    entry = point(fake)
+    space("nordis", [entry])
+    first = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize")
+    abandoned = oauth.FLOWS.last(("nordis", "dbx-fr"))
+    assert first.status_code == 200 and abandoned.status == "pending"
+    second = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize")
+    assert second.status_code == 200
+    assert abandoned.status == "failed" and abandoned.server is None
+    assert oauth.FLOWS.last(("nordis", "dbx-fr")).status == "pending"
+    assert second.json()["authorize_url"] != first.json()["authorize_url"]
+
+
+def _callback(url: str, port: int) -> str:
+    """Le retour du navigateur d'une autorisation lancée avant : même `state`, code quelconque."""
+    from urllib.parse import parse_qs, urlparse
+
+    state = parse_qs(urlparse(url).query)["state"][0]
+    return f"http://127.0.0.1:{port}/?code=code-tardif&state={state}"
+
+
+def test_cancelling_stops_the_flow_and_a_late_callback_connects_nothing(client, fake):
+    entry = point(fake)
+    space("nordis", [entry])
+    started = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize").json()
+    flow = oauth.FLOWS.last(("nordis", "dbx-fr"))
+    cancelled = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize/cancel")
+    assert cancelled.status_code == 200
+    assert (flow.status, flow.error, flow.server) == ("failed", "Connexion annulée.", None)
+    status = client.get("/api/workspaces/nordis/connections/dbx-fr/status").json()
+    assert status["flow"] == {"status": "failed", "error": "Connexion annulée."}
+    # La page d'autorisation, déjà ouverte, rappelle Atlas : plus personne n'écoute.
+    with pytest.raises(urllib.error.URLError):
+        urllib.request.urlopen(_callback(started["authorize_url"], entry["oauth_redirect_port"]),
+                               timeout=5)
+    assert keyring_vault._memory.get_password(SERVICE, "nordis/dbx-fr") is None
+    assert fake.state.token_requests == []
+    # Le port est libre : une nouvelle connexion démarre et aboutit.
+    login(client)
+
+
+def test_cancelling_while_the_callback_is_registering_waits_and_the_vault_holds_the_access(client, fake):
+    import threading
+
+    space("nordis", [point(fake)])
+    started = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize").json()
+    flow = oauth.FLOWS.last(("nordis", "dbx-fr"))
+    registering, release = threading.Event(), threading.Event()
+    store = flow.on_success
+
+    def slow_store(credential):
+        registering.set()
+        release.wait(5)
+        store(credential)
+
+    flow.on_success = slow_store
+    browser = threading.Thread(target=lambda: urllib.request.urlopen(started["authorize_url"], timeout=10).read())
+    browser.start()
+    assert registering.wait(5)
+    answers = []
+    canceller = threading.Thread(target=lambda: answers.append(
+        client.post("/api/workspaces/nordis/connections/dbx-fr/authorize/cancel").json()))
+    canceller.start()
+    time.sleep(0.2)  # l'annulation attend la fin de l'enregistrement
+    assert answers == []
+    release.set()
+    canceller.join(5)
+    browser.join(5)
+    # Rien n'a été arrêté : l'accès est au coffre, et c'est l'écran qui le relit.
+    assert answers == [{"cancelled": False}]
+    assert flow.status == "connected"
+    assert keyring_vault._memory.get_password(SERVICE, "nordis/dbx-fr") is not None
+
+
+def test_a_start_during_a_cancellation_finds_the_port_free(client, fake):
+    import threading
+
+    space("nordis", [point(fake)])
+    client.post("/api/workspaces/nordis/connections/dbx-fr/authorize")
+    flow = oauth.FLOWS.last(("nordis", "dbx-fr"))
+    flow.lock.acquire()  # un retour du navigateur tient le flux : l'annulation est retenue
+    answers = {}
+    canceller = threading.Thread(target=lambda: answers.update(
+        cancel=client.post("/api/workspaces/nordis/connections/dbx-fr/authorize/cancel").json()))
+    canceller.start()
+    time.sleep(0.2)
+    starter = threading.Thread(target=lambda: answers.update(
+        start=client.post("/api/workspaces/nordis/connections/dbx-fr/authorize")))
+    starter.start()
+    time.sleep(0.2)
+    flow.lock.release()
+    canceller.join(5)
+    starter.join(5)
+    assert answers["cancel"] == {"cancelled": True}
+    assert answers["start"].status_code == 200, answers["start"].text
+    assert flow.status == "failed" and oauth.FLOWS.last(("nordis", "dbx-fr")).status == "pending"
+
+
+def test_cancelling_without_a_pending_flow_is_harmless(client, fake):
+    space("nordis", [point(fake)])
+    assert client.post("/api/workspaces/nordis/connections/dbx-fr/authorize/cancel").status_code == 200
+    login(client)
+    # Un ancien flux connecté du même identifiant n'est pas « en attente » : rien à annuler.
+    again = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize/cancel")
+    assert again.status_code == 200 and again.json() == {"cancelled": False}
+    assert oauth.FLOWS.last(("nordis", "dbx-fr")).status == "connected"
+
+
+def test_cancelling_stops_the_pending_flow_and_ignores_an_old_one_of_the_same_id(client, fake):
+    """Un identifiant de brouillon réutilisé : l'ancien flux OAuth connecté ne dicte pas l'issue
+    de l'annulation du SSO en attente, ni l'inverse (points d'accès et brouillons)."""
+    from skifer_atlas.connectors.snowflake import SSO_FLOWS, SsoFlow
+
+    space("nordis", [point(fake)])
+    login(client)  # flux OAuth « connected » pour (nordis, dbx-fr)
+    key = ("nordis", "dbx-fr")
+    sso = SsoFlow(key)
+    SSO_FLOWS._last[key] = sso  # un SSO en attente sur le même identifiant
+    try:
+        draft = {"id": "dbx-fr", "platform": "databricks", "host": "https://adb-1.azuredatabricks.net"}
+        for route, body in (("connections/dbx-fr/authorize/cancel", None),
+                            ("access-point-draft/authorize/cancel", {"access_point": draft})):
+            sso.status, sso.error = "pending", None
+            answer = client.post(f"/api/workspaces/nordis/{route}", json=body)
+            assert answer.json() == {"cancelled": True}, route
+            assert sso.status == "failed"
+        # Et l'inverse : un SSO ancien « connecté », un flux OAuth en attente.
+        SSO_FLOWS._last[key] = SsoFlow(key, status="connected")
+        time.sleep(1)  # l'écoute du premier flux, terminé, se ferme en tâche de fond
+        again = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize")
+        assert again.status_code == 200, again.text
+        waiting = oauth.FLOWS.last(key)
+        assert waiting.status == "pending"
+        assert client.post("/api/workspaces/nordis/connections/dbx-fr/authorize/cancel").json() == {"cancelled": True}
+        assert waiting.status == "failed"
+    finally:
+        SSO_FLOWS._last.pop(key, None)
+
+
+def test_forgetting_a_draft_while_a_callback_registers_and_a_cancel_waits_does_not_deadlock(client, fake):
+    """Ordre des verrous registre, flux, `_draft_lock` : le retour du navigateur tient le verrou de son
+    flux et attend `_draft_lock` ; l'annulation tient le registre en attendant ce flux ; « Oublier »
+    tient `_draft_lock`. Chaque fil a un délai : un interblocage fait échouer le test."""
+    from skifer_atlas.connectors import drafts
+
+    space("nordis", [])
+    entry = point(fake, ap="dbx-brouillon")
+    started = client.post("/api/workspaces/nordis/access-point-draft/authorize",
+                          json={"access_point": entry}).json()
+    key = ("nordis", "dbx-brouillon")
+    drafts.put("nordis", "dbx-brouillon", fake.url)
+    flow = oauth.FLOWS.last(key)
+    registering, proceed = threading.Event(), threading.Event()
+    store = flow.on_success
+
+    def held_store(credential):
+        registering.set()
+        proceed.wait(10)
+        store(credential)  # passe par `_store_draft`, qui attend `_draft_lock`
+
+    flow.on_success = held_store
+    threads = {
+        "browser": threading.Thread(target=lambda: _quietly(urllib.request.urlopen, started["authorize_url"], timeout=10)),
+        "cancel": threading.Thread(target=lambda: connections.cancel_authorization(*key)),
+        "forget": threading.Thread(target=lambda: _quietly(connections.forget_draft_credential, *key)),
+    }
+    for thread in threads.values():
+        thread.daemon = True  # un interblocage ne doit pas bloquer la fin de la suite
+    threads["browser"].start()
+    assert registering.wait(5)  # le flux est tenu par le retour du navigateur
+    threads["cancel"].start()
+    deadline = time.time() + 5
+    while not oauth.FLOWS._lock.locked() and time.time() < deadline:
+        time.sleep(0.01)  # l'annulation tient le registre, en attente du flux
+    threads["forget"].start()
+    time.sleep(0.3)  # « Oublier » tient `_draft_lock` (ancien ordre : puis attend le registre)
+    proceed.set()
+    for name, thread in threads.items():
+        thread.join(10)
+        assert not thread.is_alive(), f"interblocage : {name}"
+    assert drafts.get("nordis", "dbx-brouillon") is None
+    assert keyring_vault._memory.get_password(SERVICE, "nordis/dbx-brouillon") is None
+
+
+def _quietly(call, *args, **kwargs):
+    with contextlib.suppress(Exception):  # seul compte ici que l'appel se termine
+        call(*args, **kwargs)
+
+
+def test_forgetting_a_draft_does_not_fail_a_flow_started_afterwards(client, fake, monkeypatch):
+    from skifer_atlas.connectors import drafts
+    from skifer_atlas.connectors.access_points import AccessPoint
+
+    space("nordis", [])
+    entry = point(fake, ap="dbx-oublie")
+    drafts.put("nordis", "dbx-oublie", fake.url)
+    real_delete = drafts.delete
+
+    def delete_then_a_flow_starts(workspace_id, access_point_id):
+        real_delete(workspace_id, access_point_id)
+        # Un nouveau flux démarre pendant l'oubli, après la lecture des flux existants.
+        oauth.FLOWS.start((workspace_id, access_point_id), AccessPoint.model_validate(entry),
+                          lambda credential: None)
+
+    monkeypatch.setattr(drafts, "delete", delete_then_a_flow_starts)
+    connections.forget_draft_credential("nordis", "dbx-oublie")
+    assert oauth.FLOWS.last(("nordis", "dbx-oublie")).status == "pending"
+
+
+def test_cancelling_requires_the_session_token(client, fake):
+    space("nordis", [point(fake)])
+    from fastapi.testclient import TestClient
+
+    from skifer_atlas.api.app import create_app
+
+    anonymous = TestClient(create_app(token="session"))
+    assert anonymous.post("/api/workspaces/nordis/connections/dbx-fr/authorize/cancel").status_code == 401
+
+
+def test_a_callback_for_a_flow_no_longer_pending_answers_410_and_stores_nothing(client, fake):
+    entry = point(fake)
+    space("nordis", [entry])
+    started = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize").json()
+    flow = oauth.FLOWS.last(("nordis", "dbx-fr"))
+    flow.status = "failed"  # annulé pendant que la requête du navigateur arrive
+    with pytest.raises(urllib.error.HTTPError) as late:
+        urllib.request.urlopen(_callback(started["authorize_url"], entry["oauth_redirect_port"]),
+                               timeout=5)
+    assert late.value.code == 410 and "annulée ou remplacée" in late.value.read().decode()
+    assert keyring_vault._memory.get_password(SERVICE, "nordis/dbx-fr") is None
+    assert fake.state.token_requests == []
+
+
+def test_a_replaced_flow_cannot_connect_late(client, fake):
+    entry = point(fake)
+    space("nordis", [entry])
+    first = client.post("/api/workspaces/nordis/connections/dbx-fr/authorize").json()
+    old = oauth.FLOWS.last(("nordis", "dbx-fr"))
+    client.post("/api/workspaces/nordis/connections/dbx-fr/authorize")
+    assert old.status == "failed" and old.server is None
+    # Le `state` du premier flux est refusé par le second, qui écoute désormais sur ce port.
+    with pytest.raises(urllib.error.HTTPError) as foreign:
+        urllib.request.urlopen(_callback(first["authorize_url"], entry["oauth_redirect_port"]),
+                               timeout=5)
+    assert foreign.value.code == 400
+    assert keyring_vault._memory.get_password(SERVICE, "nordis/dbx-fr") is None
+    assert oauth.FLOWS.last(("nordis", "dbx-fr")).status == "pending"
 
 
 def test_flow_expires_after_the_listening_delay(env, fake):
@@ -437,6 +688,43 @@ def test_failed_statement_reports_databricks_message(env, fake):
     with pytest.raises(RepoError) as error:
         connections.run_aggregate("nordis", "dbx-fr", "BROKEN")
     assert error.value.code == "query_failed" and "PARSE_SYNTAX_ERROR" in error.value.message
+
+
+# --- le jeton envoyé n'est jamais restitué, même recopié par la plateforme ------------------
+
+PAT = "dapi-perso-echo-7"
+
+
+@pytest.mark.parametrize("sql,code", [
+    ("ECHO_HTTP", "query_failed"),  # message d'une réponse d'erreur
+    ("ECHO_LATE", "query_failed"),  # jeton à cheval sur la limite de 300 caractères
+    ("ECHO_RAW", "query_failed"),  # corps brut, hors JSON
+    ("ECHO_STATEMENT", "query_failed"),  # requête terminée en échec
+    ("ECHO_STATEMENT_LATE", "query_failed"),  # idem, jeton à cheval sur la limite de 500
+])
+def test_a_token_echoed_by_databricks_is_masked(env, fake, sql, code):
+    space("nordis", [point(fake)])
+    connections.store_personal_token("nordis", "dbx-fr", PAT)
+    fake.state.valid.add(PAT)
+    with pytest.raises(RepoError) as error:
+        connections.run_aggregate("nordis", "dbx-fr", sql)
+    assert error.value.code == code
+    assert PAT not in error.value.message and PAT[:12] not in error.value.message
+    assert "***" in error.value.message
+
+
+def test_an_echoed_token_does_not_reach_the_test_route(client, fake, monkeypatch):
+    space("nordis", [point(fake)])
+    connections.store_personal_token("nordis", "dbx-fr", PAT)
+    fake.state.valid.add(PAT)
+    # Le faux répond à « SELECT 1 AS ok » : la requête d'essai devient un écho du jeton.
+    monkeypatch.setattr(databricks.DatabricksConnector, "test",
+                        lambda self: self.run_aggregate("ECHO_HTTP"))
+    answer = client.post("/api/workspaces/nordis/connections/dbx-fr/test").json()
+    assert answer["ok"] is False
+    assert PAT not in answer["error"]["message"] and "***" in answer["error"]["message"]
+    for body in client.bodies:
+        assert PAT not in body
 
 
 # --- critère 7 : plateformes autorisées -----------------------------------------------------

@@ -12,6 +12,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+from ..masking import mask_body, mask_secrets
 from ..repo.git import RepoError
 
 TIMEOUT = 30  # secondes, par appel
@@ -54,7 +55,8 @@ def request(method: str, url: str, *, token: str | None = None, json_body: Any =
     except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as error:
         reason = getattr(error, "reason", error)
         raise RepoError("host_unreachable", f"Hôte injoignable : "
-                        f"{urllib.parse.urlparse(url).netloc} ({reason}).") from None
+                        f"{urllib.parse.urlparse(url).netloc} "
+                        f"({mask_secrets(str(reason), token)}).") from None
 
 
 def _decode(raw: bytes) -> Any:
@@ -65,8 +67,10 @@ def _decode(raw: bytes) -> Any:
         return text
 
 
-def message_of(body: Any) -> str:
-    """Message d'erreur d'une réponse, borné, sans jamais recopier un jeton envoyé."""
+def message_of(body: Any, *secrets: str | None) -> str:
+    """Message d'erreur d'une réponse, borné ; les `secrets` envoyés (jeton, code,
+    vérificateur) y sont remplacés par `***` avant la troncature."""
+    body = mask_body(body, *secrets)
     if isinstance(body, dict):
         for key in ("message", "error_description", "error"):
             if isinstance(body.get(key), str):

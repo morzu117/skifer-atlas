@@ -29,6 +29,8 @@ Brief 7.2, 8.3, 8.4, 10.5 ; guide 3.7, 5 (10.5), 7 (historique complet) ; `scree
 9. Après cinq erreurs consécutives de suivi, l'écran affiche l'erreur et permet un nouveau lancement. La première lecture arrive après 400 ms, puis les reprises après erreur attendent 400, 800, 1 600 puis 3 200 ms (plafond). Une réponse réussie rétablit le rythme de 400 ms et remet le compteur à zéro ; un 404 arrête le suivi dès sa réception.
 10. Si l'annulation échoue, l'écran affiche l'erreur renvoyée, sauf `not_running` ; une réponse terminale du suivi efface l'erreur d'annulation.
 11. Avec une tolérance de 8 %, le curseur indique 8 % et la comparaison utilise cette valeur. Avec 7,25 %, la borne haute est arrondie au pas supérieur (7,3 %) et la demande envoie la valeur choisie, sans l'arrondir de nouveau.
+12. Si le lancement est refusé parce que l'accès à une plateforme est perdu (`not_connected`, `access_expired`), l'écran l'explique, renvoie vers Mes connexions et relit l'aperçu : le bandeau « Connexion requise » propose la reconnexion.
+13. Un double clic sur « Se connecter à… » du bandeau « Connexion requise » ne lance qu'une autorisation OAuth ; une page d'autorisation abandonnée se relance avec « Recommencer la connexion ».
 
 ## Tests
 - Composants : matrice (seuils et couleurs), détail, panneau de lancement.

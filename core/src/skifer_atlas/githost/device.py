@@ -27,6 +27,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
+from ..masking import mask_secrets
 from ..paths import is_workspace_id
 from ..repo.git import RepoError
 from ..vault import GITHUB_ENTRY, Credential, Vault
@@ -161,8 +162,8 @@ def _poll(flow: Flow) -> dict:
         flow.status = "expired"
     elif error and error != "authorization_pending":
         flow.status = "denied"
-        raise RepoError("device_flow_failed", "GitHub a refusé la connexion : "
-                        f"{answer.get('error_description') or error}.")
+        detail = mask_secrets(str(answer.get("error_description") or error), flow.device_code)
+        raise RepoError("device_flow_failed", f"GitHub a refusé la connexion : {detail}.")
     elif not error and answer.get("access_token"):
         token = answer["access_token"]
         expires_in = answer.get("expires_in")

@@ -23,6 +23,9 @@ Brief 7.1, 7.2, 10.6 ; guide 5 (10.6) ; `screens/10.6-connexions.html` ; plans 0
 4. Changer d'espace change la liste ; aucune connexion d'un autre espace n'apparaît.
 5. Aucun élément du DOM ne contient de token (test Playwright qui cherche les valeurs du faux serveur OAuth).
 6. Une plateforme non autorisée n'apparaît pas dans le panneau.
+7. Un double clic sur « Se connecter » (ou sur l'OAuth du panneau) ne lance qu'un flux ; les boutons sont désactivés pendant le lancement seulement : une page d'autorisation abandonnée se relance avec « Annuler » puis « Se connecter ».
+8. Un test refusé pour accès expiré ou jamais connecté est expliqué (cause et consigne) ; la ligne propose alors « Reconnecter » sans recharger l'écran.
+9. Les codes d'erreur des connecteurs et du coffre (`not_connected`, `access_expired`, `vault_unavailable`, `oauth_port_busy`, `query_failed`, `query_timeout`, `host_unreachable`, `host_rejected`) s'affichent avec un titre et une consigne, jamais avec le texte brut du serveur (ADR 0044).
 
 ## Tests
 - Composants : tableau et états.

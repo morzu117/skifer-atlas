@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   api,
   ApiError,
@@ -205,6 +205,8 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
   const [done, setDone] = useState<Run | null>(null);
   const [failure, setFailure] = useState<Explained | null>(null);
   const [attempted, setAttempted] = useState(false);
+  // Relecture de l'aperçu à la demande : un accès perdu pendant le lancement y réapparaît.
+  const [recheck, setRecheck] = useState(0);
   const starting = useRef(false);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -254,7 +256,7 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
       alive = false;
       clearTimeout(timer);
     };
-  }, [ws.id, key]);
+  }, [ws.id, key, recheck]);
 
   // Progression : relue tant que la comparaison tourne.
   useEffect(() => {
@@ -325,7 +327,12 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
       });
     } catch (reason) {
       if (reason instanceof ApiError && reason.code === "needs_auth") setMissing(reason.issues as MissingAccess[]);
-      else setFailure(explain(reason));
+      else {
+        const explained = explain(reason);
+        setFailure(explained);
+        // Accès perdu : l'aperçu relu rend le bandeau « Connexion requise » et ses boutons.
+        if (explained.action === "reconnect") setRecheck((n) => n + 1);
+      }
     } finally {
       starting.current = false;
       setIsStarting(false);
@@ -449,6 +456,12 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
       {failure && (
         <Banner tone="bad" title={failure.title}>
           {failure.text}
+          {failure.action === "reconnect" && (
+            <>
+              {" "}
+              <a href={href.view(ws.id, "connexions")}>Reconnecter dans Mes connexions</a>
+            </>
+          )}
         </Banner>
       )}
       {running && <Progress running={running} onCancel={cancel} />}
@@ -503,6 +516,11 @@ function Progress({ running, onCancel }: { running: Running; onCancel: () => voi
 function Authenticate({ ws, missing, onReady, resume }: { ws: Workspace; missing: MissingAccess[]; onReady: () => void; resume?: () => void }) {
   const [waiting, setWaiting] = useState<string[]>([]);
   const [failure, setFailure] = useState<Explained | null>(null);
+  // Un second clic sur le même bouton, avant la réponse du serveur, ne relance pas l'OAuth.
+  // La garde ne couvre que le lancement : si la page d'autorisation est fermée, « Recommencer »
+  // relance et remplace l'écoute du premier flux côté serveur.
+  const starting = useRef(new Set<string>());
+  const [launching, setLaunching] = useState<string[]>([]);
   const done = useRef(false);
   const latest = useRef({ onReady, resume });
   latest.current = { onReady, resume };
@@ -531,6 +549,9 @@ function Authenticate({ ws, missing, onReady, resume }: { ws: Workspace; missing
   }, [waiting, ws.id]);
 
   async function connect(point: string) {
+    if (starting.current.has(point)) return;
+    starting.current.add(point);
+    setLaunching([...starting.current]);
     setFailure(null);
     try {
       // SSO Snowflake : pas d'URL, Atlas ouvre lui-même le navigateur (plan 0018).
@@ -539,6 +560,9 @@ function Authenticate({ ws, missing, onReady, resume }: { ws: Workspace; missing
       setWaiting((w) => [...new Set([...w, point])]);
     } catch (reason) {
       setFailure(explain(reason));
+    } finally {
+      starting.current.delete(point);
+      setLaunching([...starting.current]);
     }
   }
 
@@ -548,9 +572,16 @@ function Authenticate({ ws, missing, onReady, resume }: { ws: Workspace; missing
       {missing.map((m) => m.access_point).join(", ")}.
       <span className="auth-actions">
         {missing.map((m) => (
-          <button key={m.access_point} type="button" className="btn btn-secondary" onClick={() => void connect(m.access_point)}>
-            {waiting.includes(m.access_point) ? `En attente de ${m.access_point}…` : `Se connecter à ${m.access_point}`}
-          </button>
+          <Fragment key={m.access_point}>
+            <button type="button" className="btn btn-secondary" disabled={launching.includes(m.access_point) || waiting.includes(m.access_point)} onClick={() => void connect(m.access_point)}>
+              {waiting.includes(m.access_point) ? `En attente de ${m.access_point}…` : `Se connecter à ${m.access_point}`}
+            </button>
+            {waiting.includes(m.access_point) && (
+              <button type="button" className="btn btn-neutral" disabled={launching.includes(m.access_point)} onClick={() => void connect(m.access_point)}>
+                {`Recommencer la connexion à ${m.access_point}`}
+              </button>
+            )}
+          </Fragment>
         ))}
         <a href={href.view(ws.id, "connexions")}>Mes connexions</a>
       </span>

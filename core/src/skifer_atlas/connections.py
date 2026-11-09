@@ -32,6 +32,9 @@ from .vault import Credential, Vault
 from .workspaces import repo_dir
 
 SUPPORTED_PLATFORMS = ("databricks", "snowflake")
+# Ordre des verrous, toujours : registre des flux (`Flows`/`SsoFlows`), puis verrou du flux, puis
+# `_draft_lock`. On ne prend jamais un verrou de registre en tenant `_draft_lock` : le retour du
+# navigateur tient celui de son flux et attend `_draft_lock` dans `store`.
 _draft_lock = threading.Lock()
 _draft_attempts: dict[tuple[str, str], object] = {}
 _refresh_locks = [threading.Lock() for _ in range(64)]
@@ -201,6 +204,16 @@ def authorize(workspace_id: str, access_point_id: str, vault: Vault | None = Non
                       listen_seconds, user)
 
 
+def cancel_authorization(workspace_id: str, access_point_id: str) -> dict:
+    """Abandonne la connexion en attente de ce point d'accès (déclaré ou en brouillon) :
+    l'écoute de retour est fermée, et la page d'autorisation déjà ouverte ne connecte plus
+    rien. `cancelled` dit si un flux en attente a été arrêté ; l'accès, lui, se lit au coffre
+    (le retour du navigateur a pu aboutir pendant l'annulation) : l'écran relit l'état."""
+    key = (workspace_id, access_point_id)
+    flows = [flow for flow in (oauth.FLOWS.cancel(key), SSO_FLOWS.cancel(key)) if flow is not None]
+    return {"cancelled": any(flow.status == "failed" for flow in flows)}
+
+
 def authorize_draft(workspace_id: str, raw: dict, vault: Vault | None = None,
                     listen_seconds: float = oauth.LISTEN_SECONDS,
                     user: str | None = None) -> dict:
@@ -225,6 +238,10 @@ def forget_draft_credential(workspace_id: str, access_point_id: str,
         raise RepoError("access_point_exists", "Ce point d'accès est déclaré.")
     vault = vault or Vault()
     key = (workspace_id, access_point_id)
+    # Les flux existants quand l'oubli commence, lus avant `_draft_lock` (ordre des verrous) : un flux
+    # démarré ensuite n'est pas visé ; démarré avant le retrait de la tentative, son enregistrement
+    # est refusé par `_store_draft`.
+    flows = (oauth.FLOWS.last(key), SSO_FLOWS.last(key))
     with _draft_lock:
         if drafts.get(workspace_id, access_point_id) is None:
             raise RepoError("not_found", "Brouillon inconnu.")
@@ -233,11 +250,9 @@ def forget_draft_credential(workspace_id: str, access_point_id: str,
         logins.delete(workspace_id, access_point_id)
         drafts.delete(workspace_id, access_point_id)
         live = LIVE.pop(key, None)
-        oauth_flow = oauth.FLOWS.last(key)
-        sso_flow = SSO_FLOWS.last(key)
     if live is not None:
         snowflake_connector.close_quietly(live)
-    for flow in (oauth_flow, sso_flow):
+    for flow in flows:
         if flow is not None and flow.status == "pending":
             flow.finish("failed", "Connexion de brouillon oubliée.")
     return {"removed": removed}
@@ -273,6 +288,7 @@ def _authorize_sso(workspace_id: str, point: AccessPoint, vault: Vault | None,
 
     def store(connection) -> None:
         tokens = snowflake_connector.session_tokens(connection)
+
         def save() -> None:
             if draft:
                 drafts.put(workspace_id, point.id, point.base_url)
@@ -313,6 +329,7 @@ def _authorize(workspace_id: str, point: AccessPoint, vault: Vault | None,
 
     def store(credential: Credential) -> None:
         credential.host = point.base_url
+
         def save() -> None:
             if draft:
                 drafts.put(workspace_id, point.id, point.base_url)

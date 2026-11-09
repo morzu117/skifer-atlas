@@ -838,6 +838,7 @@ textarea.prop-input { resize: vertical; }
 .github-device-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--atlas-space-2); }
 .connections-panel { flex: 1 1 var(--atlas-launch-basis); max-width: var(--atlas-launch-w); }
 .connections-form { gap: var(--atlas-space-3); }
+.connections-fields { display: flex; flex-direction: column; gap: var(--atlas-space-3); margin: 0; padding: 0; border: 0; min-width: 0; }
 .connections-form .select, .connections-form .select select { width: 100%; }
 .connections-form p { margin: 0; }
 .connections-form textarea {

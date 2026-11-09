@@ -57,6 +57,31 @@ describe("explain", () => {
     expect(explained.text).toMatch(/relisez la proposition/);
   });
 
+  // Codes des connecteurs et du coffre : chacun a un titre et une consigne, jamais le texte brut du serveur.
+  it.each([
+    ["not_connected", 409, "Pas encore connecté", /Mes connexions/],
+    ["access_expired", 409, "Accès expiré", /Mes connexions/],
+    ["vault_unavailable", 503, "Trousseau du système indisponible", /Déverrouillez/],
+    ["oauth_port_busy", 409, "Une connexion OAuth est déjà en cours", /Terminez-la/],
+    ["query_failed", 502, "La plateforme a refusé la requête", /Vérifiez vos droits/],
+    ["query_timeout", 504, "La requête a dépassé le délai", /entrepôt/],
+    ["host_unreachable", 502, "Hôte injoignable", /Vérifiez l'adresse/],
+    ["host_rejected", 422, "GitHub a refusé la demande", /Rechargez/],
+  ])("[S-0016-09] %s : titre et consigne, sans le texte brut du serveur", (code, status, title, advice) => {
+    const raw = `texte brut du serveur pour ${code}`;
+    const found = explain(new ApiError(status, code, raw));
+    expect(found.title).toBe(title);
+    expect(found.text).toMatch(advice);
+    expect(found.text).not.toContain(raw);
+    expect(found.title).not.toBe("L'opération a échoué");
+  });
+
+  it("[S-0016-09] seuls not_connected et access_expired mènent à la reconnexion", () => {
+    const actions = ["not_connected", "access_expired", "vault_unavailable", "oauth_port_busy", "query_failed", "query_timeout", "host_unreachable", "host_rejected"]
+      .filter((code) => explain(new ApiError(409, code, "x")).action === "reconnect");
+    expect(actions).toEqual(["not_connected", "access_expired"]);
+  });
+
   it("un code inconnu garde le titre générique et le texte du serveur", () => {
     expect(explain(new ApiError(500, "inconnu", "Détail du serveur."))).toEqual({ title: "L'opération a échoué", text: "Détail du serveur." });
   });

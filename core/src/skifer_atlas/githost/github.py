@@ -16,6 +16,7 @@ import urllib.request
 from typing import Any
 
 from ..governance.rules import Review
+from ..masking import mask_secrets
 from ..repo.git import RepoError
 from .base import Comment, GitHost, PullRequest, ReviewEvent
 
@@ -74,7 +75,8 @@ class GitHubHost(GitHost):
                 body = response.read()
         except urllib.error.HTTPError as error:
             try:
-                detail = json.loads(error.read() or b"{}").get("message", "")
+                detail = mask_secrets(str(json.loads(error.read() or b"{}").get("message", "")),
+                                      self._token)
             except ValueError:
                 detail = ""
             code = _ERRORS.get(error.code, "host_failed")

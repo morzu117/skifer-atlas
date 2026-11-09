@@ -149,3 +149,59 @@ def test_databricks_rejects_a_row_with_the_wrong_number_of_cells(monkeypatch):
     with pytest.raises(RepoError) as refused:
         connector.run_aggregate("SELECT 1")
     assert refused.value.code == "query_failed"
+
+
+def test_message_of_masks_known_secrets_before_truncating():
+    token = "dapi-0123456789abcdef"
+    # Le jeton à cheval sur la limite de 300 caractères : masqué avant la troncature.
+    late = http.message_of({"message": "x" * 295 + token + " fin"}, token)
+    assert token not in late and token[:8] not in late and "***" in late
+    assert http.message_of({"error": f"jeton {token}"}, token) == "jeton ***"
+    assert token not in http.message_of(f"corps brut {token}", token)
+    # Hors des clés connues, le corps est restitué sérialisé : masqué lui aussi, même
+    # dans une liste imbriquée ou avec des caractères que `str(dict)` échapperait.
+    odd = "a'b\\c-secret"
+    assert odd not in http.message_of({"details": [{"hint": f"vu {odd}"}]}, odd)
+    assert http.message_of({"error": "invalid_grant"}) == "invalid_grant"
+    assert http.message_of(None, token) == ""
+
+
+def test_secret_variants_and_empty_secrets():
+    from skifer_atlas.masking import mask_secrets
+
+    assert mask_secrets("a b/c=d", "b/c=d") == "a ***"
+    assert mask_secrets("redirect=b%2Fc%3Dd", "b/c=d") == "redirect=***"
+    assert mask_secrets("rien à masquer", "", None) == "rien à masquer"
+
+
+def test_oauth_code_exchange_error_does_not_echo_the_code_or_verifier(monkeypatch):
+    endpoints = oauth.Endpoints("https://adb.example.com/a", "https://adb.example.com/t")
+    monkeypatch.setattr(oauth, "request", lambda *_args, **_kwargs: http.Response(400, {
+        "error_description": "code code-77 ou vérificateur verif-88 invalide"}))
+    with pytest.raises(RepoError) as refused:
+        oauth.exchange(endpoints, "databricks-cli", "code-77", "verif-88", "http://localhost")
+    assert refused.value.code == "oauth_failed"
+    assert "code-77" not in refused.value.message and "verif-88" not in refused.value.message
+    assert "***" in refused.value.message
+
+
+def test_unreachable_host_message_does_not_carry_the_token(monkeypatch):
+    import urllib.error
+
+    def refuse(*_args, **_kwargs):
+        raise urllib.error.URLError("refusé pour Bearer jeton-xyz")
+
+    monkeypatch.setattr(http._OPENER, "open", refuse)
+    with pytest.raises(RepoError) as refused:
+        http.request("GET", "https://adb.example.com/x", token="jeton-xyz")
+    assert refused.value.code == "host_unreachable" and "jeton-xyz" not in refused.value.message
+
+
+def test_a_secret_returned_as_a_json_key_is_masked():
+    from skifer_atlas.connectors.http import message_of
+    from skifer_atlas.masking import mask_body
+
+    body = {"dapi-secret-key": "refusé", "autre": {"dapi-secret-key": ["x"]}}
+    assert "dapi-secret-key" not in str(mask_body(body, "dapi-secret-key"))
+    assert "dapi-secret-key" not in message_of(body, "dapi-secret-key")
+    assert "***" in message_of(body, "dapi-secret-key")

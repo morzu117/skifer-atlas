@@ -199,6 +199,167 @@ def test_errors_are_translated():
     assert down.code == "host_unreachable"
 
 
+def test_session_tokens_echoed_in_an_error_are_masked():
+    from snowflake.connector import errors
+
+    session, master = "sess-secret-123", "master-secret-456"
+    # Le jeton à cheval sur la limite de 300 caractères : masqué avant la troncature.
+    message = "x" * 280 + session + " puis " + master
+    for error in (errors.OperationalError(msg=message, errno=14),
+                  errors.ProgrammingError(msg=message, errno=2003),
+                  errors.ProgrammingError(msg=message, errno=1000)):
+        found = connector.translate(error, (session, master))
+        assert session not in found.message and master not in found.message
+        assert session[:8] not in found.message and "***" in found.message
+
+
+def test_connector_translates_with_its_session_tokens():
+    point = AccessPoint.model_validate({"id": "snow-de", "platform": "snowflake",
+                                        "host": "https://xy12345.snowflakecomputing.com",
+                                        "owner": "claire.m", "auth": "sso"})
+    one = connector.SnowflakeConnector(point, "anna", session=("sess-1", "master-1"))
+    assert one._secrets() == ("sess-1", "master-1")
+    one.renewed = ("sess-2", "master-2", None)
+    assert one._secrets() == ("sess-1", "master-1", "sess-2", "master-2")
+    assert connector.SnowflakeConnector(point, "anna")._secrets() == ()
+
+
+def test_tokens_renewed_during_the_call_are_masked_in_its_error():
+    """Le pilote renouvelle la session puis cite le nouveau jeton dans l'erreur : `renewed`
+    n'est rempli qu'à la libération de la connexion, les jetons sont donc lus sur elle."""
+    from types import SimpleNamespace
+
+    from snowflake.connector import errors
+
+    new_session, new_master = "sess-renouvele-789", "master-renouvele-012"
+
+    class Cursor:
+        def execute_async(self, sql):
+            raise errors.ProgrammingError(msg=f"session {new_session} / maître {new_master} refusés",
+                                          errno=2003)
+
+        def close(self):
+            pass
+
+    class Live:
+        def cursor(self):
+            return Cursor()
+
+        def _get_connection_info(self, include_master_token=False):
+            return SimpleNamespace(session_token=new_session, master_token=new_master,
+                                   master_token_expires_at_ms=None)
+
+    point = AccessPoint.model_validate({"id": "snow-de", "platform": "snowflake",
+                                        "host": "https://xy12345.snowflakecomputing.com",
+                                        "owner": "claire.m", "auth": "sso"})
+    one = connector.SnowflakeConnector(point, "anna", session=("sess-1", "master-1"), live=Live())
+    with pytest.raises(RepoError) as refused:
+        one.run_aggregate("SELECT 1")
+    assert one.renewed is None  # `_release` n'a encore rien retenu : seule la lecture directe masque
+    assert new_session not in refused.value.message and new_master not in refused.value.message
+    assert "***" in refused.value.message
+
+
+def test_cancelled_sso_flow_registers_nothing_when_the_browser_finishes_late(monkeypatch):
+    import threading
+    from types import SimpleNamespace
+
+    release = threading.Event()
+    closed = []
+
+    class Connection:
+        def close(self):
+            closed.append(True)
+
+    def late_connect(**params):
+        release.wait(5)
+        return Connection()
+
+    monkeypatch.setattr(connector, "_snowflake",
+                        lambda: SimpleNamespace(connect=late_connect, errors=SimpleNamespace(Error=OSError)))
+    monkeypatch.setattr(connector, "connection_params", lambda point, user, **kw: {})
+    point = AccessPoint.model_validate({"id": "snow-de", "platform": "snowflake",
+                                        "host": "https://xy12345.snowflakecomputing.com",
+                                        "owner": "claire.m", "auth": "sso"})
+    flows = connector.SsoFlows()
+    stored = []
+    flow = flows.start(("nordis", "snow-de"), point, "anna", stored.append)
+    assert flows.cancel(("nordis", "snow-de")) is flow
+    assert (flow.status, flow.error) == ("failed", "Connexion annulée.")
+    release.set()  # le navigateur termine l'authentification après l'annulation
+    deadline = time.time() + 5
+    while not closed and time.time() < deadline:
+        time.sleep(0.01)
+    assert closed == [True] and stored == []
+    assert flow.status == "failed"
+
+
+def test_cancelling_an_sso_flow_that_just_registered_reports_connected(monkeypatch):
+    import threading
+    from types import SimpleNamespace
+
+    registering, release = threading.Event(), threading.Event()
+    monkeypatch.setattr(connector, "_snowflake", lambda: SimpleNamespace(
+        connect=lambda **params: SimpleNamespace(close=lambda: None),
+        errors=SimpleNamespace(Error=OSError)))
+    monkeypatch.setattr(connector, "connection_params", lambda point, user, **kw: {})
+    point = AccessPoint.model_validate({"id": "snow-de", "platform": "snowflake",
+                                        "host": "https://xy12345.snowflakecomputing.com",
+                                        "owner": "claire.m", "auth": "sso"})
+
+    def slow_store(connection):
+        registering.set()
+        release.wait(5)
+
+    flows = connector.SsoFlows()
+    flow = flows.start(("nordis", "snow-de"), point, "anna", slow_store)
+    assert registering.wait(5)
+    answers = []
+    canceller = threading.Thread(target=lambda: answers.append(flows.cancel(("nordis", "snow-de"))))
+    canceller.start()
+    time.sleep(0.2)
+    release.set()
+    canceller.join(5)
+    assert answers == [flow] and flow.status == "connected"
+
+
+def test_sso_cancellation_holds_the_registry_while_waiting_for_the_flow(monkeypatch):
+    """Choisi et annulé sous le verrou du registre : tant que l'annulation attend l'enregistrement
+    en cours, ni un nouveau SSO ni une lecture du registre ne s'intercalent. Rien ne s'interbloque
+    ensuite : l'annulation finie, le nouveau flux démarre et reste en attente."""
+    import threading
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(connector, "_snowflake", lambda: SimpleNamespace(
+        connect=lambda **params: threading.Event().wait(30), errors=SimpleNamespace(Error=OSError)))
+    monkeypatch.setattr(connector, "connection_params", lambda point, user, **kw: {})
+    point = AccessPoint.model_validate({"id": "snow-de", "platform": "snowflake",
+                                        "host": "https://xy12345.snowflakecomputing.com",
+                                        "owner": "claire.m", "auth": "sso"})
+    key = ("nordis", "snow-de")
+    flows = connector.SsoFlows()
+    old = flows.start(key, point, "anna", lambda connection: None)
+    old.lock.acquire()  # un enregistrement en cours retient l'annulation
+    answers = {}
+    canceller = threading.Thread(target=lambda: answers.update(cancel=flows.cancel(key)))
+    canceller.start()
+    deadline = time.time() + 5
+    while not flows._lock.locked() and time.time() < deadline:
+        time.sleep(0.01)  # l'annulation tient le verrou du registre
+    starter = threading.Thread(target=lambda: answers.update(new=flows.start(key, point, "anna", lambda c: None)))
+    starter.start()
+    reader = threading.Thread(target=lambda: answers.update(read=flows.last(key)))
+    reader.start()
+    time.sleep(0.2)
+    blocked = "new" not in answers and "read" not in answers
+    old.lock.release()
+    for thread in (canceller, starter, reader):
+        thread.join(5)
+    assert blocked
+    assert answers["cancel"] is old and old.status == "failed"
+    assert answers["new"].status == "pending" and flows.last(key) is answers["new"]
+
+
 # --- critère 2 : paire de clés, passphrase au coffre seulement -------------------------------
 
 def test_key_pair_with_passphrase_only_in_the_vault(client, snow, env, tmp_path, capfd, caplog):

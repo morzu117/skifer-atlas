@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -64,7 +64,7 @@ const LIST: Connection[] = [
   }),
 ];
 
-type Handler = (call: Call) => { status?: number; json?: unknown } | undefined;
+type Handler = (call: Call) => { status?: number; json?: unknown } | Promise<{ status?: number; json?: unknown }> | undefined;
 
 function server(list: Connection[] | (() => Connection[]) = LIST, extra: Handler = () => undefined) {
   return fakeServer((call) => {
@@ -325,6 +325,248 @@ describe("mes connexions", () => {
       access_point: expected,
       justification: "Point d'accès de nordis-de.",
     });
+  });
+
+  it("[S-0016-07] deux clics rapides sur « Se connecter » ne lancent qu'un flux OAuth, boutons désactivés pendant le lancement", async () => {
+    let release!: () => void;
+    const held = new Promise<{ json: unknown }>((resolve) => {
+      release = () => resolve({ json: { authorize_url: "https://adb-1.azuredatabricks.net/oidc/v1/authorize?state=s" } });
+    });
+    const list = () => [connection({ access_point: "dbx-fr", auth: null, my_access: "never" })];
+    const api = server(list, ({ path }) => {
+      if (path === `${API}/connections/dbx-fr/authorize`) return held;
+      if (path === `${API}/connections/dbx-fr/status`) return { json: { ...list()[0], flow: { status: "pending", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    const button = await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" });
+    // Deux clics dans le même tick : la garde est posée avant tout rendu.
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(button).toBeDisabled();
+    release();
+    expect(await screen.findByText("Terminez la connexion dans le navigateur…")).toBeInTheDocument();
+    expect(api.calls.filter((c) => c.method === "POST" && c.path.endsWith("/authorize"))).toHaveLength(1);
+    expect(openExternal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("[S-0016-07] page d'autorisation abandonnée : « Annuler » arrête le flux côté serveur, puis « Se connecter » relance", async () => {
+    const list = () => [connection({ access_point: "dbx-fr", auth: null, my_access: "never" })];
+    const api = server(list, ({ path }) => {
+      if (path === `${API}/connections/dbx-fr/authorize/cancel`) return { json: { cancelled: true } };
+      if (path === `${API}/connections/dbx-fr/authorize`) return { json: { authorize_url: "https://adb-1.azuredatabricks.net/oidc/v1/authorize?state=s" } };
+      if (path === `${API}/connections/dbx-fr/status`) return { json: { ...list()[0], flow: { status: "pending", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" }));
+    expect(await screen.findByText("Terminez la connexion dans le navigateur…")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Annuler la connexion Databricks · dbx-fr" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" }));
+    expect(await screen.findByText("Terminez la connexion dans le navigateur…")).toBeInTheDocument();
+    const posts = api.calls.filter((c) => c.method === "POST").map((c) => c.path.replace(`${API}/connections/dbx-fr/`, ""));
+    expect(posts).toEqual(["authorize", "authorize/cancel", "authorize"]);
+    expect(openExternal).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("[S-0016-07] après l'annulation, la ligne montre l'état du coffre : connecté si le navigateur a abouti avant, quelle que soit la réponse", async () => {
+    let connected = false;
+    const list = () => [connection({ access_point: "dbx-fr", auth: connected ? "oauth" : null, my_access: connected ? "connected" : "never" })];
+    server(list, ({ path }) => {
+      if (path === `${API}/connections/dbx-fr/authorize/cancel`) {
+        connected = true; // le navigateur a terminé pendant l'annulation
+        return { json: { cancelled: true } }; // la réponse n'est pas ce que l'écran affiche
+      }
+      if (path === `${API}/connections/dbx-fr/authorize`) return { json: { authorize_url: "https://adb-1.azuredatabricks.net/oidc/v1/authorize?state=s" } };
+      if (path === `${API}/connections/dbx-fr/status`) return { json: { ...list()[0], flow: { status: "pending", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Annuler la connexion Databricks · dbx-fr" }));
+    expect(await screen.findByRole("cell", { name: /^Connecté ?· ?session OAuth$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Se connecter à Databricks · dbx-fr" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("[S-0016-07] brouillon : l'accès enregistré juste avant l'annulation s'affiche connecté", async () => {
+    let stored = false;
+    server(LIST, ({ path }) => {
+      if (path === `${API}/access-point-draft/authorize`) return { json: { authorize_url: "https://adb-2.azuredatabricks.net/oidc/v1/authorize" } };
+      if (path === `${API}/access-point-draft/authorize/cancel`) {
+        stored = true;
+        return { json: { cancelled: false } };
+      }
+      if (path === `${API}/access-point-draft/status`) {
+        return { json: { ...connection({ access_point: "dbx-de", my_access: stored ? "connected" : "never" }), flow: { status: "pending", error: null }, error: null } };
+      }
+      return undefined;
+    });
+    render(screenFor());
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de"));
+    await userEvent.click(screen.getByRole("button", { name: "S'authentifier avec OAuth" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Annuler la connexion" }));
+    expect(await screen.findByText(/Connecté : le token est rangé dans votre coffre/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reconnecter avec OAuth" })).toBeInTheDocument();
+  });
+
+  it("[S-0016-07] si l'annulation échoue, l'écran le dit au lieu de laisser croire que c'est annulé", async () => {
+    const list = () => [connection({ access_point: "dbx-fr", auth: null, my_access: "never" })];
+    server(list, ({ path }) => {
+      if (path === `${API}/connections/dbx-fr/authorize/cancel`) return { status: 503, json: { detail: { code: "vault_unavailable", message: "x" } } };
+      if (path === `${API}/connections/dbx-fr/authorize`) return { json: { authorize_url: "https://adb-1.azuredatabricks.net/oidc/v1/authorize?state=s" } };
+      if (path === `${API}/connections/dbx-fr/status`) return { json: { ...list()[0], flow: { status: "pending", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Annuler la connexion Databricks · dbx-fr" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Trousseau du système indisponible");
+  });
+
+  it("[S-0016-07] le brouillon est verrouillé pendant la connexion : l'identifiant et l'hôte ne changent plus sous le flux", async () => {
+    server(LIST, ({ path }) => {
+      if (path === `${API}/access-point-draft/authorize`) return { json: { authorize_url: "https://adb-2.azuredatabricks.net/oidc/v1/authorize" } };
+      if (path === `${API}/access-point-draft/status`) return { json: { ...connection({ access_point: "dbx-de" }), flow: { status: "pending", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de"));
+    expect(screen.getByRole("textbox", { name: "Hôte" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "S'authentifier avec OAuth" }));
+    expect(await screen.findByText(/Les champs sont verrouillés le temps de la connexion/)).toBeInTheDocument();
+    for (const name of ["Identifiant", "Hôte", "Schéma"]) expect(screen.getByRole("textbox", { name })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /Plateforme/ })).toBeDisabled();
+  });
+
+  it("[S-0016-07] le brouillon est verrouillé dès le lancement, pas seulement une fois en attente", async () => {
+    let release!: () => void;
+    const held = new Promise<{ json: unknown }>((resolve) => {
+      release = () => resolve({ json: { authorize_url: "https://adb-2.azuredatabricks.net/oidc/v1/authorize" } });
+    });
+    server(LIST, ({ path }) => {
+      if (path === `${API}/access-point-draft/authorize`) return held;
+      if (path === `${API}/access-point-draft/status`) return { json: { ...connection({ access_point: "dbx-de" }), flow: { status: "pending", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de"));
+    await userEvent.click(screen.getByRole("button", { name: "S'authentifier avec OAuth" }));
+    // L'autorisation n'est pas encore répondue : le serveur autorise déjà le point d'origine.
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Identifiant" })).toBeDisabled());
+    expect(screen.getByRole("textbox", { name: "Hôte" })).toBeDisabled();
+    release();
+    expect(await screen.findByText(/Les champs sont verrouillés le temps de la connexion/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Identifiant" })).toBeDisabled();
+  });
+
+  it("[S-0016-07] « Annuler la connexion » du panneau « Nouveau point d'accès » arrête aussi le flux du brouillon", async () => {
+    const api = server(LIST, ({ path }) => {
+      if (path === `${API}/access-point-draft/authorize`) return { json: { authorize_url: "https://adb-2.azuredatabricks.net/oidc/v1/authorize" } };
+      if (path === `${API}/access-point-draft/authorize/cancel`) return { json: { cancelled: true } };
+      if (path === `${API}/access-point-draft/status`) return { json: { ...connection({ access_point: "dbx-de" }), flow: { status: "pending", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de"));
+    await userEvent.click(screen.getByRole("button", { name: "S'authentifier avec OAuth" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Annuler la connexion" }));
+    await screen.findByRole("button", { name: "S'authentifier avec OAuth" });
+    expect(screen.getByRole("textbox", { name: "Identifiant" })).toBeEnabled();
+    const cancel = api.calls.find((c) => c.path === `${API}/access-point-draft/authorize/cancel`);
+    expect(cancel?.method).toBe("POST");
+    expect((cancel?.body as { access_point: { id: string } }).access_point.id).toBe("dbx-de");
+  });
+
+  it("[S-0016-07] le panneau « Nouveau point d'accès » ne lance pas non plus deux fois l'OAuth", async () => {
+    let release!: () => void;
+    const held = new Promise<{ json: unknown }>((resolve) => {
+      release = () => resolve({ json: { authorize_url: "https://adb-2.azuredatabricks.net/oidc/v1/authorize" } });
+    });
+    const api = server(LIST, ({ path }) => {
+      if (path === `${API}/access-point-draft/authorize`) return held;
+      if (path === `${API}/access-point-draft/status`) return { json: { ...connection({ access_point: "dbx-de" }), flow: { status: "pending", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de"));
+    const button = screen.getByRole("button", { name: "S'authentifier avec OAuth" });
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(button).toBeDisabled();
+    release();
+    expect(await screen.findByText("Terminez la connexion dans le navigateur : l'état se met à jour ici.")).toBeInTheDocument();
+    expect(api.calls.filter((c) => c.method === "POST" && c.path.endsWith("/authorize"))).toHaveLength(1);
+  });
+
+  it("[S-0016-07] port de retour OAuth occupé : titre et consigne, pas le texte brut", async () => {
+    const list = () => [connection({ access_point: "dbx-fr", auth: null, my_access: "never" })];
+    server(list, ({ path }) => {
+      if (path === `${API}/connections/dbx-fr/authorize`) {
+        return { status: 409, json: { detail: { code: "oauth_port_busy", message: "Le port 8020 est occupé : texte brut du serveur." } } };
+      }
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Une connexion OAuth est déjà en cours");
+    expect(alert).toHaveTextContent("Terminez-la ou fermez-la, puis réessayez.");
+    expect(alert).not.toHaveTextContent("texte brut");
+    // L'échec ne bloque pas un nouvel essai.
+    expect(screen.getByRole("button", { name: "Se connecter à Databricks · dbx-fr" })).toBeEnabled();
+  });
+
+  it("[S-0016-08] un test refusé pour accès expiré est expliqué, et la ligne propose « Reconnecter »", async () => {
+    let expired = false;
+    const list = () => [connection({ access_point: "dbx-fr", auth: "pat", my_access: expired ? "expired" : "connected" })];
+    const api = server(list, ({ path }) => {
+      if (path === `${API}/connections/dbx-fr/test`) {
+        expired = true;
+        return { json: { ok: false, latency_ms: null, error: { code: "access_expired", message: "La plateforme refuse vos identifiants : texte brut du serveur." } } };
+      }
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Tester Databricks · dbx-fr" }));
+    const status = await screen.findByText(/^Accès expiré\./);
+    expect(status).toHaveTextContent("Reconnectez-vous depuis Mes connexions, puis réessayez.");
+    expect(status).not.toHaveTextContent("texte brut");
+    expect(await screen.findByRole("button", { name: "Reconnecter Databricks · dbx-fr" })).toBeInTheDocument();
+    expect(await screen.findByRole("cell", { name: "Token expiré" })).toBeInTheDocument();
+    expect(api.calls.filter((c) => c.path === `${API}/connections` && c.method === "GET").length).toBeGreaterThanOrEqual(2);
+    expect(status).toBeInTheDocument(); // la relecture de la liste ne perd pas le message
+  });
+
+  it("[S-0016-08] tester le brouillon avant de s'être connecté : « Pas encore connecté » et la marche à suivre", async () => {
+    server(LIST, ({ path }) => {
+      if (path === `${API}/access-point-draft/test`) {
+        return { json: { ok: false, latency_ms: null, error: { code: "not_connected", message: "Pas encore connecté à « dbx-de »." } } };
+      }
+      return undefined;
+    });
+    render(screenFor());
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de"));
+    await userEvent.click(screen.getByRole("button", { name: "Tester la connexion" }));
+    expect(await screen.findByText(/^Pas encore connecté\. .*Connectez-vous depuis Mes connexions/)).toBeInTheDocument();
+  });
+
+  it("un code du serveur non traduit garde son message dans le résultat d'un test", async () => {
+    server(LIST, ({ path }) => {
+      if (path === `${API}/connections/dbx-fr/test`) {
+        return { json: { ok: false, latency_ms: null, error: { code: "platform_forbidden", message: "Accès refusé par Databricks : droits insuffisants." } } };
+      }
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Tester Databricks · dbx-fr" }));
+    expect(await screen.findByText("Accès refusé par Databricks : droits insuffisants.")).toBeInTheDocument();
   });
 
   it("Snowflake en SSO : identifiant, Atlas ouvre le navigateur, puis Connecté · session SSO (plan 0018)", async () => {

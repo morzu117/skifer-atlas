@@ -101,6 +101,11 @@ def authorize(ws: str, ap: str, body: AuthorizeRequest | None = None) -> dict:
     return connections.authorize(workspace_or_404(ws).id, ap, user=body.user if body else None)
 
 
+@router.post("/{ap}/authorize/cancel")
+def cancel_authorization(ws: str, ap: str) -> dict:
+    return connections.cancel_authorization(workspace_or_404(ws).id, ap)
+
+
 @router.put("/{ap}/key-pair")
 def key_pair(ws: str, ap: str, body: KeyPairRequest) -> dict:
     """Paire de clés Snowflake : chemin de la clé au registre local, passphrase au coffre."""
@@ -128,6 +133,12 @@ def revoke(ws: str, ap: str) -> dict:
 def authorize_draft(ws: str, body: DraftRequest) -> dict:
     return connections.authorize_draft(workspace_or_404(ws).id, body.access_point,
                                        user=body.user)
+
+
+@drafts.post("/authorize/cancel")
+def cancel_authorization_draft(ws: str, body: DraftRequest) -> dict:
+    return connections.cancel_authorization(workspace_or_404(ws).id,
+                                            str(body.access_point.get("id", "")))
 
 
 @drafts.put("/key-pair")
