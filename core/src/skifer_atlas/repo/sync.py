@@ -604,15 +604,15 @@ def _warnings(repo: Path) -> list[dict]:
     return []
 
 
-def sync_workspace(workspace_id: str) -> dict:
+def sync_workspace(workspace_id: str, *, automatic: bool = False) -> dict:
     """`git fetch` puis avance rapide de la branche principale. Un historique divergent
     lève `sync_conflict` sans toucher au clone : aucune résolution automatique."""
     _workspace(workspace_id)  # `not_found` avant de créer le fichier verrou d'un espace inconnu
     with clone_lock(repo_dir(workspace_id)):
-        return _sync(workspace_id)
+        return _sync(workspace_id, automatic=automatic)
 
 
-def _sync(workspace_id: str) -> dict:
+def _sync(workspace_id: str, *, automatic: bool = False) -> dict:
     workspace = _workspace(workspace_id)
     repo = repo_dir(workspace_id)
     branch = _valid_meta(repo).main_branch
@@ -632,16 +632,24 @@ def _sync(workspace_id: str) -> dict:
         raise RepoError("sync_conflict", "L'historique local et celui du dépôt distant ont "
                         "divergé : rien n'a été modifié, la résolution se fait à la main.")
     else:
+        if automatic:
+            # Préserver le début du parcours pour la prochaine synchronisation complète.
+            try:
+                run_git(["rev-parse", "--verify", "refs/atlas/tags-checked"], repo)
+            except RepoError:
+                run_git(["update-ref", "refs/atlas/tags-checked", local], repo)
         run_git(["merge", "--quiet", "--ff-only", remote], repo, error_code="sync_conflict")
         result = {"status": "fast_forward", "commit": remote}
-    warnings = _catch_up_tags(repo, local, remote, workspace.git_remote, workspace_id)
+    warnings = ([] if automatic else
+                _catch_up_tags(repo, local, remote, workspace.git_remote, workspace_id))
     meta = _valid_meta(repo)
     account = workspace.account or _host_account(workspace.git_remote, branch, workspace_id)
     update_workspace(workspace.model_copy(update={
         "name": meta.name, "sector": meta.sector, "entities": meta.entities,
-        "account": account, "synced_at": _now(), **_profile(read_governance(repo), account),
+        "account": account, **({} if automatic else {"synced_at": _now()}),
+        **_profile(read_governance(repo), account),
     }))
-    return {**result, "warnings": warnings + _warnings(repo)}
+    return {**result, "warnings": warnings + ([] if automatic else _warnings(repo))}
 
 
 def _catch_up_tags(repo: Path, before: str, after: str, remote_url: str,

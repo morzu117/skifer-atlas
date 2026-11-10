@@ -428,3 +428,21 @@ def test_counts_of_a_local_workspace(client):
     assert created.status_code == 201 and "counts" not in created.json()
     assert client.get("/api/workspaces").json()[0]["counts"] == {
         "kpi": 0, "concept": 0, "open_proposals": 0}
+
+
+def test_atlas_merge_between_auto_and_manual_sync(client, joined, as_):
+    bare, work = joined
+    git(work, "commit", "--allow-empty", "-m", "Avance distante")
+    git(work, "push", "origin", "main")
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "fast_forward"
+    as_("claire.m")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    for account in ("marc.d", "julien.h"):
+        as_(account)
+        assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"}).status_code == 200
+    as_("claire.m")
+    merged = client.post(f"{PROPOSALS}/1/merge")
+    assert merged.status_code == 200, merged.text
+    assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip()
+    result = client.post(f"{WS}/sync").json()
+    assert not any(w["code"] == "versions_tagged" for w in result["warnings"])

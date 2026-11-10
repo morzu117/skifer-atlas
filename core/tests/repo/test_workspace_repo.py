@@ -339,3 +339,46 @@ def test_versions_restore_each_tag(remote):
     with pytest.raises(RepoError) as error:
         document_at(clone, "revenu-net", 9, REVENU_NET)
     assert error.value.code == "not_found"
+
+
+def test_two_auto_advances_then_manual_catches_full_interval(remote):
+    bare, work = remote
+    join_workspace(str(bare))
+    third = merge_on_the_host(work, NORDIS_FR, "version: 2", "version: 3", "FR v3")
+    sync_workspace("groupe-nordis", automatic=True)
+    fourth = merge_on_the_host(work, NORDIS_FR, "version: 3", "version: 4", "FR v4")
+    sync_workspace("groupe-nordis", automatic=True)
+    result = sync_workspace("groupe-nordis")
+    assert [w["code"] for w in result["warnings"]] == ["versions_tagged"]
+    for number, commit in ((3, third), (4, fourth)):
+        assert git(bare, "rev-parse", f"doc/revenu-net--nordis-fr/v{number}^{{commit}}").strip() == commit
+
+
+def test_tagged_atlas_merge_between_auto_and_manual(remote):
+    bare, work = remote
+    join_workspace(str(bare))
+    merge_on_the_host(work, NORDIS_FR, "version: 2", "version: 3", "FR v3")
+    sync_workspace("groupe-nordis", automatic=True)
+    merged = merge_on_the_host(work, NORDIS_FR, "version: 3", "version: 4", "FR v4")
+    git(work, "tag", "doc/revenu-net--nordis-fr/v4", merged)
+    git(work, "push", "origin", "doc/revenu-net--nordis-fr/v4")
+    result = sync_workspace("groupe-nordis")
+    assert [w["code"] for w in result["warnings"]] == ["versions_tagged"]
+    assert "v3" in result["warnings"][0]["message"] and "v4" not in result["warnings"][0]["message"]
+
+
+def test_auto_leaves_pending_local_tag_for_manual_push(remote):
+    bare, work = remote
+    join_workspace(str(bare))
+    merge_on_the_host(work, NORDIS_FR, "version: 2", "version: 3", "FR v3")
+    sync_workspace("groupe-nordis", automatic=True)
+    hook = bare / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+    assert [w["code"] for w in sync_workspace("groupe-nordis")["warnings"]] == [
+        "versions_tagged", "tags_not_pushed"]
+    assert sync_workspace("groupe-nordis", automatic=True)["warnings"] == []
+    assert not git(bare, "tag", "--list", "doc/revenu-net--nordis-fr/v3")
+    hook.unlink()
+    assert sync_workspace("groupe-nordis")["warnings"] == []
+    assert git(bare, "tag", "--list", "doc/revenu-net--nordis-fr/v3").strip()

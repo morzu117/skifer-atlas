@@ -376,7 +376,7 @@ def test_auto_sync_throttles_failures_and_keeps_local_reads(client, joined, monk
 
     calls = []
 
-    def offline(_workspace):
+    def offline(_workspace, **_options):
         calls.append(1)
         raise RepoError("fetch_failed", "inaccessible")
 
@@ -427,7 +427,7 @@ def test_auto_sync_local_and_errors(client, joined, monkeypatch):
                          ("fetch_failed", "offline")]:
         routes._auto_attempts.clear()
 
-        def fail(_workspace, code=code):
+        def fail(_workspace, code=code, **_options):
             raise RepoError(code, "échec")
 
         monkeypatch.setattr(routes, "sync_workspace", fail)
@@ -442,7 +442,7 @@ def test_auto_sync_interval_and_force_are_per_workspace(client, joined, monkeypa
     now = [100.0]
     calls = []
     monkeypatch.setattr(routes.time, "monotonic", lambda: now[0])
-    monkeypatch.setattr(routes, "sync_workspace", lambda ws: calls.append(ws) or
+    monkeypatch.setattr(routes, "sync_workspace", lambda ws, **_options: calls.append(ws) or
                         {"status": "up_to_date", "commit": "abc"})
     routes._auto_attempts.clear()
     assert client.post(f"{WS}/sync/auto").json()["status"] == "up_to_date"
@@ -475,10 +475,10 @@ def test_auto_sync_waits_for_clone_and_route_lock_is_nonblocking(client, joined,
     held, release, waiting = threading.Event(), threading.Event(), threading.Event()
     acquire = filelock._acquire
 
-    def observed_acquire(path, lock, timeout):
+    def observed_acquire(path, lock, timeout, create_parent=True):
         if timeout == routes._AUTO_CLONE_WAIT:
             waiting.set()
-        return acquire(path, lock, timeout)
+        return acquire(path, lock, timeout, create_parent)
 
     monkeypatch.setattr(filelock, "_acquire", observed_acquire)
 
@@ -542,10 +542,101 @@ def test_auto_sync_reports_advance_before_error(client, joined, monkeypatch):
 
     repo = repo_dir("groupe-nordis")
 
-    def advance_then_fail(_workspace):
+    def advance_then_fail(_workspace, **_options):
         git(repo, "commit", "--allow-empty", "-m", "Avance")
         raise RepoError("invalid_meta", "invalide")
 
     monkeypatch.setattr(routes, "sync_workspace", advance_then_fail)
     result = client.post(f"{WS}/sync/auto").json()
     assert result == {"status": "error", "advanced": True, "commit": git(repo, "rev-parse", "HEAD").strip()}
+
+
+@pytest.mark.parametrize("existing_marker", [False, True])
+def test_auto_sync_defers_tagging_to_manual_sync(client, joined, remote, existing_marker):
+    bare, work = remote
+    repo = repo_dir("groupe-nordis")
+    old = git(repo, "rev-parse", "HEAD").strip()
+    if existing_marker:
+        git(repo, "update-ref", "refs/atlas/tags-checked", old)
+    git(work, "switch", "-c", "pr")
+    path = work / REVENU_NET
+    path.write_text(path.read_text().replace("version: 4", "version: 5", 1))
+    commit_all(work, "Version 5")
+    git(work, "switch", "main")
+    git(work, "merge", "--no-ff", "-m", "Fusion version 5", "pr")
+    merged = git(work, "rev-parse", "HEAD").strip()
+    git(work, "push", "origin", "main")
+
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "fast_forward"
+    assert git(repo, "rev-parse", "refs/atlas/tags-checked").strip() == old
+    assert git(repo, "tag", "--list", "doc/revenu-net/v5") == ""
+    assert git(bare, "tag", "--list", "doc/revenu-net/v5") == ""
+    manual = client.post(f"{WS}/sync").json()
+    assert [warning["code"] for warning in manual["warnings"]] == ["versions_tagged"]
+    assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip() == merged
+
+
+def test_auto_sync_workspace_removed_during_request(client, joined, monkeypatch):
+    import shutil
+
+    from skifer_atlas.api.routes import workspaces as routes
+    from skifer_atlas.workspaces import load_registry, save_registry
+
+    lookup = routes.workspace_or_404
+
+    def remove_after_lookup(ws):
+        workspace = lookup(ws)
+        registry = load_registry()
+        registry.workspaces = []
+        save_registry(registry)
+        shutil.rmtree(repo_dir(ws).parent)
+        return workspace
+
+    monkeypatch.setattr(routes, "workspace_or_404", remove_after_lookup)
+    response = client.post(f"{WS}/sync/auto")
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "not_found"
+    assert not repo_dir("groupe-nordis").parent.exists()
+
+
+def test_auto_sync_fetches_published_version_for_sheet(client, joined, remote):
+    bare, work = remote
+    before = client.get(WS).json()["synced_at"]
+    git(work, "switch", "-c", "pr-published")
+    path = work / REVENU_NET
+    path.write_text(path.read_text().replace("version: 4", "version: 5", 1))
+    commit_all(work, "Version 5")
+    git(work, "switch", "main")
+    git(work, "merge", "--no-ff", "-m", "Fusion version 5", "pr-published")
+    git(work, "tag", "doc/revenu-net/v5")
+    git(work, "push", "origin", "main", "doc/revenu-net/v5")
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "fast_forward"
+    assert client.get(WS).json()["synced_at"] == before
+    sheet = client.get(f"{WS}/documents/revenu-net/sheet").json()
+    assert sheet["version_count"] == 3 and sheet["validated_at"]
+    assert client.get(f"{WS}/documents/revenu-net/layout?version=5").status_code == 200
+    assert [v["version"] for v in client.get(f"{WS}/documents/revenu-net/versions").json()] == [3, 4, 5]
+    assert client.post(f"{WS}/sync").json()["warnings"] == []
+    assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip()
+
+
+def test_auto_sync_removal_between_check_and_lock(client, joined, monkeypatch):
+    import shutil
+
+    from skifer_atlas.api.routes import workspaces as routes
+    from skifer_atlas.workspaces import load_registry, save_registry
+
+    original = routes.clone_lock
+
+    def remove_before_lock(repo, **kwargs):
+        registry = load_registry()
+        registry.workspaces = []
+        save_registry(registry)
+        shutil.rmtree(repo.parent)
+        return original(repo, **kwargs)
+
+    monkeypatch.setattr(routes, "clone_lock", remove_before_lock)
+    response = client.post(f"{WS}/sync/auto")
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "not_found"
+    assert not repo_dir("groupe-nordis").parent.exists()

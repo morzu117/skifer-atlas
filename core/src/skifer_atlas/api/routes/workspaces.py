@@ -24,7 +24,7 @@ from ...workspaces import (
     list_workspaces,
     repo_dir,
 )
-from .common import workspace_or_404
+from .common import not_found, workspace_or_404
 
 router = APIRouter(prefix="/api/workspaces")
 
@@ -160,12 +160,19 @@ def post_auto_sync(ws: str, force: bool = False) -> dict:
     workspace = workspace_or_404(ws)
     if not workspace.git_remote:
         return {"status": "local"}
-    key = str(repo_dir(workspace.id).resolve())
+    try:
+        key = str(repo_dir(workspace.id).resolve())
+    except OSError as error:
+        if get_workspace(workspace.id) is None:
+            raise not_found(f"Espace « {ws} » inconnu.") from error
+        return {"status": "error"}
     with _auto_lock:
         lock = _auto_locks.setdefault(key, threading.Lock())
     if not lock.acquire(blocking=False):
         return {"status": "pending"}
     try:
+        if get_workspace(workspace.id) is None:
+            raise not_found(f"Espace « {ws} » inconnu.")
         now = time.monotonic()
         previous = _auto_attempts.get(key)
         interval = 3.0 if force else _AUTO_INTERVAL
@@ -173,10 +180,13 @@ def post_auto_sync(ws: str, force: bool = False) -> dict:
             return previous[1]
         before = None
         try:
-            with clone_lock(repo_dir(workspace.id), timeout=_AUTO_CLONE_WAIT):
+            with clone_lock(repo_dir(workspace.id), timeout=_AUTO_CLONE_WAIT,
+                            create_parent=False):
+                if get_workspace(workspace.id) is None:
+                    raise not_found(f"Espace « {ws} » inconnu.")
                 before = head(repo_dir(workspace.id))
                 try:
-                    result = sync_workspace(workspace.id)
+                    result = sync_workspace(workspace.id, automatic=True)
                     response = {key: result[key] for key in ("status", "commit") if key in result}
                 except (RepoError, OSError) as error:
                     response = {"status": _auto_error_status(error)}
@@ -187,6 +197,8 @@ def post_auto_sync(ws: str, force: bool = False) -> dict:
                     except (RepoError, OSError):
                         pass
         except (RepoError, OSError) as error:
+            if get_workspace(workspace.id) is None:
+                raise not_found(f"Espace « {ws} » inconnu.") from error
             response = {"status": _auto_error_status(error)}
         if response["status"] != "busy":
             _auto_attempts[key] = (time.monotonic(), response)

@@ -35,19 +35,33 @@ export const test = base.extend<{ isolation: void }>({
 /** Retire les espaces `ids` du registre de chaque serveur et supprime les dossiers `paths`. */
 function forget(ids: string[], paths: string[]) {
   if (ids.length) {
-    python(`import sys,shutil,yaml
+    // Sous le verrou du registre que prennent les serveurs (`workspaces.registry_lock`, même
+    // fichier, `flock`), et par remplacement atomique : sans quoi une écriture du serveur en
+    // cours (la synchronisation automatique d'ADR 0049 met à jour le registre à chaque
+    // écran, et peut finir après la fermeture de la page) relit le registre avant ce retrait
+    // et le réécrit après, ressuscitant l'espace. Le chemin du verrou est explicite : jamais
+    // `data_dir()`, qui retomberait sur le vrai dossier de données.
+    python(`import os,sys,shutil,tempfile,yaml
 from pathlib import Path
+from skifer_atlas.filelock import file_lock
 ids=set(sys.argv[2:])
 for root in sys.argv[1].split("\\n"):
-    registry=Path(root)/"workspaces.yaml"
-    if registry.exists():
-        data=yaml.safe_load(registry.read_text(encoding="utf-8")) or {}
-        kept=[w for w in data.get("workspaces",[]) if w.get("id") not in ids]
-        if len(kept)!=len(data.get("workspaces",[])):
-            data["workspaces"]=kept
-            registry.write_text(yaml.safe_dump(data,allow_unicode=True,sort_keys=False),encoding="utf-8")
+    root=Path(root)
+    if not root.is_dir():
+        continue
+    with file_lock(root/"workspaces.yaml.lock", 60.0):
+        registry=root/"workspaces.yaml"
+        if registry.exists():
+            data=yaml.safe_load(registry.read_text(encoding="utf-8")) or {}
+            kept=[w for w in data.get("workspaces",[]) if w.get("id") not in ids]
+            if len(kept)!=len(data.get("workspaces",[])):
+                data["workspaces"]=kept
+                fd,temporary=tempfile.mkstemp(dir=root,prefix=".workspaces.yaml.",suffix=".tmp")
+                with os.fdopen(fd,"w",encoding="utf-8") as fh:
+                    fh.write(yaml.safe_dump(data,allow_unicode=True,sort_keys=False))
+                os.replace(temporary,registry)
     for ident in ids:
-        shutil.rmtree(Path(root)/"workspaces"/ident,ignore_errors=True)`, SERVER_DATA.join("\n"), ...ids);
+        shutil.rmtree(root/"workspaces"/ident,ignore_errors=True)`, SERVER_DATA.join("\n"), ...ids);
   }
   for (const path of paths) rmSync(path, { recursive: true, force: true });
 }

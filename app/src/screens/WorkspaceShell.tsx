@@ -125,8 +125,10 @@ export function WorkspaceShell({
           failure.current = null;
           setNotice(null);
         }
-      } catch {
-        if (alive && (failure.current?.ws !== wsId || failure.current.status !== "offline")) {
+      } catch (error) {
+        if (!alive || mountedWorkspace.current !== wsId) return;
+        if (error instanceof ApiError && error.status === 404 && error.code === "not_found") return;
+        if (failure.current?.ws !== wsId || failure.current.status !== "offline") {
           failure.current = { ws: wsId, status: "offline" };
           setNotice({ key: syncKey, status: "offline" });
         }

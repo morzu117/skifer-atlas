@@ -238,3 +238,17 @@ it("relit la nouvelle vue après une synchronisation commencée sur l’écran p
   expect(await screen.findByText("v5")).toBeInTheDocument();
   expect(server.calls.filter((call) => call.path.endsWith("/catalog")).length).toBeGreaterThan(1);
 });
+
+it("ignore la disparition de l'espace pendant la synchronisation automatique", async () => {
+  let finish!: (value: { status: number; json: unknown }) => void;
+  fakeServer(({ path }) => {
+    if (path.endsWith("/sync/auto")) return new Promise((resolve) => { finish = resolve; });
+    if (path === "/api/workspaces/groupe-nordis") return { json: workspace() };
+    if (path.includes("proposals")) return { json: [] };
+    return undefined;
+  });
+  render(<WorkspaceShell wsId="groupe-nordis" view="administration" onUnknown={vi.fn()} />);
+  await screen.findByRole("heading", { name: "Administration" });
+  await act(async () => finish({ status: 404, json: { detail: { code: "not_found", message: "Espace inconnu" } } }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
