@@ -494,7 +494,7 @@ function TemporalForm({ node, set, columns, vocabulary, calendar, readOnly }: Fo
             onChange={(v) => set(["function"], v)}
             readOnly={readOnly}
           />
-          <TextProp label="Fenêtre" required mono value={node.frame} hint="Ex. 3 rows preceding" onChange={(v) => set(["frame"], v)} readOnly={readOnly} />
+          <TextProp label="Fenêtre" required mono value={node.frame} hint="Ex. ROWS BETWEEN 2 PRECEDING AND CURRENT ROW" onChange={(v) => set(["frame"], v)} readOnly={readOnly} />
           <OrderRows label="Ordre" value={node.order_by} upstream={upstream} readOnly={readOnly} onChange={(rows) => set(["order_by"], rows)} />
           <ColumnsProp label="Partition" value={node.partition_by} options={upstream} onChange={(v) => set(["partition_by"], v.length ? v : undefined)} readOnly={readOnly} />
         </>

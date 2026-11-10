@@ -100,6 +100,37 @@ def test_filter_without_nulls_blocks_submission(client):
     assert ["mois_fiscal", "date"] in result["columns"]["n04"]
 
 
+def test_concept_without_graph_is_not_applicable_and_can_be_proposed(client):
+    document = opened(client, "commande")["document"]
+    result = check(client, document)
+    assert result["submittable"]
+    assert all(value == {"status": "not_applicable"}
+               for value in result["status"]["compilable"].values())
+    assert client.post(f"{EDITOR}/preview", json={"document": document}).status_code == 200
+    invalid = copy.deepcopy(document)
+    invalid["label"] = ""
+    assert not check(client, invalid)["submittable"]
+    document["graph"] = {"nodes": []}
+    result = check(client, document)
+    assert not result["submittable"]
+    assert result["status"]["compilable"]["databricks"] == {"status": "blocked"}
+
+
+@pytest.mark.parametrize("document_id", ["a", "a" * 65, "-ab", "ab\n"])
+def test_new_document_rejects_invalid_identifiers(client, document_id):
+    response = client.post(f"{EDITOR}/documents", json={"kind": "concept", "id": document_id,
+                           "label": "Concept", "domain": "finance", "owner": "anna.k"})
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_document"
+
+
+@pytest.mark.parametrize("document_id", ["ab", "a" * 64])
+def test_new_document_accepts_identifier_length_boundaries(client, document_id):
+    response = client.post(f"{EDITOR}/documents", json={"kind": "concept", "id": document_id,
+                           "label": "Concept", "domain": "finance", "owner": "anna.k"})
+    assert response.status_code == 201
+
+
 def test_disappeared_upstream_column_is_reported_downstream(client):
     """Critère 2 : une colonne retirée de la source remonte sur le nœud qui l'utilise."""
     document = opened(client)["document"]
@@ -367,3 +398,153 @@ def test_validation_of_50_nodes_under_150_ms(client):
     median = statistics.median(timings)
     print(f"\nvalidation de 50 nœuds : médiane {median:.0f} ms ({', '.join(f'{t:.0f}' for t in timings)})")
     assert median < 150
+
+
+def test_creation_draft_can_be_listed_resumed_and_discarded(client):
+    body = {"kind": "kpi", "id": "stock-moyen", "label": "Stock moyen",
+            "domain": "finance", "owner": "anna.k"}
+    assert client.post(f"{EDITOR}/documents", json=body).status_code == 201
+    assert {"id": "stock-moyen", "label": "Stock moyen"} in client.get(f"{EDITOR}/drafts").json()
+    duplicate = client.post(f"{EDITOR}/documents", json=body)
+    assert duplicate.json()["detail"]["code"] == "draft_exists"
+    assert opened(client, "stock-moyen")["draft"] is not None
+    assert client.delete(f"{EDITOR}/documents/stock-moyen/draft").status_code == 204
+    assert client.get(f"{EDITOR}/drafts").json() == []
+    assert client.post(f"{EDITOR}/documents", json=body).status_code == 201
+
+
+def test_unknown_source_concept_blocks_validation(client):
+    document = opened(client)["document"]
+    node(document, "n01")["concept"] = "visiteur-inconnu"
+    result = check(client, document)
+    assert not result["submittable"]
+    assert any(i["node_id"] == "n01" and i["severity"] == "error" and
+               "visiteur-inconnu" in i["message"] for i in result["issues"])
+    node(document, "n01")["concept"] = "commande"
+    assert check(client, document)["submittable"]
+
+
+def test_invalid_window_frame_is_node_error(client):
+    document = opened(client)["document"]
+    document["graph"]["nodes"].append({"id": "n08", "type": "temporal", "inputs": ["n01"],
+        "operation": "window", "column": "montant_ttc", "target": "glissant", "function": "sum",
+        "frame": "3 rows preceding", "order_by": [["montant_ttc", "asc"]]})
+    result = check(client, document)
+    assert not result["submittable"]
+    assert any(i["node_id"] == "n08" and i["severity"] == "error" for i in result["issues"])
+
+
+def test_unknown_concept_in_resolved_variant_is_reported(client):
+    document = opened(client, "revenu-net--nordis-fr")["document"]
+    source = copy.deepcopy(node(opened(client)["document"], "n01"))
+    source["concept"] = "visiteur-inconnu"
+    document["overrides"].append({"node": "n01", "justification": "Source locale.",
+                                  "replace": source})
+    result = check(client, document)
+    assert not result["submittable"]
+    assert any(i["node_id"] == "n01" and i["code"] == "unknown_concept"
+               for i in result["issues"])
+
+
+@pytest.mark.parametrize("expression", ["(", "SUM(", "x +", "(" * 50 + "x" + ")" * 50])
+def test_invalid_editor_expression_returns_validation_error(client, expression):
+    document = opened(client)["document"]
+    node(document, "n03")["expr"] = expression
+    result = check(client, document)
+    assert not result["submittable"]
+    assert any(i["node_id"] == "n03" and i["severity"] == "error" for i in result["issues"])
+
+
+def test_draft_inventory_handles_corruption_collision_and_layout(client):
+    folder = workspace_dir("groupe-nordis") / ".atlas"
+    drafts = folder / "drafts"
+    drafts.mkdir(parents=True, exist_ok=True)
+    (drafts / "illisible.json").write_text("{", encoding="utf-8")
+    (drafts / "revenu-net.json").write_text(json.dumps({"base_version": None,
+        "document": {"kind": "kpi", "label": []}}), encoding="utf-8")
+    (drafts / "commande.json").write_text(json.dumps({"base_version": 1,
+        "document": {"kind": "concept", "label": "Commande"}}), encoding="utf-8")
+    result = client.get(f"{EDITOR}/drafts").json()
+    assert {"id": "illisible", "label": "illisible", "resumable": False} in result
+    assert {"id": "revenu-net", "label": "revenu-net"} in result
+    assert not any(item["id"] == "commande" for item in result)
+    layout = folder / "layout" / "illisible.json"
+    layout.parent.mkdir(parents=True, exist_ok=True)
+    layout.write_text('{}', encoding="utf-8")
+    assert client.delete(f"{EDITOR}/documents/illisible/draft?discard_layout=true").status_code == 204
+    assert not layout.exists()
+    assert client.delete(f"{EDITOR}/documents/invalid_id/draft").status_code == 404
+
+
+def test_reader_draft_inventory_is_empty(client):
+    workspace = get_workspace("groupe-nordis")
+    update_workspace(workspace.model_copy(update={"role": "lecteur"}))
+    assert client.get(f"{EDITOR}/drafts").json() == []
+
+
+@pytest.mark.parametrize("field,value", [
+    ("variant_id", []), ("variant_id", {}), ("replacement_id", []),
+    ("kind", []), ("mode", {}), ("nodes", {}), ("node_id", []),
+])
+def test_malformed_yaml_values_do_not_crash_check(client, field, value):
+    document = opened(client, "revenu-net--nordis-fr")["document"]
+    if field == "variant_id":
+        document["variant_of"]["id"] = value
+    elif field == "replacement_id":
+        document["overrides"] = [{"node": "n01", "replace": {"id": value}}]
+    elif field == "nodes":
+        document = opened(client)["document"]
+        document["graph"]["nodes"] = value
+    elif field == "node_id":
+        document = opened(client)["document"]
+        document["graph"]["nodes"][0]["id"] = value
+    else:
+        document[field] = value
+    result = check(client, document)
+    assert not result["submittable"]
+    assert any(issue["severity"] == "error" for issue in result["issues"])
+
+
+def test_empty_draft_inventory_does_not_analyze_repository(client, monkeypatch):
+    from skifer_atlas.api.routes import editor as routes
+
+    def unexpected(_ws):
+        raise AssertionError("repository analysis should not run")
+
+    monkeypatch.setattr(routes, "_context", unexpected)
+    assert client.get(f"{EDITOR}/drafts").json() == []
+
+
+def test_compiler_expression_reports_parse_errors():
+    from skifer_atlas.compile import CompileError
+    from skifer_atlas.compile.builder import _Builder, _Unit
+    from skifer_atlas.model.graph import Library
+
+    builder = _Unit.__new__(_Unit)
+    builder.builder = _Builder("databricks", Library(), {})
+    builder.dialect = "databricks"
+    with pytest.raises(CompileError) as error:
+        builder.expression("(", "n03", {})
+    assert error.value.issues[0].node_id == "n03"
+
+
+@pytest.mark.parametrize("document_id", ["a", "a" * 65, "-ab", "ab_", "stock--moyen"])
+def test_new_document_rejects_invalid_ids(client, document_id):
+    body = {"kind": "kpi", "id": document_id, "label": "Stock",
+            "domain": "finance", "owner": "anna.k"}
+    response = client.post(f"{EDITOR}/documents", json=body)
+    assert response.json()["detail"]["code"] == "invalid_document"
+
+
+def test_creation_draft_deletion_preserves_layout_unless_discarded(client):
+    body = {"kind": "kpi", "id": "stock-moyen", "label": "Stock moyen",
+            "domain": "finance", "owner": "anna.k"}
+    assert client.post(f"{EDITOR}/documents", json=body).status_code == 201
+    layout = workspace_dir("groupe-nordis") / ".atlas/layout/stock-moyen.json"
+    layout.write_text('{"n01": {"x": 24, "y": 48}}', encoding="utf-8")
+    path = f"{EDITOR}/documents/stock-moyen/draft"
+    assert client.delete(path).status_code == 204
+    assert json.loads(layout.read_text(encoding="utf-8")) == {"n01": {"x": 24, "y": 48}}
+    assert client.post(f"{EDITOR}/documents", json=body).status_code == 201
+    assert client.delete(f"{path}?discard_layout=true").status_code == 204
+    assert not layout.exists()

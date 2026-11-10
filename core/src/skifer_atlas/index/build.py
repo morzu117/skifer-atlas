@@ -116,7 +116,9 @@ def _tagged_kpi(repo: Path, kpi_id: str, version: int) -> KpiDocument | None:
 def _library(repo: Path, entries: list[Entry]) -> Library:
     """KPI valides au commit courant, plus les versions taguées qu'un `kpi_ref` ou une
     variante désigne : un KPI qui passe en v5 n'invalide pas ce qui référence sa v4."""
-    library = Library(e.document for e in entries if isinstance(e.document, KpiDocument))
+    library = Library((e.document for e in entries if e.document is not None),
+                      complete_concepts=True,
+                      concept_ids=(e.file.expected_id for e in entries if e.file.kind == "concept"))
     wanted = {(d[1], d[2]) for e in entries for d in _dependencies(e) if d[3] == "kpi_ref"}
     wanted |= {(e.document.variant_of.id, e.document.variant_of.version) for e in entries
                if e.file.kind == "variant" and e.document is not None}

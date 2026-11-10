@@ -20,19 +20,20 @@ function Status({ check, pending }: { check: CheckResult | null; pending: boolea
   if (!check) return <span className="status-line muted">Validation…</span>;
   const { status } = check;
   const compilable = DIALECTS.filter((d) => status.compilable[d.value]?.status === "ok").map((d) => d.label);
-  const items: { ok: boolean; text: string }[] = [
+  const notApplicable = DIALECTS.every((d) => status.compilable[d.value]?.status === "not_applicable");
+  const items: { ok: boolean | null; text: string }[] = [
     { ok: status.schema, text: status.schema ? "Schéma valide" : "Schéma invalide" },
     { ok: status.acyclic, text: status.acyclic ? "Sans cycle" : `Cycle ${status.cycle?.join(" → ") ?? ""}` },
     {
-      ok: compilable.length === DIALECTS.length,
-      text: compilable.length > 0 ? `Compilable ${compilable.join(", ")}` : "Non compilable",
+      ok: notApplicable ? null : compilable.length === DIALECTS.length,
+      text: notApplicable ? "Sans graphe : compilation non applicable" : compilable.length > 0 ? `Compilable ${compilable.join(", ")}` : "Non compilable",
     },
   ];
   return (
     <span className="status-line" role="status" aria-busy={pending}>
       {items.map((item) => (
-        <span key={item.text} className={item.ok ? "tone-ok" : "tone-warn"}>
-          <Icon name={item.ok ? "check" : "alert"} className="icon-xs" />
+        <span key={item.text} className={item.ok === null ? "muted" : item.ok ? "tone-ok" : "tone-warn"}>
+          {item.ok !== null && <Icon name={item.ok ? "check" : "alert"} className="icon-xs" />}
           {item.text}
         </span>
       ))}
@@ -64,6 +65,8 @@ function Sql({ compiled, node, dialect, onDialect }: { compiled?: Compiled; node
   let body;
   if (!compiled || compiled.status === "blocked") {
     body = <p className="bottom-empty muted">Le SQL se compile une fois les erreurs corrigées.</p>;
+  } else if (compiled.status === "not_applicable") {
+    body = <p className="bottom-empty muted">Sans graphe : compilation non applicable.</p>;
   } else if (compiled.status === "ok") {
     const own = node && compiled.node_sql;
     body = (

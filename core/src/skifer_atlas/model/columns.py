@@ -70,7 +70,7 @@ class _Propagation:
         """Contrôle une expression SQL ; renvoie son type inféré."""
         try:
             tree = parse_sql(text)
-        except sqlglot.errors.SqlglotError:
+        except (sqlglot.errors.SqlglotError, RecursionError):
             return None  # déjà signalé à la validation de schéma (plan 0001)
         for problem in expression_problems(tree):
             self.issues.append(Issue(

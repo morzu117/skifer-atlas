@@ -88,6 +88,18 @@ def post_parse(ws: str, body: ParseRequest) -> dict:
     return editor.parse(body.text)
 
 
+@router.get("/drafts")
+def get_drafts(ws: str) -> list[dict]:
+    workspace = workspace_or_404(ws)
+    if workspace.role == "lecteur":
+        return []
+    folder = workspace_dir(workspace.id)
+    if not any((folder / ".atlas" / "drafts").glob("*.json")):
+        return []
+    _, analysis, _ = _context(ws)
+    return editor.creation_drafts(folder, analysis)
+
+
 @router.post("/documents", status_code=201)
 def post_document(ws: str, body: NewRequest) -> dict:
     workspace = workspace_or_404(ws)
@@ -128,11 +140,11 @@ def put_draft(ws: str, document_id: str, body: DraftRequest) -> dict:
 
 
 @router.delete("/documents/{document_id}/draft", status_code=204)
-def delete_draft(ws: str, document_id: str) -> None:
+def delete_draft(ws: str, document_id: str, discard_layout: bool = False) -> None:
     workspace = workspace_or_404(ws)
     if workspace.role == "lecteur":
         raise RepoError("forbidden", "Un lecteur ne supprime pas de brouillon.")
-    editor.delete_draft(workspace_dir(workspace.id), document_id_or_404(document_id))
+    editor.delete_draft(workspace_dir(workspace.id), document_id_or_404(document_id), discard_layout)
 
 
 @router.post("/preview")

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useRef } from "react";
+import { StrictMode, useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type CheckResult, type EditorDocument, type Workspace } from "../api";
 import * as model from "../editor/model";
@@ -134,10 +134,11 @@ describe("éditeur", () => {
         return { status: 201, json: { id: `revenu-net--${(body as { entity: string }).entity}` } };
       }
       if (path === `${EDITOR}/documents/revenu-net--nordis-it`) {
+        const document = { schema_version: 1, kind: "variant", data_product: { id: "revenu-net--nordis-it", version: 1, owner: "anna.k" },
+          variant_of: { id: "revenu-net", version: 4 }, entity: "nordis-it", mode, justification: "Règle locale." };
         return { json: opened({ id: "revenu-net--nordis-it", kind: "variant", mode, base_version: null,
-          document: { schema_version: 1, kind: "variant", data_product: { id: "revenu-net--nordis-it", version: 1, owner: "anna.k" },
-            variant_of: { id: "revenu-net", version: 4 }, entity: "nordis-it", mode, justification: "Règle locale." },
-          canonical: structuredClone(DOCUMENT), draft: null }) };
+          document, canonical: structuredClone(DOCUMENT),
+          draft: { document, positions: {}, highest: 0, base_version: null, saved_at: "2026-11-06T10:00:00Z" } }) };
       }
       if (path.startsWith("/api/workspaces/groupe-nordis/catalog")) return { json: [] };
       if (path === `${EDITOR}/check`) return { json: checked((body as { document: { graph?: { nodes: Nodes } } }).document) };
@@ -151,6 +152,8 @@ describe("éditeur", () => {
     await userEvent.type(screen.getByLabelText(/^Justification/), "Règle locale.");
     await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
     await waitFor(() => expect(window.location.hash).toBe("#/w/groupe-nordis/editeur?from=revenu-net--nordis-it"));
+    await screen.findByRole("button", { name: "Éditer en YAML" });
+    expect(screen.queryByText(/Brouillon local repris/)).toBeNull();
     expect(calls.find((call) => call.path === `${EDITOR}/variants` && call.method === "POST")?.body).toEqual({
       kpi_id: "revenu-net", entity: "nordis-it", mode, owner: "anna.k", justification: "Règle locale.",
     });
@@ -692,6 +695,96 @@ describe("éditeur", () => {
 });
 
 describe("nouveau document", () => {
+  it("ne présente le brouillon comme repris qu'après une nouvelle ouverture", async () => {
+    window.location.hash = "#/w/groupe-nordis/editeur";
+    const draft = { document: structuredClone(DOCUMENT), positions: {}, highest: 0, base_version: null, saved_at: "2026-11-06T10:00:00Z" };
+    fakeServer((call) => {
+      if (call.path === `${EDITOR}/documents` && call.method === "POST") return { status: 201, json: { id: "revenu-net" } };
+      if (call.path === `${EDITOR}/documents/revenu-net`) return { json: opened({ base_version: null, draft }) };
+      if (call.path === `${EDITOR}/check`) return { json: checked((call.body as { document: { graph?: { nodes: Nodes } } }).document) };
+      if (call.path.startsWith("/api/workspaces/groupe-nordis/catalog")) return { json: [] };
+      return undefined;
+    });
+    const view = render(<StrictMode><Harness ws={workspace({ account: "anna.k", role: "contributeur" })} /></StrictMode>);
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Revenu net" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    await screen.findByRole("button", { name: "Éditer en YAML" });
+    expect(screen.queryByText(/Brouillon local repris/)).toBeNull();
+    view.unmount();
+    render(<StrictMode><Harness ws={workspace({ account: "anna.k", role: "contributeur" })} /></StrictMode>);
+    expect(await screen.findByText(/Brouillon local repris/)).toBeInTheDocument();
+  });
+
+  it("conserve la création si la session est démontée pendant son chargement", async () => {
+    window.location.hash = "#/w/groupe-nordis/editeur";
+    const loading = deferred<EditorDocument>();
+    const draft = { document: structuredClone(DOCUMENT), positions: {}, highest: 0, base_version: null, saved_at: "2026-11-06T10:00:00Z" };
+    const info = opened({ base_version: null, draft });
+    fakeServer((call) => {
+      if (call.path === `${EDITOR}/documents` && call.method === "POST") return { status: 201, json: {} };
+      if (call.path === `${EDITOR}/check`) return { json: checked((call.body as { document: { graph?: { nodes: Nodes } } }).document) };
+      if (call.path.startsWith("/api/workspaces/groupe-nordis/catalog")) return { json: [] };
+      return undefined;
+    });
+    vi.spyOn(api, "editorOpen").mockReturnValueOnce(loading.promise).mockResolvedValue(info);
+    const view = editor();
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Revenu net" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    await waitFor(() => expect(api.editorOpen).toHaveBeenCalled());
+    view.unmount();
+    loading.resolve(info);
+    const reopened = editor();
+    await screen.findByRole("button", { name: "Éditer en YAML" });
+    expect(screen.queryByText(/Brouillon local repris/)).toBeNull();
+    reopened.unmount();
+    editor();
+    expect(await screen.findByText(/Brouillon local repris/)).toBeInTheDocument();
+  });
+
+  it("propose de reprendre le brouillon qui occupe l'identifiant", async () => {
+    window.location.hash = "#/w/groupe-nordis/editeur";
+    fakeServer((call) => {
+      if (call.path === `${EDITOR}/documents` && call.method === "POST") return { status: 409, json: { detail: { code: "draft_exists", message: "Un brouillon local existe déjà." } } };
+      if (call.path === `${EDITOR}/documents/stock-moyen`) return { json: opened({ base_version: null, draft: { document: structuredClone(DOCUMENT), positions: {}, highest: 0, base_version: null, saved_at: "2026-11-06T10:00:00Z" } }) };
+      if (call.path === `${EDITOR}/check`) return { json: checked((call.body as { document: { graph?: { nodes: Nodes } } }).document) };
+      if (call.path.startsWith("/api/workspaces/groupe-nordis/catalog")) return { json: [] };
+      return undefined;
+    });
+    editor();
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Stock moyen" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    const resume = await screen.findByRole("link", { name: "Reprendre le brouillon" });
+    expect(resume).toHaveAttribute("href", "#/w/groupe-nordis/editeur?from=stock-moyen");
+    await userEvent.click(resume);
+    expect(await screen.findByText(/Brouillon local repris/)).toBeInTheDocument();
+  });
+
+  it.each(["a", "a".repeat(65), "-ab", "ab_", "stock--moyen"])("refuse l'identifiant invalide %s", async (id) => {
+    window.location.hash = "#/w/groupe-nordis/editeur";
+    const { calls } = fakeServer(() => undefined);
+    editor();
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Concept" } });
+    fireEvent.change(screen.getByLabelText(/^Identifiant/), { target: { value: id } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    expect(screen.getByLabelText(/^Identifiant/)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText(/De 2 à 64 caractères/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+
+  it("valide aussi l'identifiant déduit et affiche le refus serveur sous le champ", async () => {
+    window.location.hash = "#/w/groupe-nordis/editeur";
+    const { calls } = fakeServer((call) => call.path === `${EDITOR}/documents`
+      ? { status: 422, json: { detail: { code: "invalid_document", message: "Identifiant refusé par le serveur." } } } : undefined);
+    editor();
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "A" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    expect(screen.getByText(/De 2 à 64 caractères/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Ab" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    expect(await screen.findByText("Identifiant refusé par le serveur.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Identifiant/)).toHaveAccessibleDescription("Identifiant refusé par le serveur.");
+  });
   it("un identifiant déjà pris est refusé sous le champ ; sinon l'éditeur s'ouvre", async () => {
     window.location.hash = "#/w/groupe-nordis/editeur";
     const { calls } = fakeServer((call) => {

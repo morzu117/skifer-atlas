@@ -21,6 +21,7 @@ from pydantic import (
     Strict,
     Tag,
     WithJsonSchema,
+    field_validator,
     model_validator,
 )
 from pydantic_core import PydanticCustomError
@@ -118,7 +119,7 @@ def _sorted_keys(value: dict) -> dict:
 def _parse_sql(text: str) -> exp.Expression:
     try:
         return parse_sql(text)
-    except sqlglot.errors.SqlglotError as error:
+    except (sqlglot.errors.SqlglotError, RecursionError) as error:
         detail = str(error).splitlines()[0] if str(error) else type(error).__name__
         raise PydanticCustomError(
             "invalid_value", "Expression SQL illisible : {detail}", {"detail": detail}
@@ -437,6 +438,14 @@ class Window(_Temporal):
     frame: NonEmptyStr
     order_by: Annotated[list[OrderItem], Field(min_length=1)]
     partition_by: list[ColumnName] | None = None
+
+    @field_validator("frame")
+    @classmethod
+    def _valid_frame(cls, value: str) -> str:
+        tree = _parse_sql(f"SUM(x) OVER (ORDER BY y {value})")
+        if not isinstance(tree, exp.Window) or tree.args.get("spec") is None:
+            raise PydanticCustomError("invalid_value", "Cadre de fenêtre illisible.")
+        return value
 
 
 Temporal = Annotated[

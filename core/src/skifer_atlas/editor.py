@@ -218,7 +218,7 @@ def _view_nodes(raw: dict, library: Library) -> tuple[list, Any]:
     if raw.get("kind") == "variant" and raw.get("mode") == "override":
         of = _mapping(raw.get("variant_of"))
         canonical = library.kpi(of.get("id"), of.get("version")) \
-            if isinstance(of.get("version"), int) else None
+            if isinstance(of.get("id"), str) and isinstance(of.get("version"), int) else None
         if canonical is None:
             return [], None
         nodes = [n.model_dump(mode="json", by_alias=True, exclude_none=True)
@@ -226,7 +226,8 @@ def _view_nodes(raw: dict, library: Library) -> tuple[list, Any]:
         position = {n["id"]: i for i, n in enumerate(nodes)}
         for override in _list(raw.get("overrides")):
             replace = _mapping(override).get("replace") if isinstance(override, dict) else None
-            if isinstance(replace, dict) and replace.get("id") in position:
+            if (isinstance(replace, dict) and isinstance(replace.get("id"), str)
+                    and replace["id"] in position):
                 nodes[position[replace["id"]]] = replace
         return nodes, canonical
     return _list(_mapping(raw.get("graph")).get("nodes")), None
@@ -329,6 +330,9 @@ def check(raw: Any, library: Library, calendars: dict, node_id: str | None = Non
     errors = any(i.severity == "error" for i in issues)
     compiled: dict[str, dict] = {}
     for dialect in DIALECTS:
+        if raw.get("kind") == "concept" and raw.get("graph") is None:
+            compiled[dialect] = {"status": "not_applicable"}
+            continue
         if errors or partial or graph_document is None:
             compiled[dialect] = {"status": "blocked"}
             continue
@@ -474,7 +478,7 @@ def open_document(repo: Path, analysis: Analysis, folder: Path, document_id: str
     if raw.get("kind") == "variant":
         of = _mapping(raw.get("variant_of"))
         found = analysis.library.kpi(of.get("id"), of.get("version")) \
-            if isinstance(of.get("version"), int) else None
+            if isinstance(of.get("id"), str) and isinstance(of.get("version"), int) else None
         if found is not None:
             canonical = found.model_dump(mode="json", by_alias=True, exclude_none=True)
     governance = read_governance(repo)
@@ -497,15 +501,15 @@ def open_document(repo: Path, analysis: Analysis, folder: Path, document_id: str
 def new_document(repo: Path, analysis: Analysis, folder: Path, kind: str, document_id: str,
                  label: str, domain: str, owner: str) -> dict:
     """Un concept ou un KPI vierge, enregistré aussitôt en brouillon local."""
-    if not re.fullmatch(SLUG, document_id):
-        raise RepoError("invalid_document", "Identifiant attendu : minuscules, chiffres et "
-                        "tirets (ex. revenu-net).")
+    if not re.fullmatch(SLUG, document_id) or "--" in document_id:
+        raise RepoError("invalid_document", "Identifiant attendu : 2 à 64 caractères, minuscules, "
+                        "chiffres et tirets, en commençant par une lettre ou un chiffre, sans double tiret.")
     if analysis.entry(document_id) is not None or (repo / document_path(kind, document_id)).exists():
         raise RepoError("document_exists", f"« {document_id} » existe déjà dans l'espace : "
                         "proposer une modification depuis sa fiche.")
     if _folder(folder, "drafts", document_id).exists():
-        raise RepoError("document_exists", f"Un brouillon local de « {document_id} » existe "
-                        "déjà : le reprendre.")
+        raise RepoError("draft_exists", f"Un brouillon local de « {document_id} » existe "
+                        "déjà : le reprendre ou l’abandonner dans « Mes brouillons » du catalogue.")
     raw: dict = {"schema_version": 1, "kind": kind,
                  "data_product": {"id": document_id, "version": 1, "owner": owner,
                                   "domain": domain},
@@ -571,7 +575,28 @@ def save_draft(folder: Path, document_id: str, draft: dict) -> dict:
     return {"saved_at": saved["saved_at"]}
 
 
-def delete_draft(folder: Path, document_id: str) -> None:
+def creation_drafts(folder: Path, analysis: Analysis) -> list[dict]:
+    found = []
+    for path in sorted((folder / ".atlas" / "drafts").glob("*.json")):
+        if not re.fullmatch(SLUG, path.stem) or "--" in path.stem:
+            continue
+        draft = _read_json(path)
+        raw = _mapping(_mapping(draft).get("document"))
+        if isinstance(draft, dict) and (draft.get("base_version") is not None
+                                        or raw.get("kind") == "variant"):
+            continue
+        readable = isinstance(draft, dict) and raw.get("kind") in ("kpi", "concept")
+        label = raw.get("label")
+        item = {"id": path.stem, "label": label if isinstance(label, str) and label else path.stem}
+        if not readable:
+            item["resumable"] = False
+        found.append(item)
+    return found
+
+
+def delete_draft(folder: Path, document_id: str, discard_layout: bool = False) -> None:
+    if discard_layout:
+        _folder(folder, "layout", document_id).unlink(missing_ok=True)
     _folder(folder, "drafts", document_id).unlink(missing_ok=True)
 
 

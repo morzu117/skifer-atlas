@@ -143,7 +143,10 @@ class _Unit:
 
     def expression(self, text: str, node_id: str, types: dict[str, str | None],
                    substitutions: dict[str, exp.Expression] | None = None) -> exp.Expression:
-        tree = parse_sql(text)
+        try:
+            tree = parse_sql(text)
+        except (sqlglot.errors.SqlglotError, RecursionError):
+            raise compile_error("invalid_value", "Expression SQL illisible.", node_id) from None
         check_expression(tree, types, node_id, self.dialect)
         tree = safe_division(mark_strings(tree, types), types)
         if substitutions:
@@ -517,7 +520,11 @@ class _Unit:
 
     def _window(self, node: Any) -> exp.Select:
         check_window(node.function, node.id, self.dialect)
-        template = parse_sql(f"SUM(x) OVER (ORDER BY y {node.frame})")
+        try:
+            template = parse_sql(f"SUM(x) OVER (ORDER BY y {node.frame})")
+        except (sqlglot.errors.SqlglotError, RecursionError):
+            raise compile_error("invalid_value", f"Cadre de fenêtre « {node.frame} » illisible.",
+                                node.id) from None
         spec = template.args.get("spec")
         if spec is None:
             raise compile_error("invalid_value", f"Cadre de fenêtre « {node.frame} » "

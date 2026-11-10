@@ -32,7 +32,7 @@ def test_missing_required_field(node_type, field):
         ("convert_timezone", {"to": "UTC"}),
         ("to_date", {"timezone": "Europe/Paris", "format": "yyyy-MM-dd"}),
         ("period", {"grain": "quarter"}),
-        ("window", {"function": "sum", "frame": "rows:6:0", "order_by": [["d", "asc"]]}),
+        ("window", {"function": "sum", "frame": "ROWS BETWEEN 6 PRECEDING AND CURRENT ROW", "order_by": [["d", "asc"]]}),
     ],
 )
 def test_temporal_operations(operation, extra):

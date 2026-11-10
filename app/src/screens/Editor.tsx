@@ -47,6 +47,21 @@ import {
 // CodeMirror ne se charge qu'à la première ouverture de la vue YAML.
 const YamlView = lazy(() => import("../editor/YamlView").then((m) => ({ default: m.YamlView })));
 
+// Un chargement abandonné peut être suivi d'un remontage ; le marqueur expire
+// même si aucun chargement ne réussit ensuite.
+const newlyCreated = new Map<string, ReturnType<typeof setTimeout>>();
+function markNewlyCreated(key: string) {
+  clearTimeout(newlyCreated.get(key));
+  newlyCreated.set(key, setTimeout(() => newlyCreated.delete(key), 30_000));
+}
+function consumeNewlyCreated(key: string): boolean {
+  const timer = newlyCreated.get(key);
+  if (timer === undefined) return false;
+  clearTimeout(timer);
+  newlyCreated.delete(key);
+  return true;
+}
+
 const CHECK_DELAY = 300;
 const SAVE_DELAY = 800;
 const CLOSE_SAVE_TIMEOUT = 2000;
@@ -124,6 +139,7 @@ function NewVariant({ ws, kpiId, heading }: { ws: Workspace; kpiId: string; head
     setBusy(true);
     try {
       await api.editorNewVariant(ws.id, { kpi_id: kpiId, entity, mode, owner: owner.trim(), justification: justification.trim() });
+      markNewlyCreated(`${ws.id}/${kpiId}--${entity}`);
       replace(href.editor(ws.id, { from: `${kpiId}--${entity}` }));
     } catch (reason) {
       setBusy(false);
@@ -200,6 +216,7 @@ function NewDocument({ ws, heading }: { ws: Workspace; heading: RefObject<HTMLHe
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<Explained | null>(null);
+  const [resume, setResume] = useState<string | null>(null);
   const ids = { label: useId(), id: useId(), domain: useId(), owner: useId() };
   const slug = edited ? id : slugify(label);
 
@@ -207,19 +224,24 @@ function NewDocument({ ws, heading }: { ws: Workspace; heading: RefObject<HTMLHe
     event.preventDefault();
     const found: Record<string, string> = {};
     if (!label.trim()) found.label = "Donner un libellé.";
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) found.id = "Minuscules, chiffres et tirets (ex. revenu-net).";
+    if (!/^[a-z0-9][a-z0-9-]{1,63}(?![\s\S])/.test(slug) || slug.includes("--")) found.id = "De 2 à 64 caractères : minuscules, chiffres et tirets, en commençant par une lettre ou un chiffre, sans double tiret.";
     if (!domain) found.domain = "Choisir un domaine.";
     if (!owner.trim()) found.owner = "Indiquer le propriétaire.";
     setErrors(found);
     setFailure(null);
+    setResume(null);
     if (Object.keys(found).length > 0) return;
     setBusy(true);
     try {
       await api.editorNew(ws.id, { kind, id: slug, label: label.trim(), domain, owner: owner.trim() });
+      markNewlyCreated(`${ws.id}/${slug}`);
       replace(href.editor(ws.id, { from: slug }));
     } catch (reason) {
       setBusy(false);
-      if (reason instanceof ApiError && reason.code === "document_exists") setErrors({ id: reason.message });
+      if (reason instanceof ApiError && ["document_exists", "invalid_document", "draft_exists"].includes(reason.code)) {
+        setErrors({ id: reason.message });
+        if (reason.code === "draft_exists") setResume(slug);
+      }
       else setFailure(explain(reason));
     }
   }
@@ -270,8 +292,9 @@ function NewDocument({ ws, heading }: { ws: Workspace; heading: RefObject<HTMLHe
                 value={value}
                 aria-invalid={errors[key] ? true : undefined}
                 aria-describedby={describe(key)}
-                onChange={(event) => change(event.target.value)}
+                onChange={(event) => { change(event.target.value); setResume(null); }}
               />
+              {key === "id" && resume && <a href={href.editor(ws.id, { from: resume })}>Reprendre le brouillon</a>}
               {errors[key] && (
                 <span id={`${ids[key]}-error`} className="field-error">
                   {errors[key]}
@@ -395,9 +418,10 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
         setSession(start);
         infoRef.current = info;
         if (draft?.yaml_text != null) updateYaml(() => ({ text: draft.yaml_text!, issues: [] }));
+        const created = consumeNewlyCreated(`${ws.id}/${id}`);
         if (draft) {
           setSavedAt(draft.saved_at);
-          if (info.base_version !== null) setResumed({ savedAt: draft.saved_at, base: draft.base_version });
+          if (!created) setResumed({ savedAt: draft.saved_at, base: draft.base_version });
         }
         setLoad({ kind: "ready", info });
       })
@@ -408,9 +432,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
       .catalog(ws.id, { q: "", domain: "", owner: "", status: "", kind: "kpi" })
       .then((rows) => alive && setKpis(rows.filter((r) => r.id !== id).map((r) => ({ value: r.id, label: `${r.label} (${r.id})` }))))
       .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [ws.id, id, updateYaml]);
 
   const info = load.kind === "ready" ? load.info : null;
@@ -843,11 +865,11 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
       <Banner
         tone={resumed.base !== info.base_version ? "warn" : "info"}
         title={resumed.base !== info.base_version ? "La version courante a changé depuis ce brouillon" : "Brouillon local repris"}
-        action={
+        action={info.base_version !== null ? (
           <button ref={restartTrigger} type="button" className="btn btn-neutral btn-dense" disabled={restarting} onClick={() => setConfirmRestart(true)}>
             Repartir de la v{info.base_version}
           </button>
-        }
+        ) : undefined}
       >
         Enregistré {ago(resumed.savedAt)} sur ce poste
         {resumed.base !== info.base_version ? ` à partir de la v${resumed.base ?? "?"} ; la proposition sera comparée à la v${info.base_version}.` : "."}

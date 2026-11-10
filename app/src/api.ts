@@ -430,7 +430,8 @@ export type Issue = { path: string; node_id: string | null; code: string; messag
 export type Compiled =
   | { status: "ok"; sql: string; node_sql: string | null }
   | { status: "not_compilable" | "error"; node_id: string | null; reason: string }
-  | { status: "blocked" };
+  | { status: "blocked" }
+  | { status: "not_applicable" };
 
 export type CheckResult = {
   yaml: string;
@@ -692,6 +693,7 @@ export const api = {
   resetRemote: (id: string) => request<Workspace & { reset: RemoteReset }>(`${ws(id)}/remote/reset`, post({})),
   proposalsForMe: (id: string) =>
     request<{ id: number }[]>(`${ws(id)}/proposals?status=open&for_me=true`),
+  creationDrafts: (id: string) => request<{ id: string; label: string; resumable?: boolean }[]>(`${ws(id)}/editor/drafts`),
   catalog: (id: string, filters: CatalogFilters) => {
     const search = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== "")).toString();
     return request<CatalogRow[]>(`${ws(id)}/catalog${search ? `?${search}` : ""}`);
@@ -728,8 +730,8 @@ export const api = {
       body,
     });
   },
-  deleteDraft: (id: string, documentId: string) =>
-    request<null>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}/draft`, { method: "DELETE" }),
+  deleteDraft: (id: string, documentId: string, discardLayout = false) =>
+    request<null>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}/draft${discardLayout ? "?discard_layout=true" : ""}`, { method: "DELETE" }),
   preview: (id: string, document: unknown) => request<ProposalPreview>(`${ws(id)}/editor/preview`, post({ document })),
   proposalQueue: (id: string, status: ProposalStatus) =>
     request<ProposalQueue>(`${ws(id)}/proposals/queue?status=${status}`),

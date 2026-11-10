@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CatalogRow, DocumentSummary, Workspace } from "../api";
+import { api, UnreachableError, type CatalogRow, type DocumentSummary, type Workspace } from "../api";
 import { useRoute } from "../router";
 import { fakeServer, workspace, type Call } from "../test/fakeServer";
 import { Catalogue } from "./Catalogue";
@@ -92,6 +92,7 @@ function catalogServer(overrides: (call: Call) => ReturnType<Parameters<typeof f
     const found = overrides(call);
     if (found !== undefined) return found;
     const url = new URL(call.path, "http://srv");
+    if (url.pathname === `${WS}/editor/drafts`) return { json: [] };
     if (url.pathname === `${WS}/index`) return { json: { fresh: true } };
     if (url.pathname === `${WS}/catalog/facets`) return { json: FACETS };
     if (url.pathname === `${WS}/catalog`) {
@@ -124,9 +125,78 @@ const catalogCalls = (calls: Call[]) => calls.filter((c) => c.path.startsWith(`$
 beforeEach(() => {
   window.location.hash = "#/w/groupe-nordis/catalogue";
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("catalogue", () => {
+  it("permet de reprendre ou abandonner un brouillon après confirmation", async () => {
+    const { calls } = catalogServer((call) => {
+      if (call.path === `${WS}/editor/drafts`) return { json: [{ id: "stock-moyen", label: "Stock moyen" }] };
+      if (call.path === `${WS}/editor/documents/stock-moyen/draft?discard_layout=true` && call.method === "DELETE") return { status: 204 };
+      return undefined;
+    });
+    catalogue();
+    const region = await screen.findByRole("region", { name: "Mes brouillons" });
+    expect(within(region).getByRole("link", { name: "Reprendre" })).toHaveAttribute("href", "#/w/groupe-nordis/editeur?from=stock-moyen");
+    await userEvent.click(within(region).getByRole("button", { name: "Abandonner" }));
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false);
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Abandonner" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Mes brouillons" })).not.toBeInTheDocument());
+    expect(calls.some((call) => call.path.endsWith("/draft?discard_layout=true") && call.method === "DELETE")).toBe(true);
+  });
+
+  it("garde le clavier dans la confirmation et rend le focus après suppression", async () => {
+    catalogServer((call) => call.path === `${WS}/editor/drafts` ? { json: [
+      { id: "premier", label: "Premier" }, { id: "illisible", label: "Illisible", resumable: false },
+    ] } : call.method === "DELETE" ? { status: 204 } : undefined);
+    catalogue();
+    const region = await screen.findByRole("region", { name: "Mes brouillons" });
+    expect(within(region).getAllByRole("link", { name: "Reprendre" })).toHaveLength(1);
+    const first = within(region).getAllByRole("button", { name: "Abandonner" })[0];
+    await userEvent.click(first);
+    const dialog = screen.getByRole("alertdialog");
+    expect(within(dialog).getByRole("button", { name: "Annuler" })).toHaveFocus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(within(dialog).getByRole("button", { name: "Abandonner" })).toHaveFocus();
+    await userEvent.tab();
+    expect(within(dialog).getByRole("button", { name: "Annuler" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(first).toHaveFocus();
+    await userEvent.click(first);
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Abandonner" }));
+    await waitFor(() => expect(within(region).getByRole("button", { name: "Abandonner" })).toHaveFocus());
+    await userEvent.click(within(region).getByRole("button", { name: "Abandonner" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Abandonner" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Catalogue" })).toHaveFocus());
+  });
+
+  it("ne double pas l'erreur de connexion des brouillons", async () => {
+    catalogServer((call) => call.path === `${WS}/editor/drafts` ? "down" : undefined);
+    catalogue();
+    await screen.findByRole("link", { name: "Revenu net" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("ignore une erreur de connexion lors de l'abandon", async () => {
+    catalogServer((call) => call.path === `${WS}/editor/drafts` ? { json: [{ id: "stock", label: "Stock" }] } : undefined);
+    vi.spyOn(api, "deleteDraft").mockRejectedValue(new UnreachableError());
+    catalogue();
+    await userEvent.click(await screen.findByRole("button", { name: "Abandonner" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Abandonner" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("efface les brouillons au changement d'espace et ignore l'ancienne réponse", async () => {
+    catalogServer();
+    let release!: (drafts: { id: string; label: string }[]) => void;
+    const old = new Promise<{ id: string; label: string }[]>((resolve) => { release = resolve; });
+    vi.spyOn(api, "creationDrafts").mockImplementation((id) => id === "groupe-nordis" ? old : Promise.resolve([]));
+    const view = catalogue();
+    view.rerender(<Harness ws={workspace({ id: "autre" })} />);
+    await act(async () => { release([{ id: "ancien", label: "Ancien" }]); await old; });
+    expect(screen.queryByText("Ancien")).toBeNull();
+  });
+
   it("liste les documents avec type, domaine, version, déclinaisons et convergence (critère 1)", async () => {
     catalogServer();
     catalogue();
@@ -226,6 +296,7 @@ describe("catalogue", () => {
     catalogue(workspace({ role: "lecteur" }));
     await screen.findByRole("link", { name: "Revenu net" });
     expect(screen.queryByRole("link", { name: "Nouveau concept ou KPI" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Mes brouillons" })).toBeNull();
   });
 
   it("squelette pendant le chargement, message si l'index se reconstruit", async () => {

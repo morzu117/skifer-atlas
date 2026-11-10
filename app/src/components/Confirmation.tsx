@@ -8,6 +8,7 @@ export function Confirmation({ id: providedId, title, description, children, act
   const generatedId = useId();
   const id = providedId ?? generatedId;
   const cancel = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement;
     cancel.current?.focus();
@@ -16,8 +17,16 @@ export function Confirmation({ id: providedId, title, description, children, act
       if (restoreFocus && target instanceof HTMLElement && target.isConnected) target.focus();
     };
   }, [restoreFocus, returnFocusTo]);
-  return <div id={id} className="confirmation" role="alertdialog" aria-labelledby={`${id}-title`} aria-describedby={`${id}-text`}
-    onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); if (!busy) onCancel(); } }}>
+  return <div ref={dialog} id={id} className="confirmation" role="alertdialog" aria-labelledby={`${id}-title`} aria-describedby={`${id}-text`}
+    onKeyDown={(event) => {
+      if (event.key === "Escape") { event.stopPropagation(); if (!busy) onCancel(); }
+      if (event.key === "Tab" && !busy) {
+        const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])') ?? []);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    }}>
     <h3 id={`${id}-title`}>{title}</h3>
     <p id={`${id}-text`}>{description}</p>
     {children}

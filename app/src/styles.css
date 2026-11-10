@@ -890,3 +890,8 @@ textarea.prop-input { resize: vertical; }
 .admin-message { font-size: var(--atlas-text-sm); }
 .admin-issues { margin: var(--atlas-space-1) 0 0; padding-left: var(--atlas-space-4); }
 .admin-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: var(--atlas-space-2); }
+
+.catalogue-drafts { padding: var(--atlas-space-4); margin-bottom: var(--atlas-space-4); }
+.catalogue-drafts ul { list-style: none; padding: 0; margin: var(--atlas-space-3) 0 0; display: grid; gap: var(--atlas-space-2); }
+.catalogue-drafts li { display: flex; align-items: center; flex-wrap: wrap; gap: var(--atlas-space-2); }
+.catalogue-drafts li strong { margin-right: auto; }

@@ -9,6 +9,7 @@ import {
   type Workspace,
 } from "../api";
 import { Banner } from "../components/Banner";
+import { Confirmation } from "../components/Confirmation";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
 import { ago, convergence, KIND_LABELS, percent, STATUS_LABELS } from "../format";
@@ -17,6 +18,8 @@ import { href, setParams, type Params } from "../router";
 
 const SEARCH_DELAY_MS = 200;
 const SKELETON_ROWS = 5;
+
+type Draft = { id: string; label: string; resumable?: boolean };
 
 type Filter = Exclude<keyof CatalogFilters, "q">;
 
@@ -58,7 +61,44 @@ export function Catalogue({
   const [facets, setFacets] = useState<Facets | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [discard, setDiscard] = useState<Draft | null>(null);
+  const [discarding, setDiscarding] = useState(false);
+  const [draftError, setDraftError] = useState<Explained | null>(null);
+  const draftButtons = useRef(new Map<string, HTMLButtonElement>());
+  const focusAfterDiscard = useRef<string | null | undefined>(undefined);
   const links = useRef(new Map<string, HTMLAnchorElement>());
+
+  useEffect(() => {
+    let alive = true;
+    setDrafts([]);
+    setDraftError(null);
+    if (ws.role !== "lecteur") api.creationDrafts(ws.id)
+      .then((items) => { if (alive) setDrafts(items); })
+      .catch((reason) => { if (alive && !(reason instanceof UnreachableError)) setDraftError(explain(reason)); });
+    return () => { alive = false; };
+  }, [ws.id, ws.role]);
+
+  async function abandonDraft() {
+    if (!discard) return;
+    setDiscarding(true);
+    try {
+      await api.deleteDraft(ws.id, discard.id, true);
+      const index = drafts.findIndex((item) => item.id === discard.id);
+      focusAfterDiscard.current = drafts[index + 1]?.id ?? drafts[index - 1]?.id ?? null;
+      setDrafts((items) => items.filter((item) => item.id !== discard.id));
+      setDiscard(null);
+      setDraftError(null);
+    } catch (reason) { if (!(reason instanceof UnreachableError)) setDraftError(explain(reason)); setDiscard(null); }
+    finally { setDiscarding(false); }
+  }
+
+  useEffect(() => {
+    if (focusAfterDiscard.current === undefined) return;
+    const id = focusAfterDiscard.current;
+    focusAfterDiscard.current = undefined;
+    (id ? draftButtons.current.get(id) : heading.current)?.focus();
+  }, [drafts, heading]);
 
   // L'adresse a changé (retour arrière) : le champ suit.
   useEffect(() => setText(filters.q), [filters.q]);
@@ -161,6 +201,17 @@ export function Catalogue({
         )}
       </div>
 
+      {draftError && <Banner tone="bad" title={draftError.title}>{draftError.text}</Banner>}
+      {ws.role !== "lecteur" && drafts.length > 0 && <section className="card catalogue-drafts" aria-labelledby="drafts-title">
+        <h2 id="drafts-title">Mes brouillons</h2>
+        <ul>{drafts.map((draft) => <li key={draft.id}>
+          <strong>{draft.label}</strong>
+          {draft.resumable !== false && <a className="btn btn-secondary btn-dense" href={href.editor(ws.id, { from: draft.id })}>Reprendre</a>}
+          <button type="button" className="btn btn-neutral btn-dense" ref={(el) => { if (el) draftButtons.current.set(draft.id, el); else draftButtons.current.delete(draft.id); }} onClick={() => setDiscard(draft)}>Abandonner</button>
+        </li>)}</ul>
+      </section>}
+      {discard && <Confirmation title="Abandonner le brouillon ?" description={`Le brouillon local « ${discard.label} » sera supprimé.`}
+        action="Abandonner" busy={discarding} onCancel={() => setDiscard(null)} onConfirm={() => void abandonDraft()} />}
       <div className="filters" role="search">
         <label className="search">
           <Icon name="search" />
