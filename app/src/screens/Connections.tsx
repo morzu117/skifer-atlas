@@ -15,6 +15,7 @@ import { Field } from "../components/Field";
 import { GitHubConnect } from "../components/GitHubConnect";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
+import { TableWrap } from "../components/TableWrap";
 import { canPickFile, openExternal, pickFile } from "../external";
 import { explain, translated, type Explained } from "../messages";
 import { href } from "../router";
@@ -434,7 +435,7 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
             </div>
           )}
           {list.kind === "ready" && list.value.length > 0 && (
-            <div className="table-wrap">
+            <TableWrap label="Tableau : Points d'accès de l'espace">
               <table className="table connections-table" aria-label="Points d'accès de l'espace">
                 <thead>
                   <tr>
@@ -454,7 +455,7 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
           )}
         </div>
         {canDeclare && platforms.kind === "loading" && <p role="status">Chargement des plateformes…</p>}

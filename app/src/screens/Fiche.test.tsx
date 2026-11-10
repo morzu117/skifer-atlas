@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiffReport, DocumentSheet, GraphLayout, GraphNode, Version, Workspace } from "../api";
 import { positions } from "../components/GraphView";
 import { useRoute } from "../router";
+import { expectAccessibleLandmarks } from "../test/accessibility";
 import { fakeServer, workspace } from "../test/fakeServer";
 import { mockReactFlow } from "../test/reactFlow";
 import { Fiche } from "./Fiche";
@@ -154,6 +155,17 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("fiche", () => {
+  it("évite les repères dupliqués et rend les tableaux accessibles", async () => {
+    sheetServer();
+    fiche();
+    await userEvent.click(await screen.findByRole("button", { name: /Déclinaisons/ }));
+    expect(screen.getByRole("group", { name: "Tableau : Déclinaisons" })).toBeInTheDocument();
+    await expectAccessibleLandmarks();
+    await userEvent.click(screen.getByRole("button", { name: /Versions/ }));
+    await screen.findByRole("group", { name: "Tableau : Versions" });
+    await expectAccessibleLandmarks();
+  });
+
   it("propose de créer une déclinaison depuis le KPI aux contributeurs", async () => {
     sheetServer();
     fiche(workspace({ role: "contributeur" }));

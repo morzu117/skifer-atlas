@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminState, Governance } from "../api";
+import { expectAccessibleLandmarks } from "../test/accessibility";
 import { fakeServer, workspace, type Call } from "../test/fakeServer";
 import { navigate } from "../router";
 import { Administration, domainReferents, mainRole, withoutDomain, withoutMember } from "./Administration";
@@ -100,6 +101,13 @@ describe("règles", () => {
 });
 
 describe("administration", () => {
+  it("évite les repères dupliqués et rend les tableaux accessibles", async () => {
+    server();
+    render(screenFor());
+    await screen.findByRole("group", { name: "Tableau : Utilisateurs et rôles" });
+    await expectAccessibleLandmarks();
+  });
+
   it("[S-0017-06] [S-0017-08] sections de la maquette, référent seul, aucun champ de token (critères 6 et 8)", async () => {
     server();
     render(screenFor());

@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, UnreachableError, type CatalogRow, type DocumentSummary, type Workspace } from "../api";
 import { useRoute } from "../router";
+import { expectAccessibleLandmarks } from "../test/accessibility";
 import { fakeServer, workspace, type Call } from "../test/fakeServer";
 import { Catalogue } from "./Catalogue";
 import App from "../App";
@@ -128,6 +129,14 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("catalogue", () => {
+  it("évite les repères dupliqués et rend les tableaux accessibles", async () => {
+    catalogServer();
+    catalogue();
+    await screen.findByRole("link", { name: "Revenu net" });
+    expect(screen.getByRole("group", { name: "Tableau : Concepts et KPI" })).toBeInTheDocument();
+    await expectAccessibleLandmarks();
+  });
+
   it("permet de reprendre ou abandonner un brouillon après confirmation", async () => {
     const { calls } = catalogServer((call) => {
       if (call.path === `${WS}/editor/drafts`) return { json: [{ id: "stock-moyen", label: "Stock moyen" }] };
@@ -273,6 +282,8 @@ describe("catalogue", () => {
     expect(table.getByRole("link", { name: "Marge brute" })).toHaveAttribute("tabindex", "-1");
     await userEvent.click(screen.getByRole("searchbox"));
     for (let i = 0; i < 4; i += 1) await userEvent.tab(); // les quatre filtres
+    await userEvent.tab();
+    expect(screen.getByRole("group", { name: "Tableau : Concepts et KPI" })).toHaveFocus();
     await userEvent.tab(); // une seule ligne dans l'ordre de tabulation
     expect(first).toHaveFocus();
     await waitFor(() => expect(window.location.hash).toContain("sel=commande"));

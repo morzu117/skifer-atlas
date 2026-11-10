@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Connection, Platform, Workspace } from "../api";
+import { expectAccessibleLandmarks } from "../test/accessibility";
 import { ALTAVIA, fakeServer, workspace, type Call } from "../test/fakeServer";
 import { accessLabel, Connections, suggestedId, toAccessPoint } from "./Connections";
 
@@ -137,6 +138,13 @@ describe("libellés", () => {
 });
 
 describe("mes connexions", () => {
+  it("évite les repères dupliqués et rend les tableaux accessibles", async () => {
+    server();
+    render(screenFor());
+    await screen.findByRole("group", { name: "Tableau : Points d'accès de l'espace" });
+    await expectAccessibleLandmarks();
+  });
+
   it("tableau : plateforme, schéma, propriétaire, fraîcheur, mon accès et actions (critères 1 et 6)", async () => {
     server();
     render(screenFor());

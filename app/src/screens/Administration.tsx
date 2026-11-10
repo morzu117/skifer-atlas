@@ -19,6 +19,7 @@ import { Confirmation } from "../components/Confirmation";
 import { Field } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
+import { TableWrap } from "../components/TableWrap";
 import { ago, plural, slugify } from "../format";
 import { explain, type Explained } from "../messages";
 import { href, useLeaveGuard } from "../router";
@@ -454,7 +455,7 @@ function Settings({
                 onEdited={setFormEdited}
               />
             ) : (
-              <div className="table-wrap">
+              <TableWrap label="Tableau : Utilisateurs et rôles">
                 <table className="table table-dense admin-table" aria-label="Utilisateurs et rôles">
                   <thead>
                     <tr>
@@ -488,7 +489,7 @@ function Settings({
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </TableWrap>
             )}
           </Section>
 
