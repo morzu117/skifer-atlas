@@ -703,3 +703,187 @@ test("[S-0013-18] Un brouillon YAML illisible s'ouvre en vue YAML ; « Repartir 
     await request.delete(`${EDITOR}/documents/revenu-net/draft`);
   }
 });
+
+// --- Courses d'enregistrement du brouillon (critères 19, 21 et 22 du plan 0013) -------------------
+
+/** Le document créé par le brouillon n'existe plus : le brouillon supprimé n'a pas été recréé. */
+const draftGone = async (request: APIRequestContext, id: string) => {
+  const response = await request.get(`${EDITOR}/documents/${id}`);
+  return !response.ok() || (await response.json()).draft === null;
+};
+
+/** Retient la première écriture du brouillon `id` (PUT) jusqu'à `release`, puis la fait échouer ;
+ * les suivantes passent. Relève toutes les méthodes vues, dans l'ordre d'arrivée. */
+async function holdDraftWrites(page: Page, id: string) {
+  const methods: string[] = [];
+  let late = false;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/editor/documents/${id}/draft`, async (route) => {
+    const method = route.request().method();
+    methods.push(method);
+    if (method !== "PUT" || late) return route.continue().catch(() => undefined);
+    late = true;
+    await released;
+    await route.abort("failed").catch(() => undefined);
+  });
+  return { methods, release };
+}
+
+test("[S-0013-19] Une écriture du brouillon qui échoue tardivement ne recrée pas le brouillon après la soumission", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  const mark = "modification-avant-soumission";
+  try {
+    await page.goto(`${ws.root}/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    const writes = await holdDraftWrites(page, id);
+    await field(page, "Description", mark);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect.poll(() => writes.methods).toEqual(["PUT"]); // l'écriture est lancée, sa réponse retenue
+
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    await expect(submitButton(page)).not.toHaveAttribute("aria-disabled", "true");
+    await submitButton(page).click();
+    const dialog = page.getByRole("dialog", { name: "Soumettre la proposition" });
+    await dialog.getByLabel(/Justification/).fill("Soumise pendant une écriture du brouillon.");
+    await dialog.getByRole("button", { name: "Soumettre" }).click();
+    await expect(page.getByRole("heading", { name: /Proposition n° \d+ créée/ })).toBeVisible();
+    // La suppression du brouillon attend la fin de l'écriture déjà lancée.
+    expect(writes.methods).toEqual(["PUT"]);
+
+    writes.release();
+    await expect.poll(() => writes.methods).toEqual(["PUT", "DELETE"]);
+    await expect.poll(() => draftGone(request, id)).toBe(true);
+    // Rien ne recrée le brouillon ensuite, ni Ctrl/Cmd+Z, ni un nouveau départ de page.
+    await page.keyboard.press("ControlOrMeta+Z");
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await page.waitForTimeout(1200); // plus que le délai d'enregistrement (800 ms)
+    expect(writes.methods).toEqual(["PUT", "DELETE"]);
+    expect(await draftGone(request, id)).toBe(true);
+    expect(await seriousViolations(page)).toEqual([]);
+  } finally {
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-19] Une écriture du brouillon qui échoue tardivement ne recrée pas le brouillon après « Repartir de la vN », et la session reste modifiable", async ({ page, request }) => {
+  const label = "Revenu net (brouillon repris)";
+  const opened = await (await request.get(`${EDITOR}/documents/revenu-net`)).json() as { document: Raw; base_version: number; highest: number };
+  const version = opened.base_version;
+  expect((await request.put(`${EDITOR}/documents/revenu-net/draft`, {
+    data: { document: { ...opened.document, label }, positions: {}, highest: opened.highest, base_version: version },
+  })).ok()).toBe(true);
+  try {
+    await page.goto(`${ws.root}/editeur?from=revenu-net`);
+    await expect(page.getByRole("heading", { level: 1, name: `${label} : v${version + 1} · brouillon` })).toBeVisible();
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    const writes = await holdDraftWrites(page, "revenu-net");
+    await field(page, "Description", "modification-avant-repartir");
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect.poll(() => writes.methods).toEqual(["PUT"]);
+
+    await page.getByRole("button", { name: `Repartir de la v${version}` }).click();
+    await page.getByRole("alertdialog", { name: `Repartir de la v${version} ?` }).getByRole("button", { name: "Supprimer le brouillon" }).click();
+    await expect(page.getByText("Reprise en cours : l'édition est suspendue.")).toBeVisible();
+    expect(writes.methods).toEqual(["PUT"]); // la suppression attend l'écriture
+
+    writes.release();
+    await expect.poll(() => writes.methods).toEqual(["PUT", "DELETE"]);
+    await expect(page.getByRole("heading", { level: 1, name: `Revenu net : v${version + 1} · brouillon` })).toBeVisible();
+    await expect(page.getByText("Reprise en cours")).toHaveCount(0);
+    await expect.poll(() => draftOf(request, "revenu-net")).toBeNull();
+    // Aucune autre écriture n'est partie, et la session est de nouveau modifiable.
+    await page.waitForTimeout(1200);
+    expect(writes.methods).toEqual(["PUT", "DELETE"]);
+    await field(page, "Description", "apres-repartir");
+    await expect(description(page)).toHaveValue("apres-repartir");
+    await expect.poll(async () => ((await draftOf(request, "revenu-net"))?.document.data_product as Raw | undefined)?.description).toBe("apres-repartir");
+  } finally {
+    await request.delete(`${EDITOR}/documents/revenu-net/draft`);
+  }
+});
+
+test("[S-0013-21] keepalive seulement sous 60 Kio, mesuré en octets UTF-8", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  // Le navigateur n'expose pas `keepalive` à Playwright : l'appel à fetch est relevé dans la page.
+  await page.addInitScript(() => {
+    const seen: { keepalive: boolean | undefined; bytes: number }[] = [];
+    (window as unknown as { draftWrites: typeof seen }).draftWrites = seen;
+    const original = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      if (init?.method === "PUT" && String(input).endsWith("/draft")) {
+        seen.push({ keepalive: init.keepalive, bytes: new TextEncoder().encode(String(init.body)).byteLength });
+      }
+      return original(input, init);
+    };
+  });
+  const writes = () => page.evaluate(() => (window as unknown as { draftWrites: { keepalive: boolean | undefined; bytes: number }[] }).draftWrites);
+  try {
+    await page.goto(`${ws.root}/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+
+    // Un petit brouillon quitté aussitôt : keepalive.
+    await field(page, "Description", "petite-modification");
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect.poll(async () => (await writes()).length).toBe(1);
+    const [small] = await writes();
+    expect(small.bytes).toBeLessThan(60 * 1024);
+    expect(small.keepalive).toBe(true);
+
+    // 31 000 « é » : moins de 60 000 caractères, plus de 60 Kio en UTF-8 : pas de keepalive.
+    await page.getByRole("button", { name: "Éditer en YAML" }).click();
+    const yaml = page.getByRole("textbox", { name: "YAML de Revenu net" });
+    await yaml.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText("é".repeat(31_000));
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    await expect.poll(async () => (await writes()).length).toBeGreaterThan(1);
+    const large = (await writes()).filter((write) => write.bytes > 60 * 1024);
+    expect(large.length).toBeGreaterThan(0);
+    for (const write of large) expect(write.keepalive).toBe(false);
+  } finally {
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});
+
+test("[S-0013-22] Saisir du YAML ne désactive pas « Revenir au canevas », et une saisie arrivée pendant l'analyse garde la vue YAML", async ({ page, request }) => {
+  const { id } = await isolatedDraft(request);
+  try {
+    await page.goto(`${ws.root}/editeur?from=${id}`);
+    await expect(bottom(page).getByText("Compilable Databricks, Snowflake")).toBeVisible();
+    await page.getByRole("button", { name: "Éditer en YAML" }).click();
+    const yaml = page.getByRole("textbox", { name: "YAML de Revenu net" });
+    await expect(yaml).toContainText("schema_version: 1");
+    const leave = page.getByRole("button", { name: "Revenir au canevas" });
+
+    // Les analyses sont retenues : la frappe ne peut pas être « rattrapée » par un résultat.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    let parses = 0;
+    await page.route("**/editor/parse", async (route) => {
+      parses += 1;
+      await released;
+      await route.continue().catch(() => undefined);
+    });
+    await yaml.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText("label: première saisie\n");
+    await expect(leave).not.toHaveAttribute("aria-disabled", "true");
+    await leave.click(); // sans `force` : le bouton n'est pas bloqué
+    await expect.poll(() => parses).toBeGreaterThanOrEqual(1);
+    await yaml.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText("label: deuxième saisie\n");
+    release();
+
+    await expect(page.getByRole("alert")).toContainText("Le YAML a changé pendant l'analyse");
+    await expect(yaml).toBeVisible();
+    await expect(yaml).toContainText("label: deuxième saisie");
+    await expect(yaml).not.toContainText("première saisie");
+    await expect(page.getByRole("button", { name: "Éditer en YAML" })).toHaveCount(0);
+    expect(await seriousViolations(page)).toEqual([]);
+  } finally {
+    await page.goto("/");
+    await request.delete(`${EDITOR}/documents/${id}/draft`);
+  }
+});

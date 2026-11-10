@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { expect, type Page, type APIRequestContext } from "@playwright/test";
 import { FAKE_DATABRICKS } from "./demo";
 import { AUTH_API, isolatedDemo, relay, python, git, test } from "./isolation";
@@ -119,7 +121,7 @@ p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work);
   expect(await denied.json()).toMatchObject({ detail: { code: "invalid_access_point", issues: expect.arrayContaining([expect.objectContaining({ code: "platform_not_allowed" })]) } });
 });
 
-test("[S-0008-03] Tester signale explicitement un hôte injoignable", async ({ page, request }) => {
+test("[S-0008-03] [S-0016-09] Tester signale explicitement un hôte injoignable", async ({ page, request }) => {
   const ws = await isolatedDemo(request, AUTH_API);
   // Le port est choisi libre par le système ; aucun service externe n'est contacté.
   python(`import sys,yaml,socket
@@ -135,6 +137,7 @@ p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work);
   await relay(page, AUTH_API); await page.goto(`${ws.root}/connexions`);
   await row(page).getByRole("button", { name: "Tester Databricks · dbx-fr" }).click();
   await expect(row(page).getByRole("status")).toContainText("Hôte injoignable");
+  await expect(row(page).getByRole("status")).toContainText("Vérifiez l'adresse et la connexion réseau");
 });
 
 test("[S-0016-07] Un double clic sur « Se connecter » ne lance qu'un flux OAuth, sans échec affiché", async ({ page, request }) => {
@@ -191,7 +194,7 @@ test("[S-0016-07] Page d'autorisation abandonnée : « Annuler » arrête le flu
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
-test("[S-0016-08] Un test refusé pour accès expiré est expliqué, et « Reconnecter » ramène à la connexion", async ({ page, request }) => {
+test("[S-0016-08] [S-0016-09] Un test refusé pour accès expiré est expliqué, et « Reconnecter » ramène à la connexion", async ({ page, request }) => {
   const ws = await isolatedDemo(request, AUTH_API);
   // Le faux Databricks ne connaît pas ce token : la plateforme le refuse, l'accès passe à « expiré ».
   expect((await request.put(`${ws.api}/connections/dbx-fr/token`, { data: { token: "dapi-factice-refuse-par-la-plateforme" } })).ok()).toBe(true);
@@ -225,4 +228,72 @@ test("[S-0008-10] Un jeton recopié par la plateforme dans son erreur n'arrive j
   await expect(status).toContainText("***");
   expect(await page.evaluate(() => document.documentElement.outerHTML)).not.toContain(token);
   expect((await Promise.all(bodies)).join("\n")).not.toContain(token);
+});
+
+test("[S-0016-09] Un accès retiré ailleurs : le test dit « Pas encore connecté » et mène à la connexion, sans le texte brut du serveur", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  await page.goto(`${ws.root}/connexions`);
+  await authorize(page);
+  await expect(row(page).getByRole("cell", { name: /^Connecté\s*·\s*session OAuth$/ })).toBeVisible();
+  // L'accès disparaît du coffre pendant que la page reste ouverte.
+  expect((await request.delete(`${ws.api}/connections/dbx-fr/token`)).ok()).toBe(true);
+  await row(page).getByRole("button", { name: "Tester Databricks · dbx-fr" }).click();
+  const status = row(page).getByRole("status");
+  await expect(status).toContainText("Pas encore connecté");
+  await expect(status).toContainText("Connectez-vous depuis Mes connexions, puis réessayez.");
+  await expect(status).not.toContainText("Pas encore connecté à «");
+});
+
+test("[S-0016-09] Une plateforme qui répond par une erreur : « La plateforme a refusé la requête » et la consigne, sans le texte brut", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  // Un faux entrepôt qui répond HTTP 500 : il tient lieu de la plateforme, sur un port libre local.
+  const platform = createServer((incoming, outgoing) => {
+    incoming.resume();
+    outgoing.writeHead(500, { "Content-Type": "application/json" });
+    outgoing.end(JSON.stringify({ message: "texte-brut-de-la-plateforme" }));
+  });
+  await new Promise<void>((resolve) => platform.listen(0, "127.0.0.1", resolve));
+  try {
+    const port = (platform.address() as AddressInfo).port;
+    python(`import sys,yaml
+from pathlib import Path
+p=Path(sys.argv[1])/'access_points.yaml'; d=yaml.safe_load(p.read_text())
+next(a for a in d['access_points'] if a['id']=='dbx-fr')['host']=f'http://127.0.0.1:{sys.argv[2]}'
+p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))`, ws.work, String(port));
+    git(ws.work, "add", "."); git(ws.work, "commit", "-qm", "Hôte qui répond en erreur"); git(ws.work, "push", "origin", "main");
+    expect((await request.post(`${ws.api}/sync`)).ok()).toBe(true);
+    expect((await request.put(`${ws.api}/connections/dbx-fr/token`, { data: { token: "dapi-factice-requete-refusee" } })).ok()).toBe(true);
+    await relay(page, AUTH_API);
+    await page.goto(`${ws.root}/connexions`);
+    await row(page).getByRole("button", { name: "Tester Databricks · dbx-fr" }).click();
+    const status = row(page).getByRole("status");
+    await expect(status).toContainText("La plateforme a refusé la requête");
+    await expect(status).toContainText("Vérifiez vos droits sur le schéma et l'entrepôt");
+    await expect(status).not.toContainText("texte-brut-de-la-plateforme");
+  } finally {
+    platform.close();
+  }
+});
+
+test("[S-0016-09] Le port de retour OAuth occupé : « Une connexion OAuth est déjà en cours » et sa consigne", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  // Une autre application tient le port de retour (8020) : la connexion ne peut pas écouter.
+  const holder = createServer();
+  await new Promise<void>((resolve, reject) => { holder.once("error", reject); holder.listen(8020, "127.0.0.1", resolve); });
+  try {
+    await page.goto(`${ws.root}/connexions`);
+    await row(page).getByRole("button", { name: "Se connecter à Databricks · dbx-fr" }).click();
+    const alert = row(page).getByRole("alert");
+    await expect(alert).toContainText("Une connexion OAuth est déjà en cours");
+    await expect(alert).toContainText("Terminez-la ou fermez-la, puis réessayez.");
+    await expect(alert).not.toContainText("Le port 8020 est occupé");
+    await expect(row(page).getByRole("cell", { name: "Jamais connecté" })).toBeVisible();
+  } finally {
+    await new Promise<void>((resolve) => { holder.close(() => resolve()); });
+  }
+  // Le port libéré, la connexion aboutit.
+  await authorize(page);
+  await expect(row(page).getByRole("cell", { name: /^Connecté\s*·\s*session OAuth$/ })).toBeVisible();
 });

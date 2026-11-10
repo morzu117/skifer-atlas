@@ -239,3 +239,62 @@ test("[S-0015-11] une tolérance de 8 % règle le curseur sur 8 et la comparaiso
   expect(seen.starts).toHaveLength(1);
   expect(seen.starts[0]).toMatchObject({ kpi_id: "revenu-net", tolerance: 8 });
 });
+
+test("[S-0015-05] Annuler arrête la progression : message, bouton retiré, statut « Annulé »", async ({ page }) => {
+  let cancelled = false;
+  const seen = await simulateRuns(page, {
+    start: () => ({ status: 202, json: { id: 9001, status: "running", alerts: [] } }),
+    cancel: () => { cancelled = true; return { status: 200, json: { id: 9001, status: "cancelling" } }; },
+    poll: (id) => {
+      const running = ongoing(id);
+      if (!cancelled) return running;
+      return { status: 200, json: { ...(running.json as object), status: "cancelled", finished_at: "2026-11-06T09:00:05", progress: null } };
+    },
+  });
+  const launch = await readyToLaunch(page);
+  await launch.click();
+  const bar = page.getByRole("progressbar", { name: "Databricks · nordis-de, nordis-fr" });
+  await expect(bar).toHaveAttribute("aria-valuenow", "40");
+  await expect(page.getByText("En cours · 40 %")).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+
+  await page.getByRole("button", { name: "Annuler" }).click();
+  await expect.poll(() => seen.cancels).toEqual([9001]);
+  await expect(page.getByText("Comparaison n° 9001 annulée.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Annuler" })).toHaveCount(0);
+  await expect(page.getByText("Annulé", { exact: true }).first()).toBeVisible();
+  await expect(page).toHaveURL(/id=9001/);
+  // Le lancement redevient possible.
+  await expect(launch).not.toHaveAttribute("aria-disabled", "true");
+  expect(await seriousViolations(page)).toEqual([]);
+});
+
+test("[S-0015-12] un accès perdu pendant le lancement est expliqué et mène à la reconnexion", async ({ page }) => {
+  let lost = false;
+  // L'aperçu du vrai serveur trouve l'accès ; il ne le perd qu'une fois le lancement refusé.
+  await page.route((url) => url.pathname === `${RUNS}/preview`, async (route) => {
+    if (!lost) return route.fallback();
+    const preview = await (await route.fetch()).json() as object;
+    await route.fulfill({ json: { ...preview, missing_access: [{ access_point: "dbx-fr", code: "access_expired", message: "Accès expiré." }] } });
+  });
+  const seen = await simulateRuns(page, {
+    start: () => { lost = true; return refusal(409, "access_expired", "Accès expiré : texte brut du serveur."); },
+  });
+  const launch = await readyToLaunch(page);
+  await expect(page.getByText("Connexion requise", { exact: true })).toHaveCount(0);
+  await launch.click();
+
+  const alert = page.getByRole("alert").filter({ hasText: "Accès expiré" });
+  await expect(alert).toContainText("Reconnectez-vous depuis Mes connexions, puis réessayez.");
+  await expect(alert).not.toContainText("texte brut");
+  await expect(alert.getByRole("link", { name: "Reconnecter dans Mes connexions" })).toHaveAttribute("href", "#/w/groupe-nordis/connexions");
+  // L'aperçu est relu : le bandeau « Connexion requise » et son bouton existent, sans second lancement.
+  await expect(page.getByText("Connexion requise", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Se connecter à dbx-fr" })).toBeVisible();
+  expect(seen.starts).toHaveLength(1);
+  expect(await seriousViolations(page)).toEqual([]);
+
+  await alert.getByRole("link", { name: "Reconnecter dans Mes connexions" }).click();
+  await expect(page).toHaveURL(/#\/w\/groupe-nordis\/connexions$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Mes connexions" })).toBeVisible();
+});
