@@ -7,12 +7,12 @@ Date : 2026-11-07 · Statut : **proposée** (branche points d'accès REST, plan 
 Un point d'accès REST (0050) dit où l'on se connecte. Il ne dit pas quel appel remplit quelle table : les nœuds `source` nomment des tables au format `a.b[.c]` (`TABLE_PATTERN`, `model/nodes.py:41`) et gardent `platform: duckdb`. Il faut déclarer, pour chaque table, l'appel qui la remplit.
 
 Où le déclarer :
-- `access_points.yaml` est de la gouvernance (qui, où, quels quotas) ; son modèle est fermé, `extra="forbid"` (`connectors/access_points.py:59-60`) ;
+- `rest_access_points.yaml` est de la gouvernance, comme `access_points.yaml` (qui, où, quels quotas) ; son modèle REST est fermé (0050), suivant le modèle existant `extra="forbid"` (`connectors/access_points.py:60`) ;
 - les jeux de données sont nombreux, changent souvent et vivent avec les documents KPI.
 
 ## Décision
 
-- **Un fichier `rest_datasets.yaml` à part, dans l'espace de travail**, à côté des documents KPI. Rien n'est ajouté à `access_points.yaml` pour eux.
+- **Un fichier `rest_datasets.yaml` à part, dans l'espace de travail**, à côté des documents KPI. Rien n'est ajouté à `rest_access_points.yaml` pour eux.
 - **Un jeu de données associe une table à son appel.** Le design retient, par jeu de données :
   - l'identifiant de la table logique, au format `a.b[.c]`, celui qu'un nœud `source` vise ;
   - le point d'accès (id, `^[a-z0-9][a-z0-9-]{1,63}$`, `access_points.py:64`) ;
@@ -27,7 +27,7 @@ Où le déclarer :
 
   La clé n'est jamais dans ce fichier (0053) ; seul le mode d'envoi se déclare, et où (jeu de données ou point d'accès) est à préciser au plan.
 - **Un périmètre vide est refusé** pour un jeu de données qui l'exige : pas de récupération d'un univers entier par accident.
-- Le fichier a son propre `schema_version`, un modèle fermé comme `access_points.yaml`, et une validation qui rend des `Issue` (`model/errors.py`). Les noms de champs, leurs valeurs et le contrôle que le point d'accès cité existe et est `rest` : à préciser au plan.
+- Le fichier a son propre `schema_version`, un modèle fermé comme `access_points.yaml`, et une validation qui rend des `Issue` (`model/errors.py`). Les noms de champs, leurs valeurs et le contrôle que le point d'accès cité existe dans `rest_access_points.yaml` sont précisés au plan (un identifiant du seul fichier historique ne suffit pas).
 - Un nœud `source` dont la table n'a pas de jeu de données, quand l'exécution est REST, est une erreur de comparaison : son code est à préciser au plan.
 
 ## Conséquences

@@ -14,6 +14,8 @@ Le propriétaire a tranché (réponses 3 et 4) :
 
 ## Décision
 
+- **Construction : gpt-ops**, sur une branche issue de celle-ci, après approbation des ADR par le propriétaire (décision du propriétaire, 91871).
+
 - **La branche se réduit au point d'accès REST.** Elle couvre :
   - le modèle du point (0050) et les jeux de données (0051) ;
   - le choix du runner (0052) et la clé (0053) ;
