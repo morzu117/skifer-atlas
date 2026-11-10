@@ -138,6 +138,7 @@ Pour chaque écran : fichier de référence, zones, états, interactions attendu
 - Tableau : Nom (lien), Type, Domaine, Version, Déclinaisons, Convergence.
 - Panneau d'aperçu à droite (`max-width: 340px`) sur sélection d'une ligne : nom, domaine · version · propriétaire, description, points de variation, déclinaisons, référencé par, dernière comparaison, bouton « Ouvrir la fiche ».
 - « + Nouveau concept ou KPI » (contributeurs) → éditeur vide.
+- Région « Mes brouillons » au-dessus des filtres pour les brouillons locaux de création : liste de libellés, lien « Reprendre » et bouton « Abandonner » avec confirmation accessible au clavier (focus sur Annuler, Échap pour fermer et retour du focus après suppression) ; absente pour un lecteur ou si la liste est vide.
 - À moins de 900 px de large, le panneau passe sous le tableau.
 
 ### 10.2 Fiche KPI — `screens/10.2-fiche-kpi.html`
@@ -155,7 +156,7 @@ Pour chaque écran : fichier de référence, zones, états, interactions attendu
 - **Palette** 196 px : recherche, familles Entrées / Lignes / Combinaison / Résultat, chaque nœud glissable (carré de couleur 14 px + libellé). Rien d'autre n'est proposé.
 - **Canevas** : trame 24 px, nœuds et arêtes selon la section 4, mini-carte 150 × 70 px en bas à droite.
 - **Panneau de propriétés** 296 px, onglets Propriétés / Entrées / YAML du nœud. Les champs dépendent du type de nœud (tableau ci-dessous). Actions en bas : Dupliquer, Supprimer.
-- **Panneau bas** : onglets Problèmes (n) / Colonnes en sortie du nœud sélectionné / SQL compilé ; à droite, l'état permanent « Schéma valide · Sans cycle · Compilable Databricks, Snowflake ». Chaque problème : sévérité (AVERT. orange, ERREUR rouge, INFO pale), identifiant du nœud en mono, message, « Aller au nœud ».
+- **Panneau bas** : onglets Problèmes (n) / Colonnes en sortie du nœud sélectionné / SQL compilé ; à droite, l'état permanent « Schéma valide · Sans cycle · Compilable Databricks, Snowflake ». Pour un concept sans graphe, la ligne indique « Sans graphe : compilation non applicable ». Chaque problème : sévérité (AVERT. orange, ERREUR rouge, INFO pale), identifiant du nœud en mono, message, « Aller au nœud ».
 
 Champs obligatoires par type de nœud (panneau de propriétés) :
 

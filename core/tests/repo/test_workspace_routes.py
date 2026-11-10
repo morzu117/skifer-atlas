@@ -18,6 +18,7 @@ def test_workspace_list_is_local_and_detail_has_current_role(atlas_env, monkeypa
     current = get_workspace("groupe-nordis")
     update_workspace(current.model_copy(update={"git_remote":
                                               "https://github.com/example/atlas.git"}))
+
     def unexpected_request(*args):
         raise AssertionError("unexpected GitHub request")
 

@@ -148,6 +148,7 @@ def test_merge_reports_success_when_follow_up_sync_fails(client, joined, as_, mo
         assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"}).status_code == 200
 
     original_sync = proposals_merge.sync_workspace
+
     def fail_after_merge(workspace_id):
         raise RepoError("fetch_failed", "Échec simulé")
     monkeypatch.setattr(proposals_merge, "sync_workspace", fail_after_merge)

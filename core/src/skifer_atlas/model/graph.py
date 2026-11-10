@@ -120,17 +120,28 @@ class GraphView:
 class Library:
     """Documents connus, pour résoudre `kpi_ref` et trouver le canonique d'une variante.
 
-    Le plan 0005 la remplira depuis le dépôt de l'espace ; ici on la construit à la main.
+    Une bibliothèque complète connaît tous les concepts courants de l’espace. Les appels
+    isolés (CLI ou compilation d’un fichier) peuvent ne fournir qu’une partie du corpus :
+    ils ne peuvent donc pas conclure à l’absence d’un concept.
     """
 
-    def __init__(self, documents: Iterable[Any] = ()):
+    def __init__(self, documents: Iterable[Any] = (), *, complete_concepts: bool = False,
+                 concept_ids: Iterable[str] = ()):
         self._kpis: dict[KpiKey, KpiDocument] = {}
+        self._concepts: set[str] = set(concept_ids)
+        self.complete_concepts = complete_concepts
         for document in documents:
             self.add(document)
 
     def add(self, document: Any) -> None:
         if isinstance(document, KpiDocument):
             self._kpis[(document.data_product.id, document.data_product.version)] = document
+
+        elif isinstance(document, ConceptDocument):
+            self._concepts.add(document.data_product.id)
+
+    def concept(self, concept_id: str) -> bool:
+        return concept_id in self._concepts
 
     def kpi(self, kpi_id: str, version: int) -> KpiDocument | None:
         return self._kpis.get((kpi_id, version))
@@ -241,6 +252,11 @@ def structure_issues(document: Any, library: Library | None = None) -> list[Issu
                 "Un découpage en périodes suppose un calendrier déclaré (semantics.calendar).",
             ))
 
+    if library is not None and library.complete_concepts:
+        for node in document.graph.nodes:
+            if node.type == "source" and node.concept and not library.concept(node.concept):
+                issues.append(Issue(view.path(node.id, "concept"), node.id, "unknown_concept",
+                                    f"Concept « {node.concept} » rattaché à {node.id} introuvable."))
     issues.extend(_kpi_ref_issues(document, view, library or Library()))
     return issues
 

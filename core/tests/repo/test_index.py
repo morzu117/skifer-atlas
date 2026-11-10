@@ -425,3 +425,19 @@ def test_convergence_separates_candidates_from_divergences(compared, expected):
     assert _convergence("kpi", VARIANTS, 4, compared) == expected
     assert _convergence("kpi", [], 4, compared) == "converged"
     assert _convergence("concept", VARIANTS, 4, compared) is None
+
+
+def test_present_invalid_concept_is_not_unknown(repo):
+    from skifer_atlas.index.build import analyze
+
+    path = repo / "concepts/commande.yaml"
+    original = path.read_text(encoding="utf-8")
+    path.write_text("kind: concept\nlabel: [", encoding="utf-8")
+    analysis = analyze(repo)
+    assert analysis.library.concept("commande")
+    assert analysis.entry("commande").document is None
+    assert not any(i.code == "unknown_concept" for i in analysis.entry("revenu-net").issues)
+    path.unlink()
+    analysis = analyze(repo)
+    assert any(i.code == "unknown_concept" for i in analysis.entry("revenu-net").issues)
+    path.write_text(original, encoding="utf-8")

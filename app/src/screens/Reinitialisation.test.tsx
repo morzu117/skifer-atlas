@@ -433,6 +433,10 @@ describe("réinitialiser depuis la coque d'un espace rouvert (plan 0034)", () =>
     const dialog = screen.getByRole("alertdialog", { name: "Réinitialiser le rattachement ?" });
     expect(dialog).toHaveTextContent("Le dépôt distant n'est pas modifié");
     expect(within(dialog).getByRole("button", { name: "Annuler" })).toHaveFocus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(within(dialog).getByRole("button", { name: "Confirmer la réinitialisation" })).toHaveFocus();
+    await userEvent.tab();
+    expect(within(dialog).getByRole("button", { name: "Annuler" })).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(trigger).toHaveFocus();
