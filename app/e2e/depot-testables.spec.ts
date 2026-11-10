@@ -1,6 +1,7 @@
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect } from "@playwright/test";
+import { seriousViolations } from "./demo";
 import { AUTH_API, CORE, git, isolatedDemo, python, relay, test } from "./isolation";
 
 function push(work: string, message: string) {
@@ -74,9 +75,33 @@ test("[S-0020-03] Une poussée de tag refusée garde le tag local et affiche l'a
   chmodSync(hook, 0o755);
   await relay(page, AUTH_API); await page.goto(`${ws.root}/administration`);
   await page.getByRole("button", { name: "Synchroniser", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Dépôt Git de l'espace" })).toContainText("Les tags n'ont pas pu être poussés");
+  const repo = page.getByRole("region", { name: "Dépôt Git de l'espace" });
+  await expect(repo).toContainText("Les tags n'ont pas pu être poussés");
+  await expect(repo).toContainText("taguée au sync"); // les deux avertissements arrivent ensemble
   expect(git(clonePath(ws.id), "rev-parse", "doc/revenu-net/v5^{}")).toBe(commit);
   expect(git(ws.remote, "tag", "--list", "doc/revenu-net/v5")).toBe("");
+
+  // Le prochain sync qui peut pousser publie le tag, et l'avertissement disparaît.
+  unlinkSync(hook);
+  await page.getByRole("button", { name: "Synchroniser", exact: true }).click();
+  await expect(repo).not.toContainText("Les tags n'ont pas pu être poussés");
+  await expect.poll(() => git(ws.remote, "tag", "--list", "doc/revenu-net/v5")).toBe("doc/revenu-net/v5");
+  expect(git(ws.remote, "rev-parse", "doc/revenu-net/v5^{}")).toBe(commit);
+});
+
+test("[S-0020-02] Un commit sans changement de version ne produit ni tag ni avertissement", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  const tags = git(ws.remote, "tag", "--list");
+  const path = join(ws.work, "kpis/revenu-net.yaml");
+  writeFileSync(path, readFileSync(path, "utf8").replace("Revenu net", "Revenu net (libellé retouché)"));
+  git(ws.work, "add", "."); git(ws.work, "commit", "-qm", "Libellé retouché, version inchangée"); git(ws.work, "push", "origin", "main");
+  await relay(page, AUTH_API); await page.goto(`${ws.root}/administration`);
+  const repo = page.getByRole("region", { name: "Dépôt Git de l'espace" });
+  await page.getByRole("button", { name: "Synchroniser", exact: true }).click();
+  await expect(repo).not.toContainText("taguée au sync");
+  await expect(repo).not.toContainText("Les tags n'ont pas pu être poussés");
+  expect(git(ws.remote, "tag", "--list")).toBe(tags);
+  expect(git(clonePath(ws.id), "tag", "--list")).toBe(tags);
 });
 
 test("[S-0004-06] Les messages de résidu ne reprennent aucun littéral SQL", async ({ page, request }) => {
@@ -92,4 +117,30 @@ test("[S-0004-06] Les messages de résidu ne reprennent aucun littéral SQL", as
   await expect(residues.first()).toBeVisible();
   expect(await residues.count()).toBeGreaterThan(0);
   expect((await residues.allTextContents()).join("\n")).not.toMatch(/zqx|987654321/i);
+});
+
+test("[S-0004-01] Un script à résidu bloquant est signalé « Bloquant » sans comparaison, et une plateforme sans extraction ne propose pas d'extraire", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  const folder = join(ws.work, "implementations/revenu-net/nordis-fr");
+  copyFileSync(join(CORE, "tests/fixtures/sql/08_kpi_monthly.sql"), join(folder, "databricks.sql"));
+  writeFileSync(join(folder, "bigquery.sql"), "SELECT SUM(montant) AS revenu_net FROM ventes;\n");
+  push(ws.work, "Un script à fonction de fenêtre et un script BigQuery");
+  expect((await request.post(`${ws.api}/sync`)).ok()).toBe(true);
+  await relay(page, AUTH_API);
+  await page.goto(`${ws.root}/fiche/revenu-net?tab=implementations`);
+
+  const other = page.locator("section.implementation").filter({ hasText: "bigquery.sql" });
+  await expect(other).toContainText("Plateforme sans extraction");
+  await expect(other.getByRole("button", { name: "Extraire et comparer au canonique" })).toHaveCount(0);
+
+  const section = page.getByRole("region", { name: "nordis-fr · Databricks" });
+  await expect(section).toContainText("LAG(");
+  await section.getByRole("button", { name: "Extraire et comparer au canonique" }).click();
+  const blocking = section.locator(".extraction-residues li").filter({ hasText: "Bloquant" });
+  await expect(blocking.first()).toBeVisible();
+  await expect(blocking.first()).toContainText(/fenêtre|window/i);
+  // Un brouillon à résidu bloquant n'est pas comparé au canonique.
+  await expect(section.getByText("Brouillon à corriger avant de le comparer.").first()).toBeVisible();
+  await expect(section.getByRole("region", { name: "Écarts au canonique" })).toHaveCount(0);
+  expect(await seriousViolations(page)).toEqual([]);
 });

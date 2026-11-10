@@ -39,6 +39,7 @@ class State:
         self.canceled: list[str] = []
         self.rows = 3  # lignes rendues par une requête autre que SELECT 1
         self.chunk_size = 2
+        self.hold = False  # une requête autre que SELECT 1 reste « RUNNING » tant que c'est vrai
         self.seen_sql: list[str] = []
         self.token_requests: list[dict] = []
 
@@ -103,6 +104,10 @@ def _handler(state: State, base: list[str]):
                 target = query["redirect_uri"] + "?" + urlencode(
                     {"code": code, "state": query["state"]})
                 self._send(302, None, {"Location": target})
+            elif url.path == "/__test__/state":
+                self._send(200, {"canceled": state.canceled, "statements": len(state.statements),
+                                 "held": [i for i, v in state.statements.items()
+                                          if v.get("held") and i not in state.canceled]})
             elif url.path.startswith("/api/2.0/sql/statements/"):
                 if not self._authorized():
                     return
@@ -110,8 +115,12 @@ def _handler(state: State, base: list[str]):
                 statement = state.statements[parts[5]]
                 if len(parts) > 7:  # …/result/chunks/<n>
                     self._send(200, statement["chunks"][int(parts[8])])
-                else:
+                elif parts[5] in state.canceled:
+                    self._send(200, {"statement_id": parts[5], "status": {"state": "CANCELED"}})
+                elif statement.get("held") and state.hold:
                     self._send(200, statement["reply"])
+                else:
+                    self._send(200, statement.get("final") or statement["reply"])
             else:
                 self._send(404, {"message": "inconnu"})
 
@@ -124,6 +133,9 @@ def _handler(state: State, base: list[str]):
                 state.refuse_refresh = bool(form.get("refuse_refresh", False))
                 state.echo_token = bool(form.get("echo_token", False))
                 state.expires_in = int(form.get("expires_in", 3600))
+                state.hold = bool(form.get("hold", False))
+                state.rows = int(form.get("rows", 3))
+                state.chunk_size = int(form.get("chunk_size", 2))
                 self._send(200, {"configured": True})
             elif url.path == "/oidc/v1/token":
                 form = self._form()
@@ -211,6 +223,11 @@ def _handler(state: State, base: list[str]):
                      "manifest": {"schema": {"columns": columns}, "total_row_count": len(data),
                                   "total_chunk_count": len(chunks), "truncated": truncated},
                      "result": rendered[0]}
+            if state.hold:  # la requête tarde : la réponse définitive vient après `hold: false`
+                running = {"statement_id": statement_id, "status": {"state": "RUNNING"}}
+                state.statements[statement_id] = {"reply": running, "final": reply,
+                                                  "chunks": rendered, "held": True}
+                return 200, running, None, None
             state.statements[statement_id] = {"reply": reply, "chunks": rendered}
             return 200, reply, None, None
 

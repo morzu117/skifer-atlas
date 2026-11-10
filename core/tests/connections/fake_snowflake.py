@@ -50,6 +50,8 @@ class State:
         self.public_keys: dict[str, object] = {}  # LOGIN_NAME en majuscules → clé publique
         self.sso_users: set[str] = set()  # comptes acceptés par le faux fournisseur
         self.any_sso_user = False  # lancé seul : tout identifiant est accepté
+        self.echo_token = False  # une requête échoue en recopiant le jeton de session reçu
+        self.hide_keys = False  # les clés publiques enregistrées ne sont plus reconnues
         self.sso_tokens: dict[str, str] = {}  # jeton rendu par le fournisseur → compte
         self.sessions: dict[str, str] = {}  # jeton de session → compte
         self.masters: dict[str, str] = {}  # jeton maître → compte
@@ -188,7 +190,16 @@ def _handler(state: State, base: list[str]):
             url = urlparse(self.path)
             body = self._body()
             data = body.get("data") or {}
-            if url.path == "/session/authenticator-request":
+            if url.path == "/__test__/configure":
+                # Pilotage du faux uniquement, jamais monté dans le serveur Atlas : chaque appel
+                # remplace les réglages ; `expire_sessions` agit une fois.
+                state.echo_token = bool(body.get("echo_token", False))
+                state.hide_keys = bool(body.get("hide_keys", False))
+                if body.get("expire_sessions"):
+                    state.sessions.clear()
+                    state.masters.clear()
+                self._send({"configured": True})
+            elif url.path == "/session/authenticator-request":
                 state.sso_requests += 1
                 user = data.get("LOGIN_NAME", "").upper()
                 port = int(data.get("BROWSER_MODE_REDIRECT_PORT") or 0)
@@ -265,7 +276,7 @@ def _handler(state: State, base: list[str]):
                       "idToken": None, "idTokenValidityInSeconds": 0})
 
         def _valid_jwt(self, account: str, user: str, token: str) -> bool:
-            key = state.public_keys.get(user)
+            key = None if state.hide_keys else state.public_keys.get(user)
             try:
                 header, payload, signature = token.split(".")
                 claims = json.loads(_b64decode(payload))
@@ -285,6 +296,12 @@ def _handler(state: State, base: list[str]):
                 state.running.add(query_id)
                 payload = {"data": {"queryId": query_id}, "code": None, "message": None,
                            "success": True}
+            elif state.echo_token:  # l'erreur recopie le jeton de session de la requête
+                token = (self.headers.get("Authorization") or "").removeprefix(
+                    'Snowflake Token="').removesuffix('"')
+                payload = {"data": {"errorCode": "000606", "queryId": query_id},
+                           "code": "000606", "success": False,
+                           "message": f"Jeton {token} sans droit sur cet entrepôt"}
             else:
                 payload = self._execute(sql, query_id)
             state.results[query_id] = payload

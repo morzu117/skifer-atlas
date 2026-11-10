@@ -83,6 +83,61 @@ test("[S-0032-01] [S-0032-02] créer une déclinaison depuis la fiche, en surcha
   expect(await seriousViolations(page)).toEqual([]);
 });
 
+test("[S-0032-01] la liste exclut les entités déjà déclinées ; un brouillon déjà commencé est signalé avec « Reprendre le brouillon » ; les refus du serveur sont nets", async ({ page, request }) => {
+  python("import sys,yaml; from pathlib import Path; p=Path(sys.argv[1])/'atlas.yaml'; d=yaml.safe_load(p.read_text()); d['entities'] += ['nordis-it']; p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))", ws.work);
+  git(ws.work, "add", "atlas.yaml");
+  git(ws.work, "commit", "-qm", "Une entité pour créer une déclinaison");
+  git(ws.work, "push", "origin", "main");
+  expect((await request.post(`${ws.api}/sync`, { data: {} })).ok()).toBe(true);
+
+  await page.goto(`${ws.root}/fiche/revenu-net?tab=declinaisons`);
+  await page.getByRole("link", { name: "Créer une déclinaison" }).click();
+  const entity = page.getByLabel(/^Entité/);
+  // nordis-fr, nordis-de et nordis-es ont déjà leur déclinaison : seule nordis-it reste proposée.
+  await expect(entity.locator("option")).toHaveText(["Choisir…", "nordis-it"]);
+
+  // Premier brouillon, créé par l'écran.
+  await page.getByLabel(/^Justification/).fill("Règle italienne différente.");
+  await page.getByRole("button", { name: "Créer et ouvrir l'éditeur" }).click();
+  await expect(page).toHaveURL(/editeur\?from=revenu-net--nordis-it$/);
+  await expect(page.getByRole("heading", { level: 1, name: /revenu-net · nordis-it : v1 · brouillon/ })).toBeVisible();
+
+  // Le brouillon local n'est pas encore une déclinaison du dépôt : le formulaire la propose, et refuse le doublon.
+  await page.goto(`${ws.root}/fiche/revenu-net?tab=declinaisons`);
+  await page.getByRole("link", { name: "Créer une déclinaison" }).click();
+  await page.getByLabel(/^Justification/).fill("Seconde tentative.");
+  await page.getByRole("button", { name: "Créer et ouvrir l'éditeur" }).click();
+  await expect(page.getByLabel(/^Entité/)).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByLabel(/^Entité/)).toHaveAccessibleDescription(/brouillon/i);
+  await expect(page.getByRole("heading", { level: 1, name: "Nouvelle déclinaison de revenu-net" })).toBeVisible(); // le formulaire reste ouvert
+  await page.getByRole("link", { name: "Reprendre le brouillon" }).click();
+  await expect(page).toHaveURL(/editeur\?from=revenu-net--nordis-it$/);
+  expect(await seriousViolations(page)).toEqual([]);
+
+  // Refus du serveur pour une déclinaison existante et pour une entité inconnue.
+  const base = { kpi_id: "revenu-net", mode: "override", owner: "claire.m", justification: "Essai" };
+  const existing = await request.post(`${EDITOR}/variants`, { data: { ...base, entity: "nordis-fr" } });
+  expect(existing.ok()).toBe(false);
+  expect(await existing.json()).toMatchObject({ detail: { code: "document_exists" } });
+  const unknown = await request.post(`${EDITOR}/variants`, { data: { ...base, entity: "nordis-xx" } });
+  expect(unknown.ok()).toBe(false);
+  expect(await unknown.json()).toMatchObject({ detail: { code: "invalid_entity" } });
+});
+
+test("[S-0032-01] un lecteur n'a pas l'action « Créer une déclinaison »", async ({ page }) => {
+  await page.goto(`${ws.root}/fiche/revenu-net?tab=declinaisons`);
+  await expect(page.getByRole("link", { name: "Créer une déclinaison" })).toBeVisible(); // témoin : contributrice
+  await page.route(`${API}/api/workspaces/${ws.id}`, async (route) => {
+    const response = await route.fetch();
+    const found = (await response.json()) as object;
+    await route.fulfill({ response, json: { ...found, role: "lecteur", role_label: "Lecteur" } });
+  });
+  await page.reload();
+  await expect(page.getByRole("button", { name: /Déclinaisons/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Créer une déclinaison" })).toHaveCount(0);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("[S-0013-01] [S-0013-04] [S-0013-09] [S-0013-10] Revenu net reconstruit à la souris : YAML identique, soumission (critères 1, 4, 9, 10)", async ({ page, request }) => {
   test.setTimeout(120_000);
   const id = `revenu-net-e2e-${Date.now().toString(36)}`;

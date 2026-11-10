@@ -387,3 +387,47 @@ test("[S-0033-10] espace neuf : rattacher un dépôt vide, ajouter un domaine, c
   await expect(page.getByText(`Propriétaire : ${owner} ·`)).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });
+
+test("[S-0006-13] Une règle de protection de GitHub refuse la fusion : « La branche principale est protégée », rien n'est fusionné, sans contournement", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  page.setDefaultTimeout(20_000);
+  const FAKE_GITHUB = "http://127.0.0.1:8792";
+  const configureGitHub = async (data = {}) => expect((await request.post(`${FAKE_GITHUB}/__test__/configure`, { data })).ok()).toBe(true);
+  const id = `rattachement-${unique()}`;
+  const name = `vide-${unique()}`;
+  const target = join(GITHUB_FOLDER, `${name}.git`);
+  const url = `https://github.com/e2e-atlas/${name}.git`;
+  trackWorkspace(id, target);
+  bareRepository(target);
+  await relay(page, RATTACHEMENT);
+  try {
+    await createSpace(page, id, "perrault-fr");
+    await expect(page).toHaveURL(new RegExp(`#/w/${id}/catalogue$`));
+    await page.goto(`/#/w/${id}/administration`);
+    const form = attachment(page);
+    await form.getByLabel(/^Adresse du dépôt vide/).fill(url);
+    await connectGitHub(page, form);
+    await attach(page, url);
+    await expect(repository(page).getByText(`Dépôt rattaché : l'espace est publié sur ${url}, sous le compte julien.h.`)).toBeVisible();
+
+    // Seul référent, une modification de la gouvernance se fusionne sans revue : GitHub la refuse.
+    await configureGitHub({ merge_error: { status: 405, message: "Repository rule violations found" } });
+    await page.getByRole("button", { name: "Domaine", exact: true }).click();
+    const domain = page.getByRole("group", { name: "Nouveau domaine" });
+    await domain.getByRole("textbox", { name: /Libellé/ }).fill("Finance");
+    await domain.getByRole("button", { name: "Ajouter le domaine" }).click();
+    const head = git(target, "rev-parse", "main");
+    await save(page).click();
+    const failure = page.getByRole("alert").filter({ hasText: "La branche principale est protégée" });
+    await expect(failure).toBeVisible();
+    await expect(failure).toContainText("remplissez la condition sur GitHub, ou contactez le référent de l'espace");
+    await expect(failure).not.toContainText(/Repository rule violations|405/);
+    await expect(page.getByText(/Paramètres enregistrés/)).toHaveCount(0);
+    expect(await seriousViolations(page)).toEqual([]);
+    // Rien n'a été fusionné, et Atlas n'a pas essayé autre chose : la branche principale n'a pas bougé.
+    expect(git(target, "rev-parse", "main")).toBe(head);
+    expect(git(target, "show", "main:governance.yaml")).not.toContain("id: finance");
+  } finally {
+    await configureGitHub();
+  }
+});

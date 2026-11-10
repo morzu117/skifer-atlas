@@ -482,6 +482,37 @@ def test_sso_session_expiry_then_revocation(client, snow):
     assert client.get(f"{CONNECTIONS}/snow-de/status").json()["my_access"] == "never"
 
 
+def test_the_fake_is_driven_through_its_test_route(client, snow):
+    """Le pilotage du faux, qui sert aux parcours de bout en bout : jeton recopié, session
+    expirée d'un coup, clés publiques oubliées."""
+    import json
+    from urllib.request import Request, urlopen
+
+    def configure(**body):
+        request = Request(f"{snow.url}/__test__/configure", json.dumps(body).encode(),
+                          {"Content-Type": "application/json"})
+        assert json.load(urlopen(request))["configured"] is True
+
+    space("nordis", [snow_point(snow)])
+    sso_login(client)
+    assert client.post(f"{CONNECTIONS}/snow-de/test").json()["ok"] is True
+
+    configure(echo_token=True)
+    echoed = client.post(f"{CONNECTIONS}/snow-de/test").json()
+    assert echoed["ok"] is False and "sf-session-" not in json.dumps(echoed)
+    assert "***" in echoed["error"]["message"]
+
+    configure(expire_sessions=True)  # un seul effet : le réglage suivant ne le répète pas
+    assert client.post(f"{CONNECTIONS}/snow-de/test").json()["error"]["code"] == "access_expired"
+    sso_login(client)
+    assert client.post(f"{CONNECTIONS}/snow-de/test").json()["ok"] is True
+
+    configure(hide_keys=True)
+    assert snow.state.hide_keys and not snow.state.echo_token
+    configure()
+    assert not snow.state.hide_keys
+
+
 def test_sso_refused_by_the_identity_provider(client, snow):
     space("nordis", [snow_point(snow)])
     client.post(f"{CONNECTIONS}/snow-de/authorize", json={"user": "inconnu@nordis.example"})

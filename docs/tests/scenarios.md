@@ -26,25 +26,25 @@
 | 0002 | 11 | 8 | 0 | 3 | 0 |
 | 0003 | 10 | 8 | 0 | 2 | 0 |
 | 0004 | 8 | 2 | 0 | 6 | 0 |
-| 0005 | 13 | 9 | 0 | 4 | 0 |
-| 0006 | 13 | 9 | 0 | 4 | 0 |
+| 0005 | 13 | 10 | 0 | 3 | 0 |
+| 0006 | 13 | 10 | 0 | 3 | 0 |
 | 0007 | 9 | 4 | 0 | 5 | 0 |
-| 0008 | 10 | 6 | 0 | 4 | 0 |
-| 0009 | 13 | 7 | 0 | 6 | 0 |
-| 0010 | 12 | 11 | 0 | 1 | 0 |
+| 0008 | 10 | 7 | 0 | 3 | 0 |
+| 0009 | 13 | 8 | 0 | 5 | 0 |
+| 0010 | 13 | 12 | 0 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
-| 0012 | 7 | 7 | 0 | 0 | 0 |
+| 0012 | 8 | 8 | 0 | 0 | 0 |
 | 0013 | 34 | 33 | 1 | 0 | 0 |
-| 0014 | 9 | 9 | 0 | 0 | 0 |
+| 0014 | 10 | 10 | 0 | 0 | 0 |
 | 0015 | 13 | 13 | 0 | 0 | 0 |
-| 0016 | 9 | 9 | 0 | 0 | 0 |
-| 0017 | 10 | 10 | 0 | 0 | 0 |
-| 0018 | 7 | 1 | 0 | 6 | 0 |
+| 0016 | 12 | 12 | 0 | 0 | 0 |
+| 0017 | 13 | 13 | 0 | 0 | 0 |
+| 0018 | 7 | 2 | 0 | 5 | 0 |
 | 0019 | 9 | 1 | 0 | 8 | 0 |
 | 0020 | 4 | 4 | 0 | 0 | 0 |
 | 0021 | 7 | 5 | 0 | 2 | 0 |
 | 0022 | 6 | 6 | 0 | 0 | 0 |
-| 0023 | 4 | 4 | 0 | 0 | 0 |
+| 0023 | 5 | 5 | 0 | 0 | 0 |
 | 0024 | 5 | 2 | 3 | 0 | 0 |
 | 0025 | 7 | 7 | 0 | 0 | 0 |
 | 0026 | 9 | 9 | 0 | 0 | 0 |
@@ -57,7 +57,7 @@
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | 0035 | 12 | 10 | 0 | 2 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **322** | **248** | **6** | **68** | **0** |
+| **Total** | **332** | **263** | **6** | **63** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -160,6 +160,13 @@ Plan 0010, suivi de la revue globale (#151) · Tests : `app/e2e/serveur-tauri.sp
 - **Quand** l'application devient prête et que je clique « Réessayer »
 - **Alors** rien n'avait été retenu : `invoke` est interrogé de nouveau, le bandeau disparaît, l'accueil liste Groupe Nordis, toutes les requêtes portent `Authorization: Bearer` avec le token fourni, et axe-core ne relève aucune violation sérieuse, sur l'écran de démarrage avec son bandeau comme après la reprise
 - Limite : le pont est une simulation ; le vrai `invoke` n'existe que dans la fenêtre Tauri. Vitest couvre en plus le repli sans token hors Tauri, un token vide rendu par l'application et le message « Relancez Skifer Atlas ».
+
+### S-0010-13 — Le compte de propositions à relire se voit sur la carte et dans la navigation
+Plan 0010, critère 1 (compteurs de revue) · Test : `app/e2e/accueil-revue.spec.ts` › `[S-0010-13]` (deux tests : claire.m, anna.k)
+- **Étant donné** la copie isolée de la démonstration sur trois serveurs : claire.m, validatrice Finance, a plusieurs propositions à relire (l'API `for_me` en donne le nombre) ; anna.k, contributrice et autrice de la surcharge DE, n'en a aucune
+- **Quand** claire.m ouvre l'accueil, puis l'espace, puis approuve la surcharge DE dans Propositions
+- **Alors** la carte de l'espace affiche « N propositions en attente » (`count-warn`) et l'entrée « Propositions » de la navigation « N en attente de votre revue » ; après l'approbation, les deux comptes baissent d'une unité, la carte relue au retour à l'accueil
+- **Et** pour anna.k la carte affiche « Aucune proposition » sans `count-warn`, et la navigation n'a aucun compteur
 
 **Plan 0025**
 
@@ -320,12 +327,16 @@ Plan 0003, critère 8 · Test : `app/e2e/diff.spec.ts` › `[S-0003-08]`
 **Plan 0004**
 
 ### S-0004-01 — Extraire une implémentation donne un brouillon et son diff
-Plan 0004, critère 1 · Test : `app/e2e/fiche.spec.ts` › `[S-0004-01]`
+Plan 0004, critère 1 · Tests : `app/e2e/fiche.spec.ts` › `[S-0004-01]` ; `app/e2e/depot-testables.spec.ts` › `[S-0004-01]` (résidu bloquant, plateforme sans extraction)
 - **Étant donné** la fiche Revenu net, onglet Implémentations, section « nordis-fr · Databricks » : `implementations/revenu-net/nordis-fr/databricks.sql`, qui calcule `SUM(f.montant_ttc / 1.2 - f.avoirs) AS revenu_net`
 - **Quand** je clique « Extraire et comparer au canonique »
 - **Alors** « fidélité au SQL vérifiée » et « Cardinalité de la jointure inconnue » s'affichent
 - **Et** la région « Écarts au canonique » titre « Écarts au canonique v4 » et liste au moins un écart
-- Limite : un seul script est extrait. Les huit scripts du corpus, le résidu bloquant `window_function` de `08_kpi_monthly.sql` et son nœud `union` sont vérifiés par `core/tests/extract/test_extract.py::test_corpus_statuses` et `::test_monthly_kpi_union_is_a_node`.
+- **Étant donné** (second test) un espace isolé sur le serveur 8793 où `databricks.sql` de nordis-fr est remplacé par `08_kpi_monthly.sql` (fonction de fenêtre `LAG`) et où un `bigquery.sql` est ajouté ; l'espace est synchronisé
+- **Quand** j'ouvre l'onglet Implémentations de Revenu net
+- **Alors** la section `bigquery.sql` annonce « Plateforme sans extraction » et ne propose aucun bouton d'extraction
+- **Et** « Extraire et comparer au canonique » sur la section « nordis-fr · Databricks » liste un résidu « Bloquant » qui nomme la fonction de fenêtre, affiche « Brouillon à corriger avant de le comparer. » et ne montre pas la région « Écarts au canonique » ; axe-core ne relève aucune violation sérieuse
+- Limite : le nœud `union` du script mensuel et les autres scripts du corpus sont vérifiés par `core/tests/extract/test_extract.py::test_corpus_statuses` et `::test_monthly_kpi_union_is_a_node`.
 
 ### S-0004-06 — Aucun message de résidu ne cite le SQL
 Plan 0004, critère 6 · Test : `app/e2e/depot-testables.spec.ts` › `[S-0004-06]`
@@ -343,6 +354,14 @@ Plan 0005, critère 8 · Test : `app/e2e/fiche.spec.ts` › `[S-0005-08]`
 - **Quand** je lis la région « Référencé par » et suis son lien « Panier moyen »
 - **Alors** Panier moyen y figure avec « KPI · Ventes · v4 », et le lien ouvre la fiche Panier moyen
 - Limite : Commande, Date de référence, Marge brute et `impact: 2` ne sont pas lus à l'écran ; `core/tests/repo/test_index.py::test_dependencies_of_revenu_net`.
+
+### S-0005-09 — Un espace absent du registre renvoie à l'accueil
+Plan 0005, critère 9 · Test : `app/e2e/ouverture.spec.ts` › `[S-0005-09]`
+- **Étant donné** un registre local qui ne contient pas l'espace « espace-inconnu »
+- **Quand** j'ouvre `#/w/espace-inconnu/catalogue`
+- **Alors** l'accueil « Vos espaces de travail » s'affiche, avec le message « L'espace « espace-inconnu » n'est pas dans votre registre local. », sans violation d'accessibilité sérieuse
+- **Et** le message disparaît dès que j'ouvre un espace du registre
+- Limite : le refus 404 du serveur (espace absent, chemin avec `..`) est vérifié par `core/tests/repo/test_catalog_api.py::test_unknown_workspace_or_dot_dot_is_404`.
 
 **Plan 0009**
 
@@ -400,6 +419,13 @@ Plan 0012, critère 7 · Test : `app/e2e/fiche.spec.ts` › `[S-0012-07]`
 - **Quand** je lis ses onglets, puis ouvre `?tab=scope`
 - **Alors** seuls « Définition », « Versions 1 » et « Dépendances » s'affichent, avec la ligne « Clé », sans « Lancer une comparaison »
 - **Et** `?tab=scope` retombe sur Définition
+
+### S-0012-08 — Une fiche inexistante dit « Fiche introuvable »
+Plan 0012, état d'erreur de la spécification · Test : `app/e2e/ouverture.spec.ts` › `[S-0012-08]` ; `app/src/screens/Fiche.test.tsx` (composant)
+- **Étant donné** l'espace de démonstration, sans document « document-inexistant »
+- **Quand** j'ouvre `#/w/groupe-nordis/fiche/document-inexistant`
+- **Alors** le titre « Fiche introuvable » s'affiche avec une alerte qui ne montre ni trace, ni JSON brut, ni `undefined`, et le lien « Catalogue » est présent
+- **Et** aucune erreur de page n'est levée, et axe-core ne relève aucune violation sérieuse
 
 ## Éditeur
 
@@ -568,11 +594,16 @@ Plan 0007, critère 7 · Test : `app/e2e/sql.spec.ts` › `[S-0007-07]`
 **Plan 0032**
 
 ### S-0032-01 — Créer une surcharge depuis la fiche du KPI
-Plan 0032, critère 1 · Test : `app/e2e/editor.spec.ts` › `[S-0032-01]`
+Plan 0032, critère 1 · Tests : `app/e2e/editor.spec.ts` › `[S-0032-01]` (trois tests)
 - **Étant donné** un espace isolé où l'entité `nordis-it` n'a pas de déclinaison de Revenu net
 - **Quand** j'ouvre l'onglet Déclinaisons, choisis cette entité, le mode Surcharge du canonique et sa justification, puis crée le brouillon
 - **Alors** l'éditeur ouvre `revenu-net--nordis-it` en v1, lié au canonique v4 et dont les surcharges sont vides
-- Limite : les refus d'entité inconnue, de doublon dans le dépôt et de brouillon local sont vérifiés par `core/tests/repo/test_editor_api.py`.
+- **Étant donné** ce même espace, où `nordis-it` est ajoutée aux entités
+- **Quand** j'ouvre le formulaire, crée un premier brouillon pour `nordis-it`, puis tente d'en créer un second
+- **Alors** la liste d'entités ne propose que « Choisir… » et `nordis-it` (les entités déjà déclinées en sont absentes) ; le second brouillon est refusé avec un champ en erreur (`aria-invalid`) et un message qui nomme le brouillon, avec le lien « Reprendre le brouillon » vers `editeur?from=revenu-net--nordis-it`
+- **Et** par l'API, une entité qui a déjà sa déclinaison (nordis-fr) répond `document_exists`, une entité inconnue (nordis-xx) `invalid_entity`
+- **Étant donné** le rôle lecteur (réponses de l'espace réécrites), **Alors** l'action « Créer une déclinaison » n'est plus proposée, alors que la contributrice la voit
+- Limite : la copie du canonique v4 dans le brouillon et les refus au niveau du dépôt sont aussi vérifiés par `core/tests/repo/test_editor_api.py`.
 
 ### S-0032-02 — Commencer un graphe indépendant
 Plan 0032, critère 2 · Test : `app/e2e/editor.spec.ts` › `[S-0032-02]`
@@ -935,18 +966,23 @@ Plan 0013, critère 34 · Test : `app/e2e/creation.spec.ts` › `[S-0013-34]`
 **Plan 0021**
 
 ### S-0021-02 — Une division d'entiers est castée en DOUBLE
-Plan 0021, critère 2 · Test : `app/e2e/sql.spec.ts` › `[S-0021-02]`
+Plan 0021, critère 2 · Tests : `app/e2e/sql.spec.ts` › `[S-0021-02]` (deux tests)
 - **Étant donné** un brouillon de trois nœuds : source `gold.finance.mesures` (`entite`, `a` et `b` entiers), n02 calcul `a / NULLIF(b, 0)` sans type déclaré, agrégation
 - **Quand** je sélectionne n02 et affiche le SQL Databricks, puis Snowflake
 - **Alors** chacun contient `CAST(a AS DOUBLE) / NULLIF(b, 0)`
+- **Étant donné** un second brouillon qui aligne les cas limites de la réécriture (`a`, `b`, `x` entiers ou décimaux)
+- **Quand** j'affiche le SQL Databricks, puis Snowflake
+- **Alors** un diviseur entier seul est casté (`CAST(a AS DOUBLE) / 2 AS q1`), un opérande déjà `double` n'est pas recasté (`x / NULLIF(a, 0) AS q2`, `a / NULLIF(x, 0) AS q3`), une chaîne de divisions garde un seul cast (`CAST(a AS DOUBLE) / NULLIF(b, 0) / 2 AS q4`), le littéral `0` donne `CAST(a AS DOUBLE) / NULLIF(0, 0) AS q5`, le modulo `a % NULLIF(b, 0) AS q6`
+- **Et** la division écrite dans un filtre (`CAST(a AS DOUBLE) / NULLIF(b, 0) > 1`) et dans une opération de métrique (`/ NULLIF(sb, 0) AS taux`) est réécrite de la même façon
 - Limite : le même `DOUBLE` dans les trois dialectes et la relecture par SQLGlot sont vérifiés par `core/tests/compile/test_ecarts.py::test_integer_division_is_a_double_everywhere`.
 
 ### S-0021-03 — Le `NULLIF` de l'auteur n'est pas doublé
-Plan 0021, critère 3 · Test : `app/e2e/sql.spec.ts` › `[S-0021-03]`
+Plan 0021, critère 3 · Tests : `app/e2e/sql.spec.ts` › `[S-0021-03]` (deux tests)
 - **Étant donné** le même brouillon, dont l'expression porte déjà `NULLIF(b, 0)`
 - **Quand** j'affiche le SQL Databricks, puis Snowflake
 - **Alors** aucun ne contient `NULLIF(NULLIF`
-- Limite : le littéral non nul et l'opérande `double` sont vérifiés par `core/tests/compile/test_ecarts.py::test_division_rewrite_adds_nothing_superfluous`.
+- **Et** dans le brouillon des cas limites de S-0021-02, un littéral non nul ou un opérande `double` n'est pas enveloppé ni recasté, dans les deux dialectes
+- Limite : le même contrôle sur l'arbre de compilation est dans `core/tests/compile/test_ecarts.py::test_division_rewrite_adds_nothing_superfluous`.
 
 ### S-0021-04 — Le type inféré d'une division d'entiers est `double`
 Plan 0021, critère 4 · Test : `app/e2e/sql.spec.ts` › `[S-0021-04]`
@@ -960,6 +996,7 @@ Plan 0021, critère 5 · Test : `app/e2e/sql.spec.ts` › `[S-0021-05]`
 - **Étant donné** un brouillon hebdomadaire construit par `weekly()` de `core/tests/compile/test_ecarts.py`
 - **Quand** j'affiche le SQL Snowflake
 - **Alors** il contient `DAYOFWEEKISO` et pas `DATE_TRUNC('WEEK'`
+- **Et** le SQL Databricks, lui, garde `DATE_TRUNC('WEEK'` et ne contient pas `DAYOFWEEKISO`
 - Limite : l'égalité avec `DATE_TRUNC('WEEK', …)` de DuckDB sur plus d'un an de dates est vérifiée par `core/tests/compile/test_ecarts.py::test_snowflake_week_formula_matches_iso_weeks_over_a_year`.
 
 ### S-0021-06 — La garde est lue dans une branche indépendante
@@ -974,10 +1011,11 @@ Plan 0021, critère 6 · Test : `app/e2e/sql.spec.ts` › `[S-0021-06]`
 Les trois scénarios partent du même test (`app/e2e/fuseau-de-session.spec.ts`). Le brouillon est le KPI `fuseau` construit par `orders('Europe/Paris', …)` de `core/tests/compile/test_ecarts.py` : colonne `passee_le` déclarée `Europe/Paris`, plus un filtre n05 sur `passee_le:greater_than:2025-01-01 00:00:00`. Il est déposé sur `groupe-nordis`, puis supprimé en fin de test. J'ouvre l'onglet « SQL compilé ».
 
 ### S-0030-01 — En Databricks, une colonne `timestamp` est lue en heure murale de son fuseau
-Plan 0030, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-01]`
+Plan 0030, critère 1 · Tests : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-01]` (deux tests)
 - **Quand** j'affiche le SQL Databricks
 - **Alors** la source lit `passee_le` par `WHEN TYPEOF(passee_le) = 'timestamp'`, `THEN CONVERT_TIMEZONE('UTC', 'Europe/Paris', DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), …))` et `ELSE CAST(passee_le AS TIMESTAMP_NTZ)`
-- Limite : la relecture par SQLGlot et le fuseau `UTC` sont vérifiés par `core/tests/compile/test_ecarts.py::test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
+- **Et** pour une source déclarée en `UTC`, la branche instant s'arrête à l'heure UTC : `THEN DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)) ELSE`, sans `CONVERT_TIMEZONE`
+- Limite : la relecture par SQLGlot est vérifiée par `core/tests/compile/test_ecarts.py::test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
 
 ### S-0030-02 — Aucun cast d'horodatage ne dépend de la session
 Plan 0030, critère 2 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-02]`
@@ -996,10 +1034,11 @@ Plan 0030, critère 4 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030
 Même test et même brouillon que pour le plan 0030 (`app/e2e/fuseau-de-session.spec.ts`) : colonne `passee_le` déclarée `Europe/Paris`, onglet « SQL compilé ».
 
 ### S-0031-01 — En Snowflake, une colonne `timestamp` est lue en heure murale de son fuseau
-Plan 0031, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0031-01]`
+Plan 0031, critère 1 · Tests : `app/e2e/fuseau-de-session.spec.ts` › `[S-0031-01]` (deux tests)
 - **Quand** j'affiche le SQL Snowflake
 - **Alors** la source lit `passee_le` par `WHEN TYPEOF(CAST(passee_le AS VARIANT)) IN ('TIMESTAMP_LTZ', 'TIMESTAMP_TZ')`, `THEN CAST(CONVERT_TIMEZONE('Europe/Paris', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)` et `ELSE CAST(passee_le AS TIMESTAMPNTZ)`
-- Limite : la relecture par SQLGlot et le fuseau `UTC` sont vérifiés par `core/tests/compile/test_ecarts.py::test_snowflake_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
+- **Et** pour une source déclarée en `UTC`, la branche instant devient `THEN CAST(CONVERT_TIMEZONE('UTC', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)`
+- Limite : la relecture par SQLGlot est vérifiée par `core/tests/compile/test_ecarts.py::test_snowflake_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
 
 ### S-0031-04 — Le panneau SQL montre la lecture Snowflake en heure murale
 Plan 0031, critère 4 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0031-04]`
@@ -1023,10 +1062,14 @@ Plan 0024, critère 2 · Test : `app/src/editor/Canvas.test.tsx` › `[S-0024-02
 - Limite : Vitest seulement, pour la même raison que S-0024-01 : redessiner une carte inchangée ne se voit pas à l'écran.
 
 ### S-0024-03 — Sur 200 nœuds, seules les cartes visibles sont dans le DOM
-Plan 0024, critère 3 · Test : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024-03]`
+Plan 0024, critère 3 · Tests : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024-03]` (trois tests)
 - **Étant donné** un brouillon de 200 nœuds construit par `longKpi`
 - **Quand** je l'ouvre dans l'éditeur
 - **Alors** le canevas dessine au moins une carte et moins de 200
+- **Étant donné** un brouillon de 120 nœuds en chaîne
+- **Quand** je l'ouvre, puis déplace la vue au bouton droit sur le fond
+- **Alors** moins de 120 cartes sont dessinées et chacune coupe la zone visible du graphe ; après le déplacement, la liste des cartes dessinées a changé (d'autres entrent, d'autres sortent)
+- **Étant donné** un brouillon de 50 nœuds, **Alors** les 50 cartes sont dessinées, y compris celles hors de l'écran (le seuil de virtualisation n'est pas atteint)
 
 ### S-0024-04 — Sur 200 nœuds, ouvrir, sélectionner et déplacer aboutissent
 Plan 0024, critère 4 · Test : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024-04]`
@@ -1100,18 +1143,31 @@ Plan 0006, critère 4 · Test : `app/e2e/propositions.spec.ts` › `[S-0006-04]`
 - Limite : le tag Git n'est pas lu ici ; `core/tests/repo/test_proposals.py::test_full_cycle` vérifie `doc/revenu-net/v5`.
 
 ### S-0006-05 — Une base avancée refuse la fusion
-Plan 0006, critère 5 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0006-05]`
+Plan 0006, critère 5 · Tests : `app/e2e/propositions-testables.spec.ts` › `[S-0006-05]` (fusion) ; `app/e2e/propositions-testables.spec.ts` › `[S-0006-05] Une base avancée refuse aussi la création…` (création)
 - **Étant donné** une copie de la démonstration, DE approuvée par claire.m et marc.d (« 2 / 2 »), vue par claire.m ; puis un commit poussé sur la branche principale change le document DE
 - **Quand** je clique « Fusionner »
 - **Alors** le serveur répond 409 `stale_base`, et une alerte dit que le document « a changé depuis la proposition »
 - **Et** la branche principale du dépôt distant n'a pas bougé
+- **Étant donné** (création) un brouillon de la variante nordis-de ouvert dans l'éditeur, dont la justification de la surcharge de n02 est modifiée, puis un commit poussé sur la branche principale qui fait passer la base DE de la version 3 à la version 4
+- **Quand** je clique « Soumettre la proposition » et soumets avec une justification
+- **Alors** le serveur répond 409 `stale_base`, et une alerte dit que le document « n'est plus la version courante » ; aucune proposition n'est créée
+- **Et** la branche principale et les branches du dépôt distant n'ont pas bougé, et le brouillon garde la modification de l'auteur
+- Limite : le refus de création ne dépend pas de la synchronisation automatique de l'ADR 0049, car la base est comparée à la version courante au moment de la soumission.
 
 ### S-0006-07 — Le cycle de revue passe sur l'hébergeur local
 Plan 0006, critère 7 · Test : `app/e2e/propositions.spec.ts` › `[S-0006-07]`
 - **Étant donné** trois serveurs locaux sur un même dépôt nu, sans hébergeur distant (`LocalHost`)
 - **Quand** claire.m approuve à l'écran, marc.d approuve par l'API, puis claire.m fusionne
 - **Alors** le compteur passe de 0 / 2 à 1 / 2 puis 2 / 2, la fusion aboutit, et la file `?status=merged` affiche DE « Fusionnée »
-- Limite : la proposition vient du script de démonstration (la création depuis l'éditeur est S-0013-10) ; aucun commentaire n'est posté, et seules les requêtes du navigateur restent locales. Le cycle complet, commentaire compris, est vérifié par `core/tests/repo/test_proposals.py::test_full_cycle`.
+- Limite : la proposition vient du script de démonstration (la création depuis l'éditeur est S-0013-10) ; les commentaires sont S-0014-10, et seules les requêtes du navigateur restent locales. Le cycle complet, commentaire compris, est vérifié par `core/tests/repo/test_proposals.py::test_full_cycle`.
+
+### S-0006-13 — Une règle de protection de GitHub refuse la fusion, sans contournement
+Plan 0006, critère 13 · Test : `app/e2e/rattachement.spec.ts` › `[S-0006-13]`
+- **Étant donné** un espace neuf sur le serveur de rattachement, rattaché à un dépôt vide de GitHub (faux GitHub, compte julien.h, seul référent), et le faux GitHub qui répond 405 « Repository rule violations found » à toute fusion
+- **Quand** j'ajoute le domaine Finance dans l'Administration et clique « Enregistrer et fusionner »
+- **Alors** une alerte dit « La branche principale est protégée » et invite à remplir la condition sur GitHub ou à contacter le référent de l'espace, sans « Repository rule violations » ni « 405 »
+- **Et** aucun « Paramètres enregistrés » ne s'affiche, la branche principale du dépôt n'a pas bougé (Atlas n'a rien tenté d'autre), et axe-core ne relève aucune violation sérieuse
+- Limite : le refus vient d'un faux GitHub, qui ne rejoue pas les règles de protection d'un vrai dépôt ; la classification des réponses de GitHub est vérifiée par `core/tests/repo/test_githost.py::test_merge_errors`. Ce scénario ne dépend pas de la synchronisation automatique (ADR 0049) : il ne crée ni tag ni réindexation.
 
 ### S-0006-12 — Seul habilité : fusion sans revue, avec mention et trailer, jusqu'à un deuxième habilité
 Plan 0006, critère 12 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0006-12]` ; `app/e2e/administration.spec.ts` › `[S-0006-12]` (deux tests, la gouvernance)
@@ -1172,13 +1228,15 @@ Plan 0014, critère 7 · Test : `app/e2e/propositions.spec.ts` › `[S-0014-07]`
 - **Alors** elle liste trois écarts en texte, dont celui du fuseau (`timezone`), et axe-core ne relève aucune violation sérieuse
 
 ### S-0014-08 — Un refus de fusion dit ce qui s'est passé et quoi faire
-Plan 0014, critère 8 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0014-08]` ; `app/src/messages.test.ts` › `[S-0014-08]` (un cas par code) ; `app/src/screens/Proposals.test.tsx` › `[S-0014-08]` (trois tests)
+Plan 0014, critère 8 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0014-08]` ; `app/e2e/propositions-revue.spec.ts` › `[S-0014-08]` (deux tests : `merge_refused`, `not_open`) ; `app/src/messages.test.ts` › `[S-0014-08]` (un cas par code) ; `app/src/screens/Proposals.test.tsx` › `[S-0014-08]` (trois tests)
 - **Étant donné** DE approuvée par claire.m et marc.d, ouverte chez claire.m avec « Fusionner »
 - **Quand** la fusion répond `merge_conflict` avec le texte brut de GitHub (« Pull Request is not mergeable ») ; puis un commit arrive sur la branche de la proposition et claire.m clique de nouveau « Fusionner »
 - **Alors** le premier refus s'affiche sous le titre « La fusion provoque un conflit » avec sa consigne (demander à l'auteur de reproposer), sans le texte de GitHub ni « L'opération a échoué » ; le second sous « La proposition ne remplit plus les conditions de fusion » (`not_ready`), avec la raison du serveur (« 0 validation(s) sur 2. ») avant la consigne
 - **Et** l'écran se relit sans perdre le message : « Validations : 0 / 2 », plus de « Fusionner », « Approuver (0 / 2) », et la branche principale du dépôt n'a pas bougé
-- Les huit codes (`merge_conflict`, `merge_refused`, `branch_protected`, `head_changed`, `not_ready`, `not_open`, `cannot_review_own`, `comment_required`) ont chacun un titre et une consigne vérifiés par Vitest. `head_changed` relit aussi l'écran, `not_open` non (Vitest).
-- Limite : `merge_refused` et `branch_protected` ne peuvent pas être produits de bout en bout (le premier vient d'un `git push` refusé, le second d'une règle de GitHub : voir S-0006-13) ; leur traduction est vérifiée par le test de `messages.ts`.
+- **Et** un `pre-receive` posé dans le dépôt nu refuse le push de la fusion : « Le dépôt a refusé la fusion » s'affiche avec sa consigne (relire, puis réessayer), sans le texte émis par le dépôt, la proposition reste dans la file et la branche principale n'a pas bougé (`merge_refused`)
+- **Et** une proposition fusionnée depuis un autre poste pendant que l'écran de claire.m est resté ouvert : « Fusionner » donne « La proposition n'est plus ouverte » et sa consigne (`not_open`)
+- Les huit codes (`merge_conflict`, `merge_refused`, `branch_protected`, `head_changed`, `not_ready`, `not_open`, `cannot_review_own`, `comment_required`) ont chacun un titre et une consigne vérifiés par Vitest. `merge_conflict`, `merge_refused`, `not_ready` et `not_open` sont aussi provoqués à l'écran ; `head_changed` relit aussi l'écran en Vitest.
+- Limite : `branch_protected` vient d'une règle de GitHub : il est produit de bout en bout avec le faux GitHub en S-0006-13 ; sa traduction est aussi vérifiée par le test de `messages.ts`.
 
 ### S-0014-09 — Changer de statut ne laisse pas la file du statut précédent
 Plan 0014, critère 9 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0014-09]` ; `app/src/screens/Proposals.test.tsx` › `[S-0014-09]`
@@ -1186,6 +1244,14 @@ Plan 0014, critère 9 · Test : `app/e2e/propositions-testables.spec.ts` › `[S
 - **Quand** je choisis « Fusionnées » alors que la réponse tarde ; puis « Fermées » alors que le serveur est injoignable
 - **Alors** « Chargement des propositions… » remplace la liste, qui n'est pas affichée sous le filtre choisi, et le filtre reste sur le statut demandé
 - **Et** la réponse tardive d'un ancien filtre n'écrase pas la file du filtre courant (Vitest)
+
+### S-0014-10 — Un commentaire entre dans le fil ; une demande de changements part avec son texte
+Plan 0014, critère 5 (envoi), critère 4 (le décompte ne bouge pas) · Test : `app/e2e/propositions-revue.spec.ts` › `[S-0014-10]`
+- **Étant donné** claire.m sur la proposition DE, dont le fil porte déjà son commentaire de la démonstration, à « Validations : 0 / 2 »
+- **Quand** j'envoie « Répondre » sans rien écrire ; puis un commentaire ; puis « Demander des changements » avec un texte
+- **Alors** le premier envoi affiche « Écrire un commentaire avant d'envoyer. » sans aucune requête POST ; le commentaire entre dans le fil sous « Claire M. », le champ se vide
+- **Et** la demande de changements ferme le formulaire et ajoute « Claire M. demande des changements » avec son texte ; « Validations : 0 / 2 » et « Approuver (0 / 2) » restent inchangés
+- **Et** après rechargement le fil affiche les trois entrées, dans l'ordre
 
 ## Comparaison
 
@@ -1230,22 +1296,37 @@ Plan 0009, critère 6 · Test : `app/e2e/comparaison-auth.spec.ts` › `[S-0009-
 - **Alors** « Connexion requise » s'affiche, avec le bouton « Se connecter à dbx-fr »
 - Limite : l'absence d'exécution partielle est vérifiée par `core/tests/repo/test_comparisons_api.py::test_needs_auth_before_any_execution`.
 
+### S-0009-10 — Annuler une comparaison en cours la laisse « annulée » et annule la requête chez la plateforme
+Plan 0009, critère 10 · Test : `app/e2e/comparaison-reelle.spec.ts` › `[S-0015-05] [S-0009-10]`
+- **Étant donné** un espace isolé sur le serveur 8793, nordis-fr seule cochée, l'accès dbx-fr obtenu par l'OAuth du faux Databricks, et le faux qui retient la requête (elle reste « en cours »)
+- **Quand** je lance la comparaison, attends que la requête soit retenue, puis clique « Annuler »
+- **Alors** « Comparaison n° N annulée. » s'affiche, le bouton « Annuler » disparaît, le faux a reçu une annulation et ne retient plus rien
+- **Et** l'historique garde une seule exécution, « annulée » ; axe-core ne relève aucune violation sérieuse
+- Limite : aucune table temporaire n'est lue à l'écran ; leur absence est vérifiée par `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted` et `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api`.
+
 ### S-0009-13 — La comparaison déjà en cours est refusée, le message est traduit
-Plan 0009, critère 13 · Test : `app/e2e/comparaison.spec.ts` › `[S-0009-13]`
+Plan 0009, critère 13 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0009-13]` (refus simulé) ; `app/e2e/comparaison-reelle.spec.ts` › `[S-0009-13]` (refus réel)
 - **Étant donné** l'écran Comparaison de Revenu net, prêt à lancer, et un serveur qui répond au lancement par un refus 409 `comparison_running`
 - **Quand** je clique « Lancer la comparaison »
 - **Alors** la bannière « Comparaison déjà en cours » s'affiche avec « Attendez sa fin avant de relancer cette comparaison. », sans barre de progression
 - **Et** le bouton de lancement reste utilisable, une seule demande est partie, et axe-core ne relève aucune violation sérieuse
-- Limite : le refus est simulé. Le refus réel d'une seconde demande identique, sans nouvelle exécution, est vérifié par `core/tests/compare/test_compare.py::test_identical_running_comparison_is_refused` et `core/tests/repo/test_comparisons_api.py::test_running_duplicate_then_distinct_tolerance_and_retry`.
+- **Étant donné** (second test) une comparaison qui tourne vraiment sur le serveur 8793 (le faux Databricks retient la requête), et un second onglet de la même session
+- **Quand** le second onglet lance la même comparaison
+- **Alors** le serveur répond 409 `comparison_running`, la bannière « Comparaison déjà en cours » s'affiche sans barre de progression, et une seule requête est partie chez la plateforme
+- Limite : le premier test simule le refus. Le même refus est aussi vérifié par `core/tests/compare/test_compare.py::test_identical_running_comparison_is_refused` et `core/tests/repo/test_comparisons_api.py::test_running_duplicate_then_distinct_tolerance_and_retry`.
 
 **Plan 0015**
 
 ### S-0015-01 — Lancer, voir la progression, lire 94 % / 6,1 %
-Plan 0015, critère 1 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-01]`
+Plan 0015, critère 1 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-01]` ; `app/e2e/comparaison-resultats.spec.ts` › `[S-0015-01]`
 - **Étant donné** l'écran Comparaison, KPI Revenu net, nordis-de et nordis-es cochées, et l'avertissement « Surcharge hors des points déclarés » affiché avant tout lancement
 - **Quand** je clique « Lancer la comparaison »
 - **Alors** les barres « Databricks · nordis-de, nordis-fr » et « Snowflake · nordis-es » apparaissent, puis « Relancer » ; l'adresse porte `id=…&variant=nordis-de`
 - **Et** la cellule « Revenu net × nordis-de : 94 % de validation, écart max 6,1 % » est la cellule courante, et nordis-fr est à 100 %
+- **Étant donné** une copie isolée de la démonstration, dont l'historique est vide, et la comparaison lancée sur la période par défaut
+- **Alors** les cellules suivent les seuils de couleur : nordis-fr à 100 % (`tone-cell-pass`), nordis-de à 94 % (`tone-cell-warn`), nordis-es à 75 % (`tone-cell-bad`)
+- **Quand** je ramène la période du 2026-02-01 au 2026-08-31 et relance
+- **Alors** nordis-de passe à 100 % et sa ligne « Sept. 2026 DE » disparaît du détail ; l'historique ne compte que ces deux lancements (« nordis-de 100 % » puis « nordis-de 94 % »)
 
 ### S-0015-02 — Le détail : Sept. 2026 hors tolérance, lien vers n02
 Plan 0015, critère 2 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-02]`
@@ -1263,18 +1344,21 @@ Plan 0015, critère 3 · Tests : `app/e2e/comparaison-bypass.spec.ts` › `[S-00
 - Limite : la déclinaison non comparable (nordis-es désactivée, décochée et décrite par « Non comparable : … ») n'est vérifiée que par Vitest pour ce critère ; l'e2e la voit pour ses autres causes en S-0022-02 à S-0022-05.
 
 ### S-0015-04 — Sans accès, s'authentifier puis reprendre le lancement
-Plan 0015, critère 4 · Test : `app/e2e/comparaison-auth.spec.ts` › `[S-0015-04]`
+Plan 0015, critère 4 · Tests : `app/e2e/comparaison-auth.spec.ts` › `[S-0015-04]` ; `app/e2e/comparaison-reelle.spec.ts` › `[S-0015-04]`
 - **Étant donné** un espace isolé sur le serveur 8793, nordis-fr seule cochée, « Connexion requise » affichée après un premier lancement
 - **Quand** je clique « Se connecter à dbx-fr » et termine l'OAuth dans la fenêtre du faux Databricks (« Connexion réussie »)
 - **Alors** un nouveau lancement est accepté (HTTP 202) sans nouveau clic sur « Lancer », et le bouton de connexion disparaît
-- Limite : le faux Databricks ne calcule pas le SQL métier ; le scénario s'arrête à la reprise.
+- **Étant donné** (second test) le même espace, l'accès obtenu
+- **Quand** je lance la comparaison
+- **Alors** l'exécution va au bout : le bouton « Relancer » revient, l'échec est expliqué à l'écran (le faux ne calcule pas le SQL métier), l'historique garde l'exécution et axe-core ne relève aucune violation sérieuse
+- Limite : sans données de comparaison, l'issue réussie (94 % / 6,1 %) n'est pas atteignable : elle est vue en S-0015-01 sur les données locales.
 
 ### S-0015-05 — Annuler arrête la progression
-Plan 0015, critère 5 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-05]` ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0015-05]`
+Plan 0015, critère 5 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-05]` (simulé) ; `app/e2e/comparaison-reelle.spec.ts` › `[S-0015-05] [S-0009-10]` (annulation réelle, voir S-0009-10) ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0015-05]`
 - **Étant donné** l'écran Comparaison prêt à lancer et un serveur qui accepte le lancement (exécution n° 9001), la suit à 40 % (barre « Databricks · nordis-de, nordis-fr », « En cours · 40 % ») puis, une fois l'annulation reçue, la rend « annulée »
 - **Quand** je lance la comparaison, puis clique « Annuler »
 - **Alors** la demande d'annulation de l'exécution 9001 part, « Comparaison n° 9001 annulée. » s'affiche, le bouton « Annuler » disparaît, le statut « Annulé » s'affiche, l'adresse porte `id=9001` et le bouton de lancement redevient utilisable ; axe-core ne relève aucune violation sérieuse
-- Limite : le serveur est simulé (`page.route`) : une exécution locale dans DuckDB finit avant qu'on puisse l'annuler. L'arrêt réel et le nettoyage sont vérifiés par `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api` et `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted`.
+- Limite : ce test simule le serveur (`page.route`), car une exécution locale dans DuckDB finit avant qu'on puisse l'annuler ; l'annulation réelle passe par le faux Databricks qui retient la requête (S-0009-10). Le nettoyage est vérifié par `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api` et `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted`.
 
 ### S-0015-06 — L'arrondi n'est qu'à l'affichage
 Plan 0015, critère 6 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-06]`
@@ -1283,11 +1367,14 @@ Plan 0015, critère 6 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-06]`
 - **Alors** il s'affiche « +6,1 % », et son infobulle donne la valeur exacte, qui commence par `6.1001`
 
 ### S-0015-07 — L'historique complet et ses filtres
-Plan 0015, critère 7 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-07]`
+Plan 0015, critère 7 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-07]` ; `app/e2e/comparaison-resultats.spec.ts` › `[S-0015-07]`
 - **Étant donné** au moins une comparaison de Revenu net dans l'espace
 - **Quand** je clique « Tout voir » dans « Dernières comparaisons », choisis l'utilisateur anna.k, puis « Depuis le » 2999-01-01
 - **Alors** « Historique des comparaisons » s'ouvre ; la première ligne nomme anna.k et « nordis-de 94 % · nordis-es 75 % · nordis-fr 100 % » ; l'adresse porte `user=anna.k`
 - **Et** la date future donne « Aucune comparaison ne correspond à ces filtres. »
+- **Étant donné** une copie isolée de la démonstration, sans aucune comparaison
+- **Alors** la matrice dit « non comparé » dans les trois cellules de Revenu net ; la mention « Exécutée avec vos droits · résultats agrégés uniquement · historique local (DuckDB, espace Groupe Nordis) » est affichée ; « Dernières comparaisons » et l'historique complet disent « Aucune comparaison dans cet espace. »
+- **Et** un domaine sans KPI décliné affiche « Aucun KPI décliné dans ce domaine. » à la place de la matrice
 - Limite : « seulement celles de l'espace » est vérifié par `core/tests/repo/test_comparisons_api.py::test_spaces_never_share_results`.
 
 ### S-0015-08 — Un double clic sur le lancement n'envoie qu'une seule demande
@@ -1315,12 +1402,13 @@ Plan 0015, critère 10 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-10]`
 - Limite : le serveur est simulé ; l'annulation réussie est S-0015-05. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-10]` couvrent aussi l'effacement de l'erreur en fin de suivi et le cas `not_running`.
 
 ### S-0015-11 — Une tolérance de 8 % règle le curseur sur 8 et la comparaison l'utilise
-Plan 0015, critère 11 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-11]`
+Plan 0015, critère 11 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-11]` ; `app/e2e/comparaison-resultats.spec.ts` › `[S-0015-11]`
 - **Étant donné** l'écran Comparaison de Revenu net, dont le KPI et l'aperçu annoncent une tolérance de 8 %
 - **Quand** je lis le curseur de tolérance, le recule d'un cran au clavier, puis le ramène à sa butée haute (touche Fin), et lance la comparaison
 - **Alors** le curseur indique 8 (butée haute 8, intitulé « Tolérance : 8 % »), passe à 7,9 puis revient à 8 et non à 5
 - **Et** la demande de lancement porte `tolerance: 8` ; axe-core ne relève aucune violation sérieuse
-- Limite : le setup et l'aperçu sont les vraies réponses du serveur, modifiées pour annoncer 8 % ; le suivi et le lancement sont simulés. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-11]` couvrent aussi la borne haute pour une tolérance de 7,25 % et l'envoi de la valeur choisie.
+- **Étant donné** une copie isolée de la démonstration et le serveur réel, **Quand** je règle le curseur à 5 et lance la comparaison, **Alors** le calcul réel applique 5 % et non le 1 % du KPI : nordis-es passe de 75 % à 100 % (aucune ligne hors tolérance dans son détail), nordis-de reste à 94 %, nordis-fr à 100 %
+- Limite : dans le premier test, le setup et l'aperçu sont les vraies réponses du serveur, modifiées pour annoncer 8 % ; le suivi et le lancement sont simulés. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-11]` couvrent aussi la borne haute pour une tolérance de 7,25 % et l'envoi de la valeur choisie.
 
 ### S-0015-12 — Un accès perdu pendant le lancement est expliqué et mène à la reconnexion
 Plan 0015, critère 12 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-12]` ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0015-12]`
@@ -1343,11 +1431,12 @@ Plan 0015, critère 13 · Tests : `app/e2e/comparaison-auth.spec.ts` › `[S-001
 **Plan 0022**
 
 ### S-0022-01 — ES à 75 %, DE à 94 %, FR à 100 %
-Plan 0022, critère 1 · Test : `app/e2e/comparaison.spec.ts` › `[S-0022-01]`
+Plan 0022, critère 1 · Test : `app/e2e/comparaison.spec.ts` › `[S-0022-01]` (deux tests : la matrice, le détail nordis-es)
 - **Étant donné** l'écran Comparaison de Revenu net, nordis-es cochée
 - **Quand** je lance la comparaison et attends « Relancer »
 - **Alors** la matrice affiche « Revenu net × nordis-es : 75 % de validation, écart max 2,9 % », nordis-de à 94 % et nordis-fr à 100 %
-- Limite : l'interface arrondit à 2,9 %. Les huit cellules, la valeur exacte de 2,93 % et les mois de juin et juillet sont vérifiés par `core/tests/compare/test_compare.py::test_from_scratch_es_compares_with_fr_and_de`.
+- **Et** le détail de nordis-es compte huit lignes, dont exactement deux hors tolérance : juin 2026 à −2,9 % (valeur exacte −2,857…) et juillet 2026 à +2,9 % (valeur exacte 2,926…), la facture du 30 juin, clôturée après minuit à Madrid, comptant en juillet
+- Limite : l'interface arrondit à 2,9 % et le titre de la cellule porte la valeur exacte ; les valeurs des six autres cellules sont vérifiées par `core/tests/compare/test_compare.py::test_from_scratch_es_compares_with_fr_and_de`.
 
 ### S-0022-02 — Une source sans colonne lue est refusée, la colonne nommée
 Plan 0022, critère 2 · Test : `app/e2e/comparaison-refus.spec.ts` › `[S-0022-02]`
@@ -1442,6 +1531,14 @@ Plan 0008, critère 5 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0
 - **Et** la ligne affiche « Connecté · token personnel », y compris après rechargement ; le token n'apparaît ni dans les réponses de `connections` et `connections/dbx-fr/status`, ni dans les réponses relevées pendant le test, ni dans le HTML, les champs, le stockage du navigateur ou `sessionStorage`
 - Limite : coffre en mémoire ; le trousseau est vérifié par `core/tests/connections/test_connections.py::test_personal_token_goes_to_the_vault_and_never_comes_back`. Le même repli est rendu en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0008-05]`. C'est une exception assumée à la règle du guide 10.6 (voir plus bas).
 
+### S-0008-06 — Au-delà de la limite de lignes, la comparaison échoue sans rapatrier le résultat
+Plan 0008, critère 6 · Test : `app/e2e/comparaison-reelle.spec.ts` › `[S-0008-06]`
+- **Étant donné** un espace isolé sur le serveur 8793, nordis-fr seule cochée, l'accès dbx-fr obtenu par l'OAuth du faux Databricks, et le faux qui annonce 60 000 lignes en un seul bloc (limite : 50 000)
+- **Quand** je lance la comparaison
+- **Alors** la bannière « Comparaison n° N en échec » s'affiche dans le panneau de lancement puis dans le détail, et son message traduit cite la limite (« Le résultat dépasse 50 000 lignes »), sans le code technique `result_too_large`
+- **Et** la requête a été annulée chez la plateforme, axe-core ne relève aucune violation sérieuse, et l'historique garde l'exécution en échec
+- Limite : le faux annonce le dépassement dès le premier bloc ; le refus sans rapatriement du premier bloc est aussi vérifié par `core/tests/connections/test_connections.py::test_too_many_rows_are_refused_without_fetching` et `core/tests/compare/test_compare.py::test_too_many_rows_fail_the_variant_only`.
+
 ### S-0008-07 — Une plateforme non autorisée est refusée à la déclaration
 Plan 0008, critère 7 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-07]`
 - **Étant donné** un espace isolé dont la gouvernance retire Databricks des plateformes autorisées, par un commit poussé ; l'espace est synchronisé
@@ -1526,25 +1623,64 @@ Plan 0016, critère 9 · Tests : `app/e2e/connexions-testables.spec.ts` › `[S-
 - **Et** le port libéré, la connexion aboutit ; Vitest garantit que seuls `not_connected` et `access_expired` portent l'action de reconnexion
 - Limite : les trois autres codes restent en Vitest. `vault_unavailable` : le coffre des tests est en mémoire, un trousseau verrouillé ne se fabrique pas. `query_timeout` : la requête de test attend 60 s avant d'abandonner (un test de plus d'une minute pour une consigne déjà vue en Vitest). `host_rejected` : propre aux propositions GitHub, que le faux GitHub ne refuse pas en 422. Le texte propre au rattachement d'un dépôt (`host_unreachable` : « Dépôt injoignable ») reste prioritaire dans le formulaire de rattachement : `app/src/screens/Rattachement.test.tsx` › `[S-0033-02]`. Les autres codes émis par les routes de connexion (`platform_forbidden`, `platform_not_found`, `oauth_unavailable`, `oauth_failed`, les clés Snowflake) gardent le message du serveur, qui dit déjà la cause et la suite.
 
+### S-0016-10 — Une autorisation sans réponse échoue au bout de 5 minutes, et « Se connecter » repart
+Plan 0016, critère 2 (délai de l'OAuth) · Test : `app/e2e/connexions-etats.spec.ts` › `[S-0016-10]`
+- **Étant donné** un espace isolé, l'horloge de la page avançant à la main (`page.clock`), et la page d'autorisation du faux Databricks interrompue au niveau du contexte : la fenêtre s'ouvre, personne ne répond
+- **Quand** je clique « Se connecter à Databricks · dbx-fr », laisse passer 4 minutes, puis 61 secondes de plus
+- **Alors** après 4 minutes la ligne n'a pas d'alerte ; après 5 minutes l'alerte « Délai dépassé : La connexion n'a pas abouti en 5 minutes : réessayer. » s'affiche
+- **Et** une fois la page d'autorisation rétablie, « Se connecter » ouvre une seconde fenêtre, la connexion aboutit (« Connecté · session OAuth ») et l'alerte disparaît
+
+### S-0016-11 — Sans plateforme autorisée, ou en simple lecteur, rien ne permet d'ajouter un point d'accès
+Plan 0016, critère 6 (cas limite) · Tests : `app/e2e/connexions-etats.spec.ts` › `[S-0016-11]` (deux tests : les états, l'accessibilité)
+- **Étant donné** un espace isolé dont `allowed_platforms` est vide (commit poussé, sync fait), julien.h référent de l'espace
+- **Quand** j'ouvre « Mes connexions »
+- **Alors** l'aside « Aucune plateforme connectable autorisée » dit qu'un référent de l'espace doit autoriser Databricks ou Snowflake dans l'administration, avec le lien « Configurer les plateformes » ; ni bouton « Ajouter un point d'accès », ni panneau « Nouveau point d'accès » ; le point existant reste listé avec « Plateforme retirée par le référent »
+- **Et** si l'espace est lu en rôle `lecteur` (réponse de `GET /api/workspaces/{id}` réécrite), ni l'avis, ni le bouton, ni le panneau ne sont affichés, et le tableau reste lisible
+- **Et** l'écran sans plateforme autorisée n'a aucune violation d'accessibilité sérieuse
+- Limite : le second test est rouge tant que le conteneur de défilement `.table-wrap` (scroll horizontal dès que l'aside tient à côté du tableau) n'est pas focalisable au clavier, règle axe `scrollable-region-focusable`.
+
+### S-0016-12 — Un identifiant déjà déclaré est refusé pour se connecter ou tester, avec la consigne
+Plan 0016, critère 9 (code `access_point_exists`) · Test : `app/e2e/connexions-etats.spec.ts` › `[S-0016-12]`
+- **Étant donné** le panneau « Nouveau point d'accès » rempli avec l'identifiant `dbx-fr`, déjà déclaré
+- **Quand** je clique « Tester la connexion », puis « S'authentifier avec OAuth »
+- **Alors** une alerte dit « « dbx-fr » est déjà déclaré : s'y connecter depuis la liste. », sans trace ni code brut, aucun test n'est rendu, aucune fenêtre ne s'ouvre et rien n'est rangé dans le coffre
+- **Et** avec un identifiant libre, l'alerte disparaît
+- Limite : le code n'a pas de titre dans `messages.ts` : l'écran montre le message du serveur, qui dit déjà la cause et la suite.
+
 **Plan 0018**
 
 ### S-0018-02 — Paire de clés avec passphrase
-Plan 0018, critère 2 · Test : `app/e2e/connexions.spec.ts` › `[S-0018-02]`
+Plan 0018, critère 2 · Tests : `app/e2e/connexions.spec.ts` › `[S-0018-02]` ; `app/e2e/connexions-testables.spec.ts` › `[S-0018-02]`
 - **Étant donné** le faux Snowflake : SSO automatique pour snow-de, clé chiffrée de `svc_es` pour snow-es
 - **Quand** je connecte snow-de par « Ouvrir le SSO » et le teste ; puis, sur snow-es, saisis l'identifiant `svc_es`, le fichier de clé et sa passphrase, clique « Ranger dans le coffre » et teste ; enfin révoque les deux
 - **Alors** snow-de passe à « Connecté · session SSO », snow-es à « Connecté · paire de clés », chaque test donne « Connexion OK · N ms »
 - **Et** la passphrase n'apparaît ni dans le HTML ni dans les stockages ; la révocation affiche « Accès révoqué, ici et chez Snowflake. » et ramène les deux lignes à « Jamais connecté »
+- **Étant donné** un espace isolé et le formulaire de paire de clés de snow-es ouvert, l'identifiant `svc_es` saisi
+- **Quand** je range une clé avec une mauvaise passphrase, puis sans passphrase (clé chiffrée), puis avec un chemin introuvable, puis avec un fichier qui n'est pas une clé
+- **Alors** chaque essai affiche une alerte distincte (passphrase incorrecte, passphrase requise, fichier introuvable, fichier qui n'est pas une clé RSA), la passphrase n'est jamais renvoyée dans l'alerte, le champ passphrase est vidé et la ligne reste « Jamais connecté »
+- **Et** la bonne passphrase aboutit ensuite à « Connecté · paire de clés », sans alerte
 - Limite : « au coffre et nulle part ailleurs » est vérifié par `core/tests/connections/test_snowflake.py::test_key_pair_with_passphrase_only_in_the_vault`.
+
+### S-0018-07 — Un jeton de session Snowflake n'arrive jamais à l'écran ; session ou clé refusée se reconnecte
+Plan 0018, critère 7 · Tests : `app/e2e/connexions-testables.spec.ts` › `[S-0018-07]` (trois tests)
+- **Étant donné** snow-de connecté par le SSO du faux Snowflake, qui répond désormais à toute requête par une erreur recopiant le jeton de session reçu
+- **Quand** je clique « Tester Snowflake · snow-de »
+- **Alors** la ligne dit « La plateforme a refusé la requête » ; aucun jeton de session ou maître (`sf-session-…`, `sf-master-…`) n'est dans le HTML, les réponses de l'API ni les stockages du navigateur
+- **Étant donné** la session SSO de snow-de expirée chez Snowflake, **Quand** je la teste, **Alors** « Accès expiré » et la consigne de reconnexion s'affichent, la cellule dit « Session expirée » ; « Reconnecter » ramène à « Connecté · session SSO » et le test redonne « Connexion OK »
+- **Étant donné** la clé publique de svc_es oubliée chez Snowflake après une connexion par paire de clés de snow-es, **Quand** je la teste, **Alors** « Accès expiré » et la cellule « Clé refusée » ; une fois la clé rétablie, la même clé et sa passphrase rétablissent « Connecté · paire de clés » et le test réussit
+- Limite : le masquage au niveau du connecteur, y compris la troncature, est vérifié par `core/tests/connections/test_snowflake.py::test_session_tokens_echoed_in_an_error_are_masked` et `::test_connector_translates_with_its_session_tokens`. Le faux Snowflake est piloté par sa route `/__test__/configure` (`core/tests/connections/test_snowflake.py::test_the_fake_is_driven_through_its_test_route`).
 
 **Plan 0025**
 
 Les cinq scénarios suivants viennent d'un même test : deux espaces isolés sur le serveur 8793, dont l'adresse déclarée devient `https://github.com/nordis/<espace>.git` ; le dépôt reste local et aucune requête ne part vers github.com. Toutes les réponses de l'API sont relevées.
 
 ### S-0025-01 — Un code s'affiche, GitHub s'ouvre, aucun champ de jeton
-Plan 0025, critère 1 · Test : `app/e2e/github.spec.ts` › `[S-0025-01]`
+Plan 0025, critère 1 · Tests : `app/e2e/github.spec.ts` › `[S-0025-01]` (deux tests)
 - **Étant donné** les connexions du premier espace, région « Dépôt de l'espace »
 - **Quand** je clique « Se connecter à GitHub », puis « Ouvrir GitHub »
 - **Alors** le groupe « Connexion à GitHub » montre le code (« … code sur GitHub »), la région ne contient aucun champ texte, et une fenêtre s'ouvre sur `http://127.0.0.1:8792/login/device?code=…`
+- **Étant donné** un espace dont l'adresse déclarée est `https://github.com/…`, sur le serveur d'accueil lancé sans client OAuth GitHub
+- **Alors** la région « Dépôt de l'espace » affiche « Connexion GitHub non configurée pour cette installation » et « Jamais connecté », sans bouton « Se connecter à GitHub » ; l'API répond `applies: true`, `configured: false`
 
 ### S-0025-02 — Une fois autorisé, le jeton est au coffre et jamais rendu
 Plan 0025, critère 2 · Test : `app/e2e/github.spec.ts` › `[S-0025-02]`
@@ -1697,6 +1833,26 @@ Plan 0017, critère 10 · Test : `app/e2e/administration.spec.ts` › `[S-0017-1
 - **Quand** je clique un onglet de la navigation
 - **Alors** la vue s'ouvre aussitôt, sans question
 
+### S-0017-11 — Une gouvernance modifiée ailleurs refuse l'enregistrement ; « Relire les paramètres » efface le brouillon
+Plan 0017, critère 8 (base périmée) · Test : `app/e2e/administration-etats.spec.ts` › `[S-0017-11]`
+- **Étant donné** julien.h dans l'Administration d'une copie isolée, avec BigQuery cochée, puis un commit poussé qui change `governance.yaml` (le libellé de Marketing) et un sync fait
+- **Quand** je clique « Enregistrer et … »
+- **Alors** une alerte avec « Relire les paramètres » s'affiche, sans trace ni code brut, aucune proposition n'est créée et la branche principale du dépôt n'a pas bougé
+- **Et** « Relire les paramètres » ferme l'alerte, décoche BigQuery, affiche le libellé « Marketing et communication » et désactive de nouveau « Enregistrer »
+
+### S-0017-12 — Inviter un membre : compte mal formé ou déjà membre refusé, puis ajouté à governance.yaml
+Plan 0017, critère 4 (membres) · Test : `app/e2e/administration-etats.spec.ts` › `[S-0017-12]`
+- **Étant donné** julien.h, seul référent, dans l'Administration d'une copie isolée
+- **Quand** je clique « Inviter », saisis « Léa M. », puis le compte « léa m », puis « anna.k », puis « lea.m », en cliquant « Ajouter le membre » à chaque fois, et enfin « Enregistrer et fusionner »
+- **Alors** le champ du compte est décrit par « Le compte de la personne sur l'hébergeur (lettres, chiffres, . _ -). » puis « Ce compte est déjà membre de l'espace. » ; le rappel « l'accès au dépôt se donne sur l'hébergeur » est affiché
+- **Et** le membre « Léa M. » apparaît, l'enregistrement est « fusionné sans revue », `governance.yaml` du dépôt porte `account: lea.m`, et l'API la donne contributrice sans domaine
+
+### S-0017-13 — Une référente de domaine n'a ni lien d'administration, ni accès à l'écran, ni à l'API
+Plan 0017, critère 1 (référent de domaine) · Test : `app/e2e/administration-etats.spec.ts` › `[S-0017-13]` ; `app/src/App.test.tsx` (composant)
+- **Étant donné** claire.m, référente du seul domaine Finance, sur son serveur et la copie isolée de la démonstration
+- **Quand** j'ouvre le catalogue, puis `administration`
+- **Alors** la navigation n'a pas de lien « Administration », `GET /admin` répond 403, et l'adresse `administration` retombe sur le catalogue
+
 **Plan 0020**
 
 ### S-0020-01 — Une fusion faite hors d'Atlas est taguée au sync
@@ -1707,26 +1863,28 @@ Plan 0020, critère 1 · Test : `app/e2e/administration.spec.ts` › `[S-0020-01
 - **Et** la fiche affiche « v5 · validée … », et l'onglet « Versions 5 » montre « v5 · courante »
 
 ### S-0020-02 — Une version déjà taguée ne produit ni tag ni avertissement
-Plan 0020, critère 2 · Test : `app/e2e/administration.spec.ts` › `[S-0020-02]`
+Plan 0020, critère 2 · Tests : `app/e2e/administration.spec.ts` › `[S-0020-02]` ; `app/e2e/depot-testables.spec.ts` › `[S-0020-02]`
 - **Étant donné** le même espace, v5 déjà taguée
 - **Quand** je clique de nouveau « Synchroniser »
 - **Alors** « Déjà à jour avec le dépôt distant. » s'affiche, et la liste des tags du dépôt distant est inchangée
-- Limite : le commit sans changement de version est vérifié par `core/tests/repo/test_workspace_repo.py::test_sync_leaves_versions_tagged_by_atlas_alone`.
+- **Et** un commit poussé qui ne change que le libellé de Revenu net, sans changer sa version, puis « Synchroniser », ne produit ni avertissement ni tag, ni dans le dépôt nu ni dans le clone
+- Limite : le détail de la règle est vérifié par `core/tests/repo/test_workspace_repo.py::test_sync_leaves_versions_tagged_by_atlas_alone`.
 
 ### S-0020-03 — Une poussée de tag refusée garde le tag local et le signale
 Plan 0020, critère 3 · Test : `app/e2e/depot-testables.spec.ts` › `[S-0020-03]`
 - **Étant donné** un espace isolé où Revenu net passe en v5 par une fusion git (`--no-ff`) poussée hors d'Atlas ; le dépôt nu refuse les tags (crochet `pre-receive`)
 - **Quand** je clique « Synchroniser » dans Administration
 - **Alors** la région « Dépôt Git de l'espace » affiche « Les tags n'ont pas pu être poussés »
-- **Et** le clone porte `doc/revenu-net/v5` sur le commit de fusion, et le dépôt nu n'a pas ce tag
-- Limite : plusieurs avertissements à la fois sont rendus en Vitest : `app/src/screens/Administration.test.tsx` › `[S-0020-03]`.
+- **Et** le même statut affiche aussi « taguée au sync » (les deux avertissements arrivent ensemble), le clone porte `doc/revenu-net/v5` sur le commit de fusion, et le dépôt nu n'a pas ce tag
+- **Et** quand le crochet est retiré, le « Synchroniser » suivant publie le tag sur le commit de fusion dans le dépôt nu et l'avertissement disparaît
+- Limite : le rendu de plusieurs avertissements à la fois est aussi couvert en Vitest : `app/src/screens/Administration.test.tsx` › `[S-0020-03]`.
 
 ### S-0020-04 — L'écran affiche l'avertissement du sync
 Plan 0020, critère 4 · Test : `app/e2e/administration.spec.ts` › `[S-0020-04]`
 - **Étant donné** la v5 fusionnée hors d'Atlas
 - **Quand** je clique « Synchroniser »
 - **Alors** le statut de la région « Dépôt Git de l'espace » contient « taguée au sync »
-- Limite : plusieurs avertissements à la fois sont vérifiés par le test Vitest `app/src/screens/Administration.test.tsx` › `[S-0020-03]`.
+- Limite : l'affichage simultané de « taguée au sync » et de l'échec de poussée des tags est vérifié en e2e par S-0020-03.
 
 **Plan 0023**
 
@@ -1754,6 +1912,13 @@ Plan 0023, critère 4 · Test : `app/e2e/administration.spec.ts` › `[S-0023-04
 - **Étant donné** Anna K., contributrice de l'espace isolé
 - **Quand** je clique « + Ajouter un rôle », choisis validateur limité à Marketing, applique, enregistre et recharge
 - **Alors** « Rôle 1 » vaut contributeur et « Rôle 2 » validateur
+
+### S-0023-05 — Les formulaires de retrait disent pourquoi un retrait est impossible ou ce qu'il entraîne
+Plan 0023, spécification des consignes · Test : `app/e2e/administration-etats.spec.ts` › `[S-0023-05]`
+- **Étant donné** julien.h, seul référent, dans l'Administration d'une copie isolée
+- **Quand** j'ouvre successivement Julien H., le domaine Finance, puis Anna K. avec un deuxième rôle « contributeur » ; puis je nomme Claire M. référente de l'espace, rouvre Julien H. et Anna K. et retire Anna K.
+- **Alors** Julien H. porte « Seul référent de l'espace : nommez-en un autre avant de le retirer. » et son retrait est désactivé ; Finance porte « N documents rattachés : les rattacher à un autre domaine avant de le retirer. » et son retrait est désactivé ; le rôle en double est décrit par « Ce rôle figure déjà : regroupez ses domaines. » et le formulaire reste ouvert
+- **Et** avec deux référents, le retrait de Julien H. est actif et dit « Vous retirer vous ôtera l'administration de l'espace une fois la proposition fusionnée. » ; celui d'Anna K. dit « L'accès au dépôt se retire sur l'hébergeur. » et ouvre une proposition à relire dont le texte contient « Anna K. (anna.k) retiré. »
 
 **Plan 0033**
 
@@ -2100,7 +2265,7 @@ Plan 0026, critère 3 · Test : `app/e2e/parcours.webkit.spec.ts` › `[S-0026-0
 - **Quand** je place le focus sur « Définition », appuie deux fois sur Tab, puis Entrée, choisis De 3 et À 4 et clique « Afficher les écarts »
 - **Alors** le graphe compte sept cartes et aucun champ ; le focus passe à Déclinaisons puis Versions
 - **Et** trois écarts s'affichent, et n06 est « ajouté » dans le graphe de la version 4
-- Les onglets sont des boutons avec tabulation explicite : le test utilise Tab seul sous WebKit macOS.
+- Limite : les onglets sont des boutons à `tabIndex={0}` explicite (`app/src/screens/Fiche.tsx`, ADR 0030, révisé) : Tab et Entrée suffisent, sans ⌥Tab, aussi bien sous Chromium (où tout bouton est tabulable) que sous WebKit macOS (où Tab seul sauterait des liens). Le test ne tourne que sous WebKit, le seul moteur où la différence existait ; la note de ⌥Tab dans la « Mise en œuvre » du plan 0026 date d'avant le passage aux boutons. Vue web sous WebKit, pas la fenêtre Tauri.
 
 ### S-0026-04 — Sélectionner, déplacer, supprimer puis annuler au clavier
 Plan 0026, critère 4 · Test : `app/e2e/parcours.webkit.spec.ts` › `[S-0026-04]`
@@ -2217,25 +2382,21 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0004-08 | `examples/extraction/` produit les écarts annoncés | Démonstration en ligne de commande | `core/tests/extract/test_extract.py::test_demo_shows_the_announced_differences` |
 | S-0005-06 | Supprimer `atlas.duckdb` et relancer redonne le même index | Logique serveur sans écran : aucune commande de l'app ne supprime l'index | `core/tests/repo/test_index.py::test_rebuild_from_scratch_is_identical` |
 | S-0005-07 | `versions` et `versions/{n}` restituent le contenu exact de chaque tag | Contenu à l'octet ; la fiche montre la liste et les graphes de deux versions (S-0012-03), pas le fichier | `core/tests/repo/test_workspace_repo.py::test_versions_restore_each_tag` ; `core/tests/repo/test_catalog_api.py::test_document_versions_and_dependencies` |
-| S-0005-09 | Espace inconnu ou chemin avec `..` : 404 | Logique serveur sans écran : l'app renvoie à l'accueil un espace absent de la liste, sans appeler la route | `core/tests/repo/test_catalog_api.py::test_unknown_workspace_or_dot_dot_is_404` |
 | S-0005-10 | Sans token, le serveur refuse de démarrer ; sans en-tête ou avec un mauvais token, 401 | Démarrage et en-tête posés par Tauri ; les serveurs e2e tournent en mode développement sans token | `core/tests/test_api.py::test_server_refuses_to_start_without_token`, `::test_missing_or_wrong_token_is_refused` ; `core/tests/test_sidecar.py::test_frozen_binary_refuses_to_start_without_token` |
 | S-0006-06 | Une proposition invalide n'est jamais poussée | Logique serveur sans écran : l'éditeur bloque la soumission avant (S-0013-04), la route n'est pas atteinte | `core/tests/repo/test_proposals.py::test_an_invalid_proposal_is_never_pushed` |
 | S-0006-08 | Le cycle de revue passe sur un vrai dépôt GitHub | Compte réel : compte et dépôt GitHub de test, hors CI | `core/tests/repo/test_githost.py::test_github_cycle` (faux hôte), `::test_real_github_reads` (marqué `github`) |
 | S-0006-09 | Le token de l'hébergeur n'est ni dans l'URL distante, ni dans `.git/config`, ni dans les journaux | Fichiers et journaux du poste, hors du DOM | `core/tests/repo/test_githost.py::test_the_token_stays_out_of_urls_config_and_errors` ; `core/tests/repo/test_workspace_repo.py::test_remote_urls_never_carry_credentials` |
-| S-0006-13 | Une règle de protection GitHub donne `branch_protected`, sans contournement | Compte réel : règle de protection d'un dépôt GitHub | `core/tests/repo/test_githost.py::test_merge_errors` |
 | S-0007-03 | `nulls: keep` contre `nulls: drop` : nombres de lignes attendus | Exécution moteur ; l'éditeur compile sans exécuter | `core/tests/compile/test_compile.py::test_nulls_keep_and_drop_on_not_equals` |
 | S-0007-04 | Ratio de sommes contre moyenne de ratios : résultats attendus | Exécution moteur | `core/tests/compile/test_compile.py::test_ratio_of_sums_differs_from_average_of_ratios` |
 | S-0007-05 | Commandes du 30 septembre à 23 h UTC dans le bon mois fiscal (`Europe/Paris`) | Exécution moteur | `core/tests/compile/test_compile.py::test_fiscal_month_follows_the_paris_day` |
 | S-0007-08 | SQL Databricks et Snowflake analysables par SQLGlot | L'affichage du SQL ne prouve pas son analyse | `core/tests/compile/test_compile.py::test_generated_sql_parses_in_its_dialect` |
 | S-0007-09 | Graphe extrait puis recompilé : même résultat DuckDB que le SQL source | Exécution du corpus d'exemples | `core/tests/compile/test_oracle.py::test_recompiled_draft_matches_the_source_sql` |
 | S-0008-01 | Après l'OAuth, l'entrée est au trousseau sous `<ws>/<ap>` et nulle part ailleurs | Trousseau système, disque et journaux ; l'e2e utilise un coffre en mémoire | `core/tests/connections/test_connections.py::test_oauth_stores_tokens_in_the_vault_only` |
-| S-0008-06 | Au-delà de `max_rows`, refus sans rapatriement | Logique serveur (transport) ; aucun écran ne fixe la limite | `core/tests/connections/test_connections.py::test_too_many_rows_are_refused_without_fetching` ; `core/tests/compare/test_compare.py::test_too_many_rows_fail_the_variant_only` |
 | S-0008-08 | Aucune route ne renvoie de secret | Toutes les routes ; le DOM et le stockage sont vérifiés par S-0016-05 | `core/tests/connections/test_connections.py::test_no_route_returns_a_secret` |
 | S-0008-09 | Le binaire figé démarre et répond ; sa taille est notée | Binaire PyInstaller ; l'e2e tourne depuis les sources | `core/tests/test_sidecar.py::test_frozen_binary_smoke` |
 | S-0009-07 | Aucune table `staging_*` ne reste ; SQL relisibles dans `comparison_runs` | Tables DuckDB que l'écran n'expose pas | `core/tests/compare/test_compare.py::test_sql_is_kept_and_nothing_extracted_remains` |
 | S-0009-08 | La base d'un espace ne contient aucune donnée d'un autre | Fichiers séparés ; l'historique affiché (S-0015-07) ne le prouve pas | `core/tests/repo/test_comparisons_api.py::test_spaces_never_share_results` |
 | S-0009-09 | Lignes rapatriées par plateforme ≤ cellules du scope | Compteur du connecteur, non affiché | `core/tests/compare/test_compare.py::test_sql_is_kept_and_nothing_extracted_remains` |
-| S-0009-10 | Annuler laisse `cancelled` et aucune table temporaire | Les tables temporaires ne s'affichent pas ; l'état annulé à l'écran est S-0015-05 | `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted` ; `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api` |
 | S-0009-11 | À tolérance nulle, deux entiers consécutifs au-delà de 2⁵³ et deux décimaux distincts au-delà de la précision d'un double sont hors tolérance | Calcul de réconciliation : l'écran ne reçoit et n'affiche que des écarts en pourcentage déjà arrondis, jamais les entiers ou décimaux exacts | `core/tests/compare/test_compare.py::test_exact_numeric_reconciliation` |
 | S-0009-12 | Deux dimensions décimales distinctes qui donneraient le même double restent deux cellules ; deux représentations de la même valeur se rejoignent | Appariement des cellules côté serveur : l'écran affiche les cellules qu'on lui renvoie, sans refaire l'appariement | `core/tests/compare/test_compare.py::test_precise_decimal_dimensions_do_not_collapse` |
 | S-0010-08 | Aucune couleur ou taille en dur hors `tokens.css` | Contrôle statique des sources : un rendu ne prouve pas l'absence de littéraux | `app/src/tokens.test.ts` |
@@ -2244,7 +2405,6 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0018-04 | Le contrôle de cardinalité échoue sur Snowflake avec une table dupliquée | Exécution sur Snowflake | `core/tests/repo/test_snowflake_compare.py::test_cardinality_check_fails_on_snowflake` |
 | S-0018-05 | Le binaire figé s'authentifie et exécute ; taille sous 200 Mo | CI de release, binaire PyInstaller | `core/tests/test_sidecar.py::test_frozen_binary_authenticates_and_runs` |
 | S-0018-06 | Aucun cache de jeton Snowflake sur le poste | Disque du poste, hors du DOM | `core/tests/connections/test_snowflake.py::test_connection_params_never_cache_tokens`, `::test_sso_stores_the_session_in_the_vault_and_no_token_cache` |
-| S-0018-07 | Un jeton de session Snowflake recopié par une erreur du connecteur n'est jamais restitué, même coupé par la troncature | Le faux Snowflake ne recopie pas les jetons ; aucun écran ne montre ce canal (le Databricks l'est par S-0008-10) | `core/tests/connections/test_snowflake.py::test_session_tokens_echoed_in_an_error_are_masked`, `::test_connector_translates_with_its_session_tokens` |
 | S-0019-01 | Trois installateurs signés ; notarisation macOS | CI de release, certificats réels | `.github/workflows/release.yml` |
 | S-0019-02 | Test de fumée du binaire sur chaque plateforme, `_selftest` compris | CI de release | `core/tests/test_sidecar.py::test_frozen_binary_smoke` ; `core/tests/test_release.py::test_selftest_route_is_protected_and_checks_dynamic_imports` ; `.github/workflows/release.yml` |
 | S-0019-03 | L'app release démarre en moins de 10 s et ne laisse aucun serveur après fermeture | Fenêtre native Tauri, mesure sur machine de référence | `core/tests/test_sidecar.py::test_frozen_binary_stops_when_the_app_disappears` ; `core/tests/test_release.py::test_server_stops_when_its_parent_disappears` (le temps de démarrage reste une mesure manuelle) |

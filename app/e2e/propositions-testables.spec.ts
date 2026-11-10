@@ -211,3 +211,37 @@ test("[S-0014-09] Changer de statut affiche le chargement, pas la file de l'anci
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
+
+test("[S-0006-05] Une base avancée refuse aussi la création de la proposition : alerte nette, rien n'est poussé, le brouillon reste", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, API);
+  await page.goto(`${ws.root}/editeur?from=revenu-net--nordis-de`);
+  await expect(page.getByRole("heading", { level: 1, name: /nordis-de.*brouillon/i })).toBeVisible();
+  // La variante surcharge déjà n02 : on précise la justification de cette surcharge.
+  const props = page.getByRole("complementary", { name: "Propriétés" });
+  await page.locator('[data-node-id="n02"]').click();
+  await props.getByLabel(/Justification de la surcharge/).fill("Expédiées comprises.");
+  await expect.poll(async () => JSON.stringify((await (await request.get(`${ws.api}/editor/documents/revenu-net--nordis-de`)).json()).draft?.document?.overrides ?? null)).toContain("Expédiées comprises.");
+
+  // Pendant ce temps, la base DE passe à la version suivante sur la branche principale.
+  const path = join(ws.work, "variants/revenu-net/nordis-de.yaml");
+  writeFileSync(path, readFileSync(path, "utf8").replace("version: 3\n", "version: 4\n"));
+  git(ws.work, "add", "."); git(ws.work, "commit", "-qm", "Base DE avancée"); git(ws.work, "push", "origin", "main");
+  const head = git(ws.remote, "rev-parse", "main");
+  const branches = git(ws.remote, "for-each-ref", "refs/heads");
+
+  await page.getByRole("button", { name: "Soumettre la proposition" }).click();
+  const dialog = page.getByRole("dialog", { name: "Soumettre la proposition" });
+  await dialog.getByLabel(/Justification/).fill("Soumise sur une base périmée.");
+  const response = page.waitForResponse(r => r.url().endsWith("/proposals") && r.request().method() === "POST");
+  await dialog.getByRole("button", { name: "Soumettre" }).click();
+  const answered = await response;
+  expect(answered.status()).toBe(409);
+  expect(await answered.json()).toMatchObject({ detail: { code: "stale_base" } });
+  await expect(page.getByRole("alert").filter({ hasText: /n'est plus la version courante/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Proposition n° \d+ créée/ })).toHaveCount(0);
+  // Rien n'a été publié, et le travail de l'auteur est encore là.
+  expect(git(ws.remote, "rev-parse", "main")).toBe(head);
+  expect(git(ws.remote, "for-each-ref", "refs/heads")).toBe(branches);
+  const draft = await (await request.get(`${ws.api}/editor/documents/revenu-net--nordis-de`)).json();
+  expect(JSON.stringify(draft.draft.document.overrides)).toContain("Expédiées comprises.");
+});

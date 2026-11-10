@@ -57,6 +57,23 @@ test("[S-0015-02] [S-0015-06] détail : Sept. 2026 hors tolérance, le nœud div
   expect(await seriousViolations(page)).toEqual([]);
 });
 
+test("[S-0022-01] détail nordis-es : huit cellules, la facture du 30 juin sort de juin et entre en juillet", async ({ page }) => {
+  await page.goto(COMPARISON);
+  await page.getByRole("link", { name: /Revenu net × nordis-es : 75 %/ }).click();
+  const detail = page.getByRole("region", { name: /Détail · Revenu net · nordis-es/ });
+  const rows = detail.getByRole("row").filter({ has: page.locator("td") });
+  await expect(rows).toHaveCount(8);
+  const out = detail.locator("tr.is-out");
+  await expect(out).toHaveCount(2); // 6 cellules sur 8 dans la tolérance : 75 %
+  await expect(out.nth(0)).toContainText("Juin 2026");
+  await expect(out.nth(0)).toContainText("−2,9 %");
+  await expect(out.nth(0).getByText("−2,9 %")).toHaveAttribute("title", /^-2\.857/);
+  await expect(out.nth(1)).toContainText("Juil. 2026");
+  await expect(out.nth(1)).toContainText("+2,9 %");
+  await expect(out.nth(1).getByText("+2,9 %")).toHaveAttribute("title", /^2\.9268/);
+  expect(await seriousViolations(page)).toEqual([]);
+});
+
 test("[S-0015-07] historique : « Tout voir », filtre par utilisateur (critère 7)", async ({ page }) => {
   await page.goto(COMPARISON);
   const strip = page.getByRole("region", { name: "Dernières comparaisons" });
