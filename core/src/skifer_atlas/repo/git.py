@@ -111,18 +111,22 @@ def clone_lock_path(repo: Path) -> Path:
 
 
 @contextmanager
-def clone_lock(repo: Path) -> Iterator[None]:
+def clone_lock(repo: Path, timeout: float | None = None, *,
+               create_parent: bool = True) -> Iterator[None]:
     """Un seul fetch ou une seule synchronisation à la fois par clone, dans ce processus et
     entre processus (l'app et la CLI, plan 0028 ; ADR 0035 puis 0039). Deux `git fetch`
     concurrents se disputent le verrou des références distantes, et le second échoue (« cannot
     lock ref 'refs/remotes/origin/main' »). Réentrant : une synchronisation peut suivre un
-    fetch sous le même verrou. Au-delà de `CLONE_WAIT_SECONDS`, `clone_busy`.
+    fetch sous le même verrou. Au-delà de `timeout` secondes, `clone_busy` ; par défaut,
+    `timeout` vaut `CLONE_WAIT_SECONDS`.
 
     Ordre de prise (ADR 0039) : le verrou d'un clone se prend AVANT celui du registre
     (`workspaces.registry_lock`), jamais l'inverse ; un seul clone à la fois."""
     with ExitStack() as stack:
         try:
-            stack.enter_context(file_lock(clone_lock_path(repo), CLONE_WAIT_SECONDS))
+            stack.enter_context(file_lock(clone_lock_path(repo),
+                                          CLONE_WAIT_SECONDS if timeout is None else timeout,
+                                          create_parent=create_parent))
         except LockTimeout as error:
             raise RepoError("clone_busy", "Une autre opération (dans l'application ou dans la "
                             "ligne de commande) tient le dépôt de l'espace. Réessayer quand "

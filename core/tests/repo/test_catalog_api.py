@@ -222,6 +222,8 @@ def test_sync_conflict(client, joined):
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "sync_conflict"
     assert git(clone, "rev-parse", "HEAD").strip() == local
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "conflict"
+    assert git(clone, "rev-parse", "HEAD").strip() == local
 
 
 def test_sync_refreshes_the_catalog(client, joined):
@@ -353,3 +355,288 @@ def test_a_rebuild_in_progress_does_not_delay_the_workspace_list(client, joined)
     assert (counts["kpi"], counts["concept"]) == (None, None)
     counts = client.get("/api/workspaces").json()[0]["counts"]
     assert counts["kpi"] > 0
+
+
+def test_auto_sync_updates_catalog_sheet_and_next_draft(client, joined):
+    work = joined
+    path = work / REVENU_NET
+    path.write_text(path.read_text().replace("version: 4", "version: 5", 1))
+    commit_all(work, "Version suivante")
+    git(work, "push", "origin", "main")
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "fast_forward"
+    rows = client.get(f"{WS}/catalog").json()
+    assert next(row for row in rows if row["id"] == "revenu-net")["version"] == 5
+    assert client.get(f"{WS}/documents/revenu-net/sheet").json()["version"] == 5
+    assert client.get(f"{WS}/documents/revenu-net/draft").json()["version"] == 6
+
+
+def test_auto_sync_throttles_failures_and_keeps_local_reads(client, joined, monkeypatch):
+    from skifer_atlas.api.routes import workspaces as routes
+    from skifer_atlas.repo import RepoError
+
+    calls = []
+
+    def offline(_workspace, **_options):
+        calls.append(1)
+        raise RepoError("fetch_failed", "inaccessible")
+
+    monkeypatch.setattr(routes, "sync_workspace", offline)
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "offline"
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "offline"
+    assert len(calls) == 1
+    assert client.get(f"{WS}/catalog").status_code == 200
+
+
+def test_auto_sync_preserves_existing_draft(client, joined):
+    editor = f"{WS}/editor/documents/revenu-net"
+    document = client.get(editor).json()["document"]
+    document["label"] = "Brouillon conservé"
+    saved = client.put(f"{editor}/draft", json={"document": document, "positions": {},
+                                               "highest": 8, "base_version": 4})
+    assert saved.status_code == 200
+    path = joined / REVENU_NET
+    path.write_text(path.read_text().replace("version: 4", "version: 5", 1))
+    commit_all(joined, "Version suivante")
+    git(joined, "push", "origin", "main")
+    result = client.post(f"{WS}/sync/auto").json()
+    assert result["status"] == "fast_forward"
+    assert "previous_commit" not in result
+    assert client.get(editor).json()["draft"]["document"]["label"] == "Brouillon conservé"
+
+
+def test_auto_sync_refuses_other_branch(client, joined):
+    repo = repo_dir("groupe-nordis")
+    git(repo, "checkout", "-b", "autre")
+    before = git(repo, "rev-parse", "HEAD")
+    manual = client.post(f"{WS}/sync")
+    assert manual.status_code == 409
+    assert manual.json()["detail"]["code"] == "sync_wrong_branch"
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "wrong_branch"
+    assert git(repo, "rev-parse", "HEAD") == before
+    assert git(repo, "branch", "--show-current").strip() == "autre"
+
+
+def test_auto_sync_local_and_errors(client, joined, monkeypatch):
+    from skifer_atlas.api.routes import workspaces as routes
+    from skifer_atlas.repo import RepoError
+
+    for code, status in [("sync_conflict", "conflict"), ("no_remote", "local"),
+                         ("invalid_meta", "error"), ("clone_busy", "busy"),
+                         ("git_timeout", "offline"), ("host_unreachable", "offline"),
+                         ("git_missing", "offline"), ("sync_wrong_branch", "wrong_branch"),
+                         ("fetch_failed", "offline")]:
+        routes._auto_attempts.clear()
+
+        def fail(_workspace, code=code, **_options):
+            raise RepoError(code, "échec")
+
+        monkeypatch.setattr(routes, "sync_workspace", fail)
+        assert client.post(f"{WS}/sync/auto").json()["status"] == status
+        if status == "busy":
+            assert not routes._auto_attempts
+
+
+def test_auto_sync_interval_and_force_are_per_workspace(client, joined, monkeypatch):
+    from skifer_atlas.api.routes import workspaces as routes
+
+    now = [100.0]
+    calls = []
+    monkeypatch.setattr(routes.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(routes, "sync_workspace", lambda ws, **_options: calls.append(ws) or
+                        {"status": "up_to_date", "commit": "abc"})
+    routes._auto_attempts.clear()
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "up_to_date"
+    now[0] += 4
+    client.post(f"{WS}/sync/auto")
+    assert len(calls) == 1
+    client.post(f"{WS}/sync/auto?force=true")
+    assert len(calls) == 2
+    now[0] += 31
+    client.post(f"{WS}/sync/auto")
+    assert len(calls) == 3
+    created = client.post("/api/workspaces", json={"id": "autre", "name": "Autre"})
+    assert created.status_code == 201
+    from skifer_atlas.workspaces import get_workspace, update_workspace
+    other = get_workspace("autre")
+    update_workspace(other.model_copy(update={"git_remote": "https://example.com/repo"}))
+    client.post("/api/workspaces/autre/sync/auto")
+    assert calls == ["groupe-nordis"] * 3 + ["autre"]
+
+
+def test_auto_sync_waits_for_clone_and_route_lock_is_nonblocking(client, joined, monkeypatch):
+    import threading
+
+    from skifer_atlas import filelock
+    from skifer_atlas.api.routes import workspaces as routes
+    from skifer_atlas.repo.git import clone_lock
+
+    repo = repo_dir("groupe-nordis")
+    monkeypatch.setattr(routes, "_AUTO_CLONE_WAIT", 0.15)
+    held, release, waiting = threading.Event(), threading.Event(), threading.Event()
+    acquire = filelock._acquire
+
+    def observed_acquire(path, lock, timeout, create_parent=True):
+        if timeout == routes._AUTO_CLONE_WAIT:
+            waiting.set()
+        return acquire(path, lock, timeout, create_parent)
+
+    monkeypatch.setattr(filelock, "_acquire", observed_acquire)
+
+    def operation():
+        with clone_lock(repo):
+            held.set()
+            release.wait()
+
+    thread = threading.Thread(target=operation)
+    thread.start()
+    try:
+        assert held.wait(2)
+        response = []
+        request = threading.Thread(target=lambda: response.append(client.post(f"{WS}/sync/auto")))
+        request.start()
+        assert waiting.wait(5)
+        request.join(5)
+        assert not request.is_alive()
+        assert response[0].json()["status"] == "busy"
+    finally:
+        release.set()
+        thread.join()
+    held.clear()
+    release.clear()
+    waiting.clear()
+    monkeypatch.setattr(routes, "_AUTO_CLONE_WAIT", 2.0)
+    thread = threading.Thread(target=operation)
+    thread.start()
+    try:
+        assert held.wait(2)
+        response = []
+        request = threading.Thread(target=lambda: response.append(client.post(f"{WS}/sync/auto")))
+        request.start()
+        assert waiting.wait(5)
+        release.set()
+        request.join(5)
+        assert not request.is_alive()
+        assert response[0].json()["status"] == "up_to_date"
+    finally:
+        release.set()
+        thread.join()
+    key = str(repo.resolve())
+    with routes._auto_lock:
+        lock = routes._auto_locks[key]
+    with lock:
+        assert client.post(f"{WS}/sync/auto").json()["status"] == "pending"
+
+
+def test_auto_sync_local_and_removed_origin(client, joined):
+    created = client.post("/api/workspaces", json={"id": "local", "name": "Local"})
+    assert created.status_code == 201
+    assert client.post("/api/workspaces/local/sync/auto").json() == {"status": "local"}
+    repo = repo_dir("groupe-nordis")
+    git(repo, "remote", "remove", "origin")
+    assert client.post(f"{WS}/sync/auto").json() == {"status": "local"}
+
+
+def test_auto_sync_reports_advance_before_error(client, joined, monkeypatch):
+    from skifer_atlas.api.routes import workspaces as routes
+    from skifer_atlas.repo import RepoError
+
+    repo = repo_dir("groupe-nordis")
+
+    def advance_then_fail(_workspace, **_options):
+        git(repo, "commit", "--allow-empty", "-m", "Avance")
+        raise RepoError("invalid_meta", "invalide")
+
+    monkeypatch.setattr(routes, "sync_workspace", advance_then_fail)
+    result = client.post(f"{WS}/sync/auto").json()
+    assert result == {"status": "error", "advanced": True, "commit": git(repo, "rev-parse", "HEAD").strip()}
+
+
+@pytest.mark.parametrize("existing_marker", [False, True])
+def test_auto_sync_defers_tagging_to_manual_sync(client, joined, remote, existing_marker):
+    bare, work = remote
+    repo = repo_dir("groupe-nordis")
+    old = git(repo, "rev-parse", "HEAD").strip()
+    if existing_marker:
+        git(repo, "update-ref", "refs/atlas/tags-checked", old)
+    git(work, "switch", "-c", "pr")
+    path = work / REVENU_NET
+    path.write_text(path.read_text().replace("version: 4", "version: 5", 1))
+    commit_all(work, "Version 5")
+    git(work, "switch", "main")
+    git(work, "merge", "--no-ff", "-m", "Fusion version 5", "pr")
+    merged = git(work, "rev-parse", "HEAD").strip()
+    git(work, "push", "origin", "main")
+
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "fast_forward"
+    assert git(repo, "rev-parse", "refs/atlas/tags-checked").strip() == old
+    assert git(repo, "tag", "--list", "doc/revenu-net/v5") == ""
+    assert git(bare, "tag", "--list", "doc/revenu-net/v5") == ""
+    manual = client.post(f"{WS}/sync").json()
+    assert [warning["code"] for warning in manual["warnings"]] == ["versions_tagged"]
+    assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip() == merged
+
+
+def test_auto_sync_workspace_removed_during_request(client, joined, monkeypatch):
+    import shutil
+
+    from skifer_atlas.api.routes import workspaces as routes
+    from skifer_atlas.workspaces import load_registry, save_registry
+
+    lookup = routes.workspace_or_404
+
+    def remove_after_lookup(ws):
+        workspace = lookup(ws)
+        registry = load_registry()
+        registry.workspaces = []
+        save_registry(registry)
+        shutil.rmtree(repo_dir(ws).parent)
+        return workspace
+
+    monkeypatch.setattr(routes, "workspace_or_404", remove_after_lookup)
+    response = client.post(f"{WS}/sync/auto")
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "not_found"
+    assert not repo_dir("groupe-nordis").parent.exists()
+
+
+def test_auto_sync_fetches_published_version_for_sheet(client, joined, remote):
+    bare, work = remote
+    before = client.get(WS).json()["synced_at"]
+    git(work, "switch", "-c", "pr-published")
+    path = work / REVENU_NET
+    path.write_text(path.read_text().replace("version: 4", "version: 5", 1))
+    commit_all(work, "Version 5")
+    git(work, "switch", "main")
+    git(work, "merge", "--no-ff", "-m", "Fusion version 5", "pr-published")
+    git(work, "tag", "doc/revenu-net/v5")
+    git(work, "push", "origin", "main", "doc/revenu-net/v5")
+    assert client.post(f"{WS}/sync/auto").json()["status"] == "fast_forward"
+    assert client.get(WS).json()["synced_at"] == before
+    sheet = client.get(f"{WS}/documents/revenu-net/sheet").json()
+    assert sheet["version_count"] == 3 and sheet["validated_at"]
+    assert client.get(f"{WS}/documents/revenu-net/layout?version=5").status_code == 200
+    assert [v["version"] for v in client.get(f"{WS}/documents/revenu-net/versions").json()] == [3, 4, 5]
+    assert client.post(f"{WS}/sync").json()["warnings"] == []
+    assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip()
+
+
+def test_auto_sync_removal_between_check_and_lock(client, joined, monkeypatch):
+    import shutil
+
+    from skifer_atlas.api.routes import workspaces as routes
+    from skifer_atlas.workspaces import load_registry, save_registry
+
+    original = routes.clone_lock
+
+    def remove_before_lock(repo, **kwargs):
+        registry = load_registry()
+        registry.workspaces = []
+        save_registry(registry)
+        shutil.rmtree(repo.parent)
+        return original(repo, **kwargs)
+
+    monkeypatch.setattr(routes, "clone_lock", remove_before_lock)
+    response = client.post(f"{WS}/sync/auto")
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "not_found"
+    assert not repo_dir("groupe-nordis").parent.exists()

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import threading
+import time
+
 import duckdb
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
@@ -9,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 from ...admin import is_space_referent
 from ...dbfile import without_waiting
 from ...index import ensure_index, index_fresh
-from ...repo.git import RepoError
+from ...repo.git import RepoError, clone_lock, head
 from ...repo.layout import WorkspaceMeta
 from ...repo.reset_remote import attachment_state, reset_remote
 from ...repo.sync import create_workspace, join_workspace, set_remote, sync_workspace
@@ -21,7 +24,7 @@ from ...workspaces import (
     list_workspaces,
     repo_dir,
 )
-from .common import workspace_or_404
+from .common import not_found, workspace_or_404
 
 router = APIRouter(prefix="/api/workspaces")
 
@@ -133,3 +136,72 @@ def post_sync(ws: str) -> dict:
     synced = get_workspace(workspace.id)
     return {**result, "reindexed": reindexed, "index_fresh": fresh,
             "synced_at": synced.synced_at if synced else None}
+
+
+# La limitation est locale au processus ; le verrou du clone reste l'arbitre entre processus.
+_auto_lock = threading.Lock()
+_auto_attempts: dict[str, tuple[float, dict]] = {}
+_auto_locks: dict[str, threading.Lock] = {}
+_AUTO_INTERVAL = 30.0
+_AUTO_CLONE_WAIT = 2.0
+
+
+def _auto_error_status(error: RepoError | OSError) -> str:
+    if isinstance(error, OSError):
+        return "error"
+    return {"sync_conflict": "conflict", "sync_wrong_branch": "wrong_branch",
+            "no_remote": "local", "clone_busy": "busy",
+            "fetch_failed": "offline", "git_timeout": "offline",
+            "host_unreachable": "offline", "git_missing": "offline"}.get(error.code, "error")
+
+
+@router.post("/{ws}/sync/auto")
+def post_auto_sync(ws: str, force: bool = False) -> dict:
+    workspace = workspace_or_404(ws)
+    if not workspace.git_remote:
+        return {"status": "local"}
+    try:
+        key = str(repo_dir(workspace.id).resolve())
+    except OSError as error:
+        if get_workspace(workspace.id) is None:
+            raise not_found(f"Espace « {ws} » inconnu.") from error
+        return {"status": "error"}
+    with _auto_lock:
+        lock = _auto_locks.setdefault(key, threading.Lock())
+    if not lock.acquire(blocking=False):
+        return {"status": "pending"}
+    try:
+        if get_workspace(workspace.id) is None:
+            raise not_found(f"Espace « {ws} » inconnu.")
+        now = time.monotonic()
+        previous = _auto_attempts.get(key)
+        interval = 3.0 if force else _AUTO_INTERVAL
+        if previous and now - previous[0] < interval:
+            return previous[1]
+        before = None
+        try:
+            with clone_lock(repo_dir(workspace.id), timeout=_AUTO_CLONE_WAIT,
+                            create_parent=False):
+                if get_workspace(workspace.id) is None:
+                    raise not_found(f"Espace « {ws} » inconnu.")
+                before = head(repo_dir(workspace.id))
+                try:
+                    result = sync_workspace(workspace.id, automatic=True)
+                    response = {key: result[key] for key in ("status", "commit") if key in result}
+                except (RepoError, OSError) as error:
+                    response = {"status": _auto_error_status(error)}
+                    try:
+                        after = head(repo_dir(workspace.id))
+                        if after != before:
+                            response.update(advanced=True, commit=after)
+                    except (RepoError, OSError):
+                        pass
+        except (RepoError, OSError) as error:
+            if get_workspace(workspace.id) is None:
+                raise not_found(f"Espace « {ws} » inconnu.") from error
+            response = {"status": _auto_error_status(error)}
+        if response["status"] != "busy":
+            _auto_attempts[key] = (time.monotonic(), response)
+        return response
+    finally:
+        lock.release()

@@ -372,3 +372,18 @@ describe("fiche", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Fiche introuvable" })).toBeInTheDocument();
   });
 });
+
+it("relit la fiche après une avance sans démonter son titre", async () => {
+  const sheet = { ...SHEET };
+  const other = sheetServer(sheet);
+  const heading = { current: null };
+  const rendered = render(<Fiche ws={workspace()} id="revenu-net" params={{}} heading={heading} revision={0} />);
+  await screen.findByText(/v4 · validée/);
+  const title = screen.getByRole("heading", { name: "Revenu net" });
+  title.focus();
+  sheet.version = 5;
+  rendered.rerender(<Fiche ws={workspace()} id="revenu-net" params={{}} heading={heading} revision={1} />);
+  await screen.findByText(/v5 · validée/);
+  expect(title).toHaveFocus();
+  expect(other.calls.filter((call) => call.path === `${DOC}/sheet`)).toHaveLength(2);
+});

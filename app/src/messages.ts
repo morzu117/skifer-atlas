@@ -26,6 +26,22 @@ const KNOWN: Record<string, Explained> = {
     title: "Git ne répond pas",
     text: "Le dépôt met trop de temps à répondre. Vérifiez la connexion, puis réessayez.",
   },
+  stale_base: {
+    title: "La version de départ a changé",
+    text: "Cette version n’est plus à jour.",
+  },
+  fetch_failed: {
+    title: "Le dépôt est inaccessible",
+    text: "Vérifiez le réseau ou votre accès au dépôt, puis réessayez.",
+  },
+  sync_wrong_branch: {
+    title: "La copie locale n’est pas sur la branche principale",
+    text: "Revenez sur la branche principale avant de synchroniser le dépôt.",
+  },
+  sync_error: {
+    title: "La synchronisation n’a pas abouti",
+    text: "La copie locale reste disponible. Réessayez ou contactez le référent de l’espace.",
+  },
   sync_conflict: {
     title: "Le dépôt local a divergé du dépôt distant",
     text: "Des modifications locales empêchent la mise à jour. Contactez le référent de l'espace.",
@@ -207,6 +223,9 @@ export function explain(error: unknown): Explained {
       return { title: KNOWN[error.code].title, text: error.message };
     }
     // La raison du refus (décompte, changements demandés, aucun habilité) précède la consigne.
+    if (error.code === "stale_base") {
+      return { title: KNOWN.stale_base.title, text: `${KNOWN.stale_base.text} ${error.message}` };
+    }
     if (error.code === "not_ready") {
       return { title: KNOWN.not_ready.title, text: `${error.message} ${KNOWN.not_ready.text}` };
     }

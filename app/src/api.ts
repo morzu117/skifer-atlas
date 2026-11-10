@@ -794,5 +794,6 @@ export const api = {
   admin: (id: string) => request<AdminState>(`${ws(id)}/admin`),
   saveGovernance: (id: string, governance: Governance, baseDigest: string) =>
     request<AdminSaved>(`${ws(id)}/admin/governance`, post({ governance, base_digest: baseDigest })),
+  autoSync: (id: string, force = false) => request<{ status: string; commit?: string; advanced?: boolean }>(`${ws(id)}/sync/auto${force ? "?force=true" : ""}`, post({})),
   sync: (id: string) => request<SyncResult>(`${ws(id)}/sync`, post({})),
 };

@@ -69,6 +69,78 @@ export function WorkspaceShell({
     };
   }, [wsId, onUnknown]);
 
+  // Les relectures conservent les composants et leurs états de saisie.
+  const mountedWorkspace = useRef<string | null>(null);
+  useEffect(() => {
+    mountedWorkspace.current = wsId;
+    return () => { mountedWorkspace.current = null; };
+  }, [wsId]);
+  const syncKey = `${wsId}:${view}:${doc ?? ""}`;
+  const [dataRevision, setDataRevision] = useState(0);
+  const [notice, setNotice] = useState<{ key: string; status: string } | null>(null);
+  const lastCommit = useRef<{ ws: string; commit: string } | null>(null);
+  const failure = useRef<{ ws: string; status: string } | null>(null);
+  const [editorReady, setEditorReady] = useState(0);
+  const entry = useRef({ key: "", revision: 0 });
+  const editorKey = `${syncKey}:${params.from ?? ""}`;
+  if (entry.current.key !== editorKey) entry.current = { key: editorKey, revision: entry.current.revision + 1 };
+  const editorEntry = entry.current.revision;
+  useEffect(() => {
+    if (load.kind !== "ready" || load.ws.id !== wsId) return;
+    let alive = true;
+    const existingEditor = view === "editeur" && !!params.from;
+    const timer = existingEditor ? window.setTimeout(() => {
+      if (alive) setEditorReady(editorEntry);
+    }, 2500) : undefined;
+    const run = async () => {
+      try {
+        let attempts = 1;
+        let result = await api.autoSync(wsId, existingEditor);
+        while (alive && attempts < 20 && performance.now() < deadline &&
+               (result.status === "pending" || result.status === "busy")) {
+          await new Promise((resolve) => window.setTimeout(resolve, 150));
+          if (!alive || performance.now() >= deadline) return;
+          attempts += 1;
+          result = await api.autoSync(wsId, existingEditor);
+        }
+        if (mountedWorkspace.current !== wsId) return;
+        if ((result.status === "fast_forward" || result.advanced) && result.commit &&
+            (lastCommit.current?.ws !== wsId || lastCommit.current.commit !== result.commit)) {
+          lastCommit.current = { ws: wsId, commit: result.commit };
+          setDataRevision((revision) => revision + 1);
+          api.workspace(wsId).then((updated) => {
+            if (mountedWorkspace.current === wsId) setLoad({ kind: "ready", ws: updated });
+          }).catch(() => {});
+        }
+        if (!alive) return;
+        if (["offline", "conflict", "local", "error", "wrong_branch"].includes(result.status)) {
+          if (result.status === "local") {
+            failure.current = null;
+            setNotice(null);
+          } else if (failure.current?.ws !== wsId || failure.current.status !== result.status) {
+            failure.current = { ws: wsId, status: result.status };
+            setNotice({ key: syncKey, status: result.status });
+          }
+        } else if (["up_to_date", "ahead", "fast_forward"].includes(result.status)) {
+          failure.current = null;
+          setNotice(null);
+        }
+      } catch (error) {
+        if (!alive || mountedWorkspace.current !== wsId) return;
+        if (error instanceof ApiError && error.status === 404 && error.code === "not_found") return;
+        if (failure.current?.ws !== wsId || failure.current.status !== "offline") {
+          failure.current = { ws: wsId, status: "offline" };
+          setNotice({ key: syncKey, status: "offline" });
+        }
+      } finally {
+        if (alive && existingEditor) setEditorReady(editorEntry);
+      }
+    };
+    const deadline = performance.now() + 8000;
+    void run();
+    return () => { alive = false; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [wsId, syncKey, load.kind, params.from]);
+
   // Une fusion relit l’espace sans démonter la vue courante.
   useEffect(() => {
     if (!refresh || refresh.id !== wsId) return;
@@ -100,6 +172,14 @@ export function WorkspaceShell({
   }, [wsId]);
 
   const ws = load.kind === "ready" ? load.ws : null;
+  const conflict = explain(new ApiError(409, "sync_conflict", ""));
+  const syncMessage = notice?.status === "conflict" ? conflict
+    : notice?.status === "wrong_branch" ? explain(new ApiError(409, "sync_wrong_branch", ""))
+    : notice?.status === "error" ? explain(new ApiError(500, "sync_error", ""))
+    : { title: "Dépôt momentanément inaccessible", text: "La copie locale reste disponible. Vérifiez le réseau ou l’accès au dépôt." };
+  const syncNotice = notice?.key === syncKey && (
+    <Banner tone="info" title={syncMessage.title}>{syncMessage.text}</Banner>
+  );
   // Un référent de domaine n'administre pas l'espace : seul un référent d'espace (0017).
   const referent = ws?.space_referent === true;
 
@@ -114,7 +194,7 @@ export function WorkspaceShell({
   const workspaceReady = ws !== null;
   useEffect(() => {
     if (workspaceReady) heading.current?.focus();
-  }, [workspaceReady, wsId, view, doc, replacement]);
+  }, [workspaceReady, wsId, view, doc, replacement, editorReady, editorEntry]);
 
   const replaceWorkspace = (next: Workspace) => {
     setLoad({ kind: "ready", ws: next });
@@ -159,7 +239,9 @@ export function WorkspaceShell({
           </Banner>
         )}
         {interrupted}
-        {ws && <Editor ws={ws} params={params} heading={heading} />}
+        {syncNotice}
+        {ws && params.from && editorReady !== editorEntry && <p className="muted editor-loading" role="status">Mise à jour du dépôt…</p>}
+        {ws && (!params.from || editorReady === editorEntry) && <Editor ws={ws} params={params} heading={heading} />}
       </div>
     );
   }
@@ -222,8 +304,9 @@ export function WorkspaceShell({
           </Banner>
         )}
         {interrupted}
-        {ws && view === "catalogue" && <Catalogue ws={ws} params={params} heading={heading} />}
-        {ws && view === "fiche" && doc && <Fiche ws={ws} id={doc} params={params} heading={heading} />}
+        {syncNotice}
+        {ws && view === "catalogue" && <Catalogue revision={dataRevision} ws={ws} params={params} heading={heading} />}
+        {ws && view === "fiche" && doc && <Fiche revision={dataRevision} ws={ws} id={doc} params={params} heading={heading} />}
         {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} onMerged={refreshWorkspace} />}
         {ws && view === "comparaison" && <Comparison ws={ws} params={params} heading={heading} />}
         {ws && view === "connexions" && <Connections ws={ws} heading={heading} />}

@@ -77,7 +77,7 @@ def _entry(path: Path) -> tuple[Path, _Held]:
         return path, _held.setdefault(path, _Held())
 
 
-def _acquire(path: Path, held: _Held, timeout: float) -> bool:
+def _acquire(path: Path, held: _Held, timeout: float, create_parent: bool = True) -> bool:
     """Prend le verrou en attendant au plus `timeout` secondes (0 : un seul essai)."""
     deadline = time.monotonic() + timeout
     if timeout > 0:
@@ -92,7 +92,8 @@ def _acquire(path: Path, held: _Held, timeout: float) -> bool:
             # Toute exception d'ici à la prise du verrou du système (dossier ou fichier
             # inaccessible, disque plein) rend le `RLock` : sinon les autres threads
             # attendraient ce verrou jusqu'au redémarrage.
-            path.parent.mkdir(parents=True, exist_ok=True)
+            if create_parent:
+                path.parent.mkdir(parents=True, exist_ok=True)
             fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
             delay = 0.01
             while not _try_lock(fd):
@@ -125,11 +126,11 @@ def _release(held: _Held) -> None:
 
 
 @contextmanager
-def file_lock(path: Path, timeout: float) -> Iterator[None]:
+def file_lock(path: Path, timeout: float, *, create_parent: bool = True) -> Iterator[None]:
     """Tient le verrou de `path` pendant le bloc ; `LockTimeout` si un autre thread ou un
     autre processus le tient encore après `timeout` secondes. Réentrant dans le processus."""
     path, held = _entry(path)
-    if not _acquire(path, held, timeout):
+    if not _acquire(path, held, timeout, create_parent):
         raise LockTimeout(str(path))
     try:
         yield

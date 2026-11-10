@@ -39,10 +39,12 @@ export function Catalogue({
   ws,
   params,
   heading,
+  revision = 0,
 }: {
   ws: Workspace;
   params: Params;
   heading: RefObject<HTMLHeadingElement>;
+  revision?: number;
 }) {
   const filters: CatalogFilters = {
     q: params.q ?? "",
@@ -68,6 +70,7 @@ export function Catalogue({
   const [draftError, setDraftError] = useState<Explained | null>(null);
   const draftButtons = useRef(new Map<string, HTMLButtonElement>());
   const focusAfterDiscard = useRef<string | null | undefined>(undefined);
+  const previewIdentity = useRef("");
   const links = useRef(new Map<string, HTMLAnchorElement>());
 
   useEffect(() => {
@@ -125,7 +128,7 @@ export function Catalogue({
     return () => {
       alive = false;
     };
-  }, [ws.id, retry]);
+  }, [ws.id, retry, revision]);
 
   const { q, domain, owner, status, kind } = filters;
   useEffect(() => {
@@ -148,16 +151,19 @@ export function Catalogue({
     return () => {
       alive = false;
     };
-  }, [ws.id, q, domain, owner, status, kind, retry]);
+  }, [ws.id, q, domain, owner, status, kind, retry, revision]);
 
   const shown = rows !== null && rows.some((row) => row.id === selected) ? selected : "";
   useEffect(() => {
     if (!shown) {
+      previewIdentity.current = "";
       setPreview(null);
       return;
     }
     let alive = true;
-    setPreview({ kind: "loading" });
+    const identity = `${ws.id}:${shown}`;
+    if (previewIdentity.current !== identity) setPreview({ kind: "loading" });
+    previewIdentity.current = identity;
     api
       .summary(ws.id, shown)
       .then((summary) => alive && setPreview({ kind: "ready", summary }))
@@ -165,7 +171,7 @@ export function Catalogue({
     return () => {
       alive = false;
     };
-  }, [ws.id, shown]);
+  }, [ws.id, shown, revision]);
 
   const select = (id: string) => setParams({ sel: id }, { push: false });
 

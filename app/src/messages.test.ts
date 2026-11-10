@@ -24,6 +24,17 @@ describe("explain", () => {
     });
   });
 
+  it.each([
+    ["stale_base", "La version de départ a changé", /Cette version n’est plus à jour/],
+    ["fetch_failed", "Le dépôt est inaccessible", /réseau ou votre accès au dépôt/],
+  ])("traduit %s avec une consigne", (code, title, advice) => {
+    const found = explain(new ApiError(409, code, "détail brut"));
+    expect(found.title).toBe(title);
+    expect(found.text).toMatch(advice);
+    if (code === "stale_base") expect(found.text).toContain("détail brut");
+    else expect(found.text).not.toContain("détail brut");
+  });
+
   // Refus de la revue et de la fusion : le serveur y joint la sortie de git ou la réponse de GitHub.
   const REFUSALS: [code: string, status: number, raw: string, title: string, advice: RegExp][] = [
     ["merge_conflict", 409, "git merge a échoué : CONFLICT (content): Merge conflict in kpis/revenu-net.yaml", "La fusion provoque un conflit", /reproposer/],

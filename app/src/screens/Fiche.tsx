@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   api,
   UnreachableError,
@@ -50,11 +50,13 @@ const RUN_STATUS: Record<string, string> = {
 type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "error"; error: Explained };
 
 /** Charge une ressource à chaque changement de `deps` ; ignore une réponse périmée. */
-function useLoad<T>(load: () => Promise<T>, deps: unknown[]): Load<T> {
+function useLoad<T>(load: () => Promise<T>, deps: unknown[], identity?: string): Load<T> {
   const [state, setState] = useState<Load<T>>({ kind: "loading" });
+  const previousIdentity = useRef(identity);
   useEffect(() => {
     let alive = true;
-    setState({ kind: "loading" });
+    if (identity === undefined || previousIdentity.current !== identity) setState({ kind: "loading" });
+    previousIdentity.current = identity;
     load()
       .then((value) => alive && setState({ kind: "ready", value }))
       .catch((reason) => {
@@ -89,13 +91,15 @@ export function Fiche({
   id,
   params,
   heading,
+  revision = 0,
 }: {
   ws: Workspace;
   id: string;
   params: Params;
   heading: RefObject<HTMLHeadingElement>;
+  revision?: number;
 }) {
-  const sheet = useLoad(() => api.sheet(ws.id, id), [ws.id, id]);
+  const sheet = useLoad(() => api.sheet(ws.id, id), [ws.id, id, revision], `${ws.id}:${id}`);
   // Le titre définitif remplace celui du chargement, qui avait le focus : il le reprend.
   useEffect(() => {
     if (sheet.kind === "ready" && document.activeElement === document.body) heading.current?.focus();

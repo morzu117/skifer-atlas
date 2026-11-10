@@ -31,6 +31,9 @@ export default defineConfig({
   testDir: "e2e",
   workers: 1,
   fullyParallel: false,
+  // La suite complète dure environ 16 min : une série d'échecs lents (worker recréé après
+  // chacun) ne doit pas la faire tourner des heures en tenant le verrou des ports fixes.
+  globalTimeout: 45 * 60_000,
   reporter: "list",
   use: { baseURL: "http://localhost:1420", viewport: { width: 1280, height: 820 } },
   // Chromium pour tous les scénarios ; WebKit, le moteur de la vue Tauri sous macOS, pour
