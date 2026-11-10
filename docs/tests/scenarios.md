@@ -30,14 +30,14 @@
 | 0006 | 13 | 9 | 0 | 4 | 0 |
 | 0007 | 9 | 4 | 0 | 5 | 0 |
 | 0008 | 10 | 6 | 0 | 4 | 0 |
-| 0009 | 13 | 6 | 1 | 6 | 0 |
-| 0010 | 12 | 10 | 1 | 1 | 0 |
+| 0009 | 13 | 7 | 0 | 6 | 0 |
+| 0010 | 12 | 11 | 0 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 7 | 7 | 0 | 0 | 0 |
-| 0013 | 22 | 18 | 4 | 0 | 0 |
+| 0013 | 22 | 21 | 1 | 0 | 0 |
 | 0014 | 9 | 9 | 0 | 0 | 0 |
-| 0015 | 13 | 9 | 4 | 0 | 0 |
-| 0016 | 9 | 8 | 1 | 0 | 0 |
+| 0015 | 13 | 13 | 0 | 0 | 0 |
+| 0016 | 9 | 9 | 0 | 0 | 0 |
 | 0017 | 10 | 10 | 0 | 0 | 0 |
 | 0018 | 7 | 1 | 0 | 6 | 0 |
 | 0019 | 9 | 1 | 0 | 8 | 0 |
@@ -54,9 +54,9 @@
 | 0031 | 4 | 2 | 0 | 2 | 0 |
 | 0032 | 2 | 2 | 0 | 0 | 0 |
 | 0033 | 12 | 9 | 2 | 1 | 0 |
-| 0034 | 10 | 6 | 3 | 1 | 0 |
+| 0034 | 10 | 9 | 0 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **298** | **213** | **19** | **66** | **0** |
+| **Total** | **298** | **226** | **6** | **66** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -152,12 +152,13 @@ Plan 0010, suivi de la revue globale (#151) · Test : `app/e2e/accueil.spec.ts` 
 - Limite : l'analyse de plusieurs adresses invalides (espace, fiche, `%` isolé) est rendue sans navigateur par `app/src/format.test.ts` › `[S-0010-11]`.
 
 ### S-0010-12 — Sous Tauri, l'échec de `get_server_info` ne laisse pas de repli sans token
-Plan 0010, suivi de la revue globale (#151) · Test : `app/src/api.test.ts` › `[S-0010-12]` (Vitest seulement)
-- **Étant donné** la fenêtre Tauri simulée (`window.__TAURI_INTERNALS__`) et une commande `get_server_info` qui échoue
-- **Quand** une requête demande l'adresse du serveur
-- **Alors** `invoke` est réessayé, puis l'erreur « L'application n'a pas fourni l'adresse et le token du serveur local » est levée et la coque est prévenue (bandeau « Serveur local injoignable »), sans qu'aucune requête parte sans token
-- **Et** rien n'est retenu : l'essai suivant (« Réessayer ») interroge de nouveau l'application et réussit ; hors Tauri, le repli sans token reste en place
-- Limite : le bandeau est rendu par S-0010-05 ; ici la coque est seulement prévenue. Le vrai `invoke` n'existe que dans la fenêtre Tauri.
+Plan 0010, suivi de la revue globale (#151) · Tests : `app/e2e/serveur-tauri.spec.ts` › `[S-0010-12]` ; Vitest : `app/src/api.test.ts` › `[S-0010-12]` (six tests)
+- **Étant donné** un pont Tauri simulé dans la page (`window.__TAURI_INTERNALS__`) dont la commande `get_server_info` échoue, l'horloge de la page avançant à la main (`page.clock`), et le vrai serveur derrière
+- **Quand** j'ouvre l'accueil, puis laisse le démarrage épuiser ses essais
+- **Alors** le bandeau « Serveur local injoignable » s'affiche, `invoke` a été réessayé (au moins trois appels) et aucune requête n'est partie vers le serveur
+- **Quand** l'application devient prête et que je clique « Réessayer »
+- **Alors** rien n'avait été retenu : `invoke` est interrogé de nouveau, le bandeau disparaît, l'accueil liste Groupe Nordis, toutes les requêtes portent `Authorization: Bearer` avec le token fourni, et axe-core ne relève aucune violation sérieuse, sur l'écran de démarrage avec son bandeau comme après la reprise
+- Limite : le pont est une simulation ; le vrai `invoke` n'existe que dans la fenêtre Tauri. Vitest couvre en plus le repli sans token hors Tauri, un token vide rendu par l'application et le message « Relancez Skifer Atlas ».
 
 **Plan 0025**
 
@@ -741,34 +742,38 @@ Plan 0013, critère 18 · Test : `app/e2e/editor.spec.ts` › `[S-0013-18]` ; Vi
 - Limite : le contrôle axe n'est pas fait dans la vue YAML, où CodeMirror signale `scrollable-region-focusable` (hors périmètre du correctif).
 
 ### S-0013-19 — Une sauvegarde tardive ne recrée pas un brouillon supprimé
-Plan 0013, critère 19 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-19]` (Vitest, deux tests : soumission, puis « Repartir »)
-- **Étant donné** un brouillon repris et une écriture de brouillon lancée par `pagehide`, dont la réponse est retenue
-- **Quand** je soumets la proposition, ou confirme « Repartir de la v4 », puis que l'écriture échoue tardivement
-- **Alors** la suppression du brouillon n'est envoyée qu'après la fin de l'écriture, Ctrl/Cmd+Z ne change plus le graphe, aucune autre écriture ne part, et la session issue de « Repartir » reste modifiable
-- Limite : le temps réel d'une vraie écriture n'est pas exercé ; la course est simulée par la promesse retenue. Pas de test e2e : la course exige de retenir puis de faire échouer une écriture déjà lancée, ce que seule la promesse simulée de Vitest maîtrise.
+Plan 0013, critère 19 · Tests : `app/e2e/editor.spec.ts` › `[S-0013-19]` (deux tests : soumission, puis « Repartir ») ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-19]` (deux tests)
+- **Étant donné** un brouillon, une description modifiée et une écriture de brouillon lancée par un vrai évènement `pagehide`, dont la réponse est retenue par le test (`page.route`)
+- **Quand** je soumets la proposition (« Proposition n° … créée »), ou confirme « Repartir de la v4 » (« Reprise en cours : l'édition est suspendue. »)
+- **Alors** la suppression du brouillon n'est pas envoyée tant que l'écriture n'a pas fini ; seule la liste des méthodes `PUT` puis `DELETE` est vue
+- **Quand** l'écriture retenue échoue (`abort`)
+- **Alors** la suppression part, l'API ne rend plus de brouillon, aucun autre `PUT` ne part (ni Ctrl/Cmd+Z, ni un nouveau `pagehide`, ni après 1,2 s) ; après « Repartir », le titre redevient « Revenu net : v5 · brouillon » et la session reste modifiable : une nouvelle description est enregistrée
+- Limite : le test e2e retient et fait échouer une vraie requête, mais le graphe retrouvé après Ctrl/Cmd+Z (nombre de nœuds) n'est vérifié que par Vitest, où la promesse d'écriture est maîtrisée.
 
 ### S-0013-20 — Fermer la fenêtre Tauri attend la sauvegarde, au plus deux secondes
 Plan 0013, critère 20 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-20]` (Vitest, deux tests : succès, délai dépassé ; le passage à `hidden` est aussi dans `[S-0013-14] [S-0013-20] [S-0013-21]`)
 - **Étant donné** l'éditeur sous Tauri (API de fenêtre simulée) et une écriture en attente ou lancée
 - **Quand** la fenêtre demande à se fermer
 - **Alors** la fermeture est d'abord empêchée, la sauvegarde est attendue (au plus deux secondes), puis la fenêtre est détruite une seule fois ; quitter l'écran retire l'écouteur
-- Limite : sans fenêtre native. Le cycle réel de fermeture de la WebView reste une vérification dans l'application Tauri (ADR 0040), et `pagehide` du navigateur est visible en e2e (S-0013-14).
+- Limite : Vitest seulement, sans fenêtre native. Un pont Tauri simulé dans la page ne prouverait rien de plus que l'API de fenêtre simulée de Vitest : `onCloseRequested` et `destroy` n'ont d'effet à l'écran que dans la vraie fenêtre. Le départ de page (`pagehide`) du navigateur est vu en e2e par S-0013-14. Le cycle réel de fermeture de la WebView reste une vérification dans l'application Tauri (ADR 0040).
 
 ### S-0013-21 — `keepalive` seulement sous 60 Kio
-Plan 0013, critère 21 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-21]` (Vitest, deux tests : `pagehide` d'un petit brouillon, `visibilitychange` d'un corps de plus de 60 Kio en UTF-8)
-- **Étant donné** l'éditeur ouvert
-- **Quand** la page est masquée avec un petit brouillon, puis avec un texte YAML de 31 000 « é » (moins de 60 000 caractères, plus de 60 Kio en UTF-8)
-- **Alors** le premier `PUT` part avec `keepalive`, le second sans
-- Limite : le navigateur n'expose pas `keepalive` aux tests Playwright ; la mesure en octets est donc vérifiée sur l'appel `fetch`.
+Plan 0013, critère 21 · Tests : `app/e2e/editor.spec.ts` › `[S-0013-21]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-21]` (deux tests : `pagehide` d'un petit brouillon, `visibilitychange` d'un corps de plus de 60 Kio en UTF-8) et sa frontière à 61 439 et 61 440 octets (même fichier, `[S-0013-21]`)
+- **Étant donné** l'éditeur ouvert, l'appel `fetch` de la page enveloppé par le test (le navigateur n'expose pas `keepalive` à Playwright) pour relever l'option et la taille en octets de chaque `PUT` du brouillon
+- **Quand** la page reçoit `pagehide` avec une petite modification, puis, dans la vue YAML, avec un texte de 31 000 « é » (moins de 60 000 caractères, plus de 60 Kio en UTF-8)
+- **Alors** le premier `PUT` (moins de 60 Kio) part avec `keepalive`, ceux de plus de 60 Kio sans
+- Limite : `visibilitychange` et la frontière exacte des 60 Kio ne sont vérifiés qu'en Vitest ; l'e2e relève l'appel à `fetch`, pas le comportement du navigateur à la fermeture.
 
 ### S-0013-22 — Saisir du YAML ne désactive pas « Revenir au canevas »
-Plan 0013, critère 22 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-22]` (Vitest, deux tests)
-- **Étant donné** la vue « Éditer en YAML » de Revenu net
+Plan 0013, critère 22 · Tests : `app/e2e/editor.spec.ts` › `[S-0013-22]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-22]` (deux tests)
+- **Étant donné** la vue « Éditer en YAML » d'un brouillon valide, dont les analyses (`/editor/parse`) sont retenues par le test
 - **Quand** je saisis du YAML pendant la validation
-- **Alors** « Revenir au canevas » n'est pas `aria-disabled`, et une saisie arrivée pendant l'analyse de retour garde la vue YAML, le dernier texte et un avis
-- **Quand** le remplacement du canevas est refusé
+- **Alors** « Revenir au canevas » n'est pas `aria-disabled` et se clique sans `force`
+- **Quand** je saisis un autre texte pendant que l'analyse du retour est en cours, puis qu'elle aboutit
+- **Alors** la vue YAML reste, avec le dernier texte et l'avis « Le YAML a changé pendant l'analyse » ; axe-core ne relève aucune violation sérieuse
+- **Quand** le remplacement du canevas est refusé (Vitest)
 - **Alors** la vue YAML, le texte saisi et l'avis « Remplacement refusé. » restent affichés
-- Limite : Vitest seulement, parce que l'absence d'`aria-disabled` pendant la frappe est une course contre la temporisation de 300 ms que Playwright ne tient pas : après l'échec de l'analyse, le bouton est de nouveau `aria-disabled` et un clic sans `force` attend indéfiniment. Le parcours e2e s'appuie sur ce comportement : `[S-0013-06]` et `[S-0001-10]` attendent l'état stable (bouton `aria-disabled`, cause affichée) et cliquent avec `force`, puisque le bouton `aria-disabled` explique son blocage au clic.
+- Limite : le refus du remplacement (`OpError`) ne se fabrique pas depuis l'écran avec un YAML que le serveur accepte : Vitest seulement. Les parcours e2e qui attendent l'état stable du bouton `aria-disabled` (analyse en échec, cause affichée) cliquent avec `force` : `[S-0013-06]` et `[S-0001-10]`.
 
 **Plan 0021**
 
@@ -851,14 +856,14 @@ Plan 0024, critère 1 · Test : `app/src/editor/Canvas.test.tsx` › `[S-0024-01
 - **Étant donné** le composant Canvas rendu avec une chaîne de cinquante nœuds (`LARGE_GRAPH`), toutes les cartes dessinées
 - **Quand** la position de n007 passe à (600, 600)
 - **Alors** seule la carte n007 est redessinée (compteur : les appels à `summary`, un par rendu de carte)
-- Limite : test de composant, React Flow simulé sous jsdom ; pas de navigateur.
+- Limite : Vitest seulement. Le compte de rendus d'une carte (les appels à `summary`) n'a aucune trace à l'écran : un parcours Playwright ne verrait que des cartes identiques, redessinées ou non. Le coût du rendu est vu en e2e à 200 nœuds par S-0024-03 et S-0024-04.
 
 ### S-0024-02 — Une modification ou une sélection ne redessine que les cartes concernées
 Plan 0024, critère 2 · Test : `app/src/editor/Canvas.test.tsx` › `[S-0024-02]` (Vitest, deux tests)
 - **Étant donné** le même Canvas de cinquante nœuds
 - **Quand** la sélection passe de n003 à n004 ; puis, dans un autre rendu, l'expression de n010 devient `a + b`
 - **Alors** seules n003 et n004 sont redessinées ; puis seule n010
-- Limite : test de composant, sans navigateur.
+- Limite : Vitest seulement, pour la même raison que S-0024-01 : redessiner une carte inchangée ne se voit pas à l'écran.
 
 ### S-0024-03 — Sur 200 nœuds, seules les cartes visibles sont dans le DOM
 Plan 0024, critère 3 · Test : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024-03]`
@@ -878,7 +883,7 @@ Plan 0024, ADR 0028 (complément, issue #48) · Test : `app/src/stable.test.tsx`
 - **Étant donné** `useStable` rendu avec une liste de nœuds, seul ou sous StrictMode
 - **Quand** la liste revient recopiée à l'identique, ou avec un seul nœud modifié, ou après un rendu abandonné
 - **Alors** les nœuds inchangés gardent leur objet, le tableau aussi si rien n'a changé, et un rendu abandonné n'entre pas dans le cache
-- Limite : test du hook sous jsdom, sans React Flow.
+- Limite : Vitest seulement. `useStable` est un hook interne (cache d'objets, rendus abandonnés sous StrictMode) : il n'a pas de surface à l'écran, et l'identité des objets de nœuds ne s'observe pas depuis le navigateur ; la conséquence visible (cartes non redessinées) est S-0024-01 et S-0024-02.
 
 ## Propositions
 
@@ -1055,11 +1060,11 @@ Plan 0009, critère 4 · Test : `app/e2e/comparaison-cellules.spec.ts` › `[S-0
 - Limite : la réponse est simulée ; la règle de calcul est vérifiée par `core/tests/compare/test_compare.py::test_gap`.
 
 ### S-0009-05 — Une jointure contournée est signalée avant le lancement
-Plan 0009, critère 5 · Test : `app/src/screens/Comparison.test.tsx` › `[S-0009-05]` (Vitest)
-- **Étant donné** l'écran Comparaison rendu contre un faux serveur dont l'aperçu signale une jointure contournée
-- **Quand** l'écran se charge, sans lancer
-- **Alors** l'alerte « Contrôle de cardinalité contourné » s'affiche, l'aperçu a été demandé pour nordis-de et nordis-fr, et aucun lancement n'est parti
-- Limite : pas de parcours e2e, la démonstration n'a pas de jointure contournée. `bypass_nodes` est vérifié par `core/tests/compare/test_compare.py::test_bypassed_join_is_reported`.
+Plan 0009, critère 5 · Tests : `app/e2e/comparaison-bypass.spec.ts` › `[S-0009-05]` ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0009-05]`
+- **Étant donné** un espace isolé dont le KPI canonique Revenu net porte une jointure au contrôle de cardinalité contourné (n07, `check: bypass` avec sa raison), poussé puis synchronisé
+- **Quand** j'ouvre l'écran Comparaison, sans lancer
+- **Alors** l'alerte « Contrôle de cardinalité contourné » s'affiche avec « nordis-fr : contrôle de cardinalité contourné (n07). », l'aperçu a été demandé pour le scope déclaré et pour nordis-fr, et aucune demande de lancement n'est partie
+- Limite : l'e2e tourne sur le serveur sans données locales de comparaison (celui de l'OAuth) : seul l'aperçu est exercé, pas un lancement. Vitest rend la même alerte contre un faux serveur qui signale nordis-de. `bypass_nodes` du résultat est vérifié par `core/tests/compare/test_compare.py::test_bypassed_join_is_reported`.
 
 ### S-0009-06 — Sans accès valide, la comparaison demande une connexion
 Plan 0009, critère 6 · Test : `app/e2e/comparaison-auth.spec.ts` › `[S-0009-06]`
@@ -1093,12 +1098,12 @@ Plan 0015, critère 2 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-02]`
 - **Et** le lien ouvre `fiche/revenu-net--nordis-de?diff=canonique&node=n02`, avec « Nœud sélectionné : n02 » et la carte Factures validées sélectionnée et visible
 
 ### S-0015-03 — Une déclinaison avec bypass affiche le bandeau avant lancement
-Plan 0015, critère 3 · Test : `app/src/screens/Comparison.test.tsx` › `[S-0015-03]` (Vitest)
-- **Étant donné** l'écran Comparaison rendu contre un faux serveur : nordis-es non comparable, un aperçu qui signale une jointure contournée
-- **Quand** l'écran se charge, puis je change la granularité et passe la tolérance à 2
-- **Alors** nordis-es est désactivée, décochée et décrite par « Non comparable : Le canonique ne se rebranche pas… », nordis-de est cochée, et « Contrôle de cardinalité contourné » s'affiche sans qu'aucun lancement soit parti ; la tolérance affichée est 1,5 %
-- **Et** le nouvel aperçu porte un scope ad hoc (granularité `mois_fiscal`) et la tolérance 2
-- Limite : pas de parcours e2e, faute de jointure contournée dans la démonstration.
+Plan 0015, critère 3 · Tests : `app/e2e/comparaison-bypass.spec.ts` › `[S-0015-03]` ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0015-03]`
+- **Étant donné** l'espace isolé de S-0009-05 (jointure n07 au contrôle contourné)
+- **Quand** l'écran se charge, puis je choisis la granularité « Mois fiscal » et passe la tolérance à 2
+- **Alors** le bandeau « Contrôle de cardinalité contourné » s'affiche sans qu'aucun lancement soit parti, et reste affiché après les deux changements ; la tolérance affichée est « Tolérance : 2 % »
+- **Et** le premier aperçu porte le scope déclaré `fy2026-mois-entite`, le dernier un scope ad hoc (granularité `mois_fiscal`) et la tolérance 2
+- Limite : la déclinaison non comparable (nordis-es désactivée, décochée et décrite par « Non comparable : … ») n'est vérifiée que par Vitest pour ce critère ; l'e2e la voit pour ses autres causes en S-0022-02 à S-0022-05.
 
 ### S-0015-04 — Sans accès, s'authentifier puis reprendre le lancement
 Plan 0015, critère 4 · Test : `app/e2e/comparaison-auth.spec.ts` › `[S-0015-04]`
@@ -1108,11 +1113,11 @@ Plan 0015, critère 4 · Test : `app/e2e/comparaison-auth.spec.ts` › `[S-0015-
 - Limite : le faux Databricks ne calcule pas le SQL métier ; le scénario s'arrête à la reprise.
 
 ### S-0015-05 — Annuler arrête la progression
-Plan 0015, critère 5 · Test : `app/src/screens/Comparison.test.tsx` › `[S-0015-05]` (Vitest)
-- **Étant donné** l'écran Comparaison contre un faux serveur, une exécution n° 8 en cours (barre « Databricks · nordis-de, nordis-fr » à 40 %, « En cours · 40 % »)
-- **Quand** je clique « Annuler »
-- **Alors** la requête `/comparisons/8/cancel` part, « Comparaison n° 8 annulée. » s'affiche, le bouton « Annuler » disparaît et le statut « Annulé » s'affiche
-- Limite : pas de parcours e2e. L'arrêt réel et le nettoyage sont vérifiés par `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api` et `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted`.
+Plan 0015, critère 5 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-05]` ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0015-05]`
+- **Étant donné** l'écran Comparaison prêt à lancer et un serveur qui accepte le lancement (exécution n° 9001), la suit à 40 % (barre « Databricks · nordis-de, nordis-fr », « En cours · 40 % ») puis, une fois l'annulation reçue, la rend « annulée »
+- **Quand** je lance la comparaison, puis clique « Annuler »
+- **Alors** la demande d'annulation de l'exécution 9001 part, « Comparaison n° 9001 annulée. » s'affiche, le bouton « Annuler » disparaît, le statut « Annulé » s'affiche, l'adresse porte `id=9001` et le bouton de lancement redevient utilisable ; axe-core ne relève aucune violation sérieuse
+- Limite : le serveur est simulé (`page.route`) : une exécution locale dans DuckDB finit avant qu'on puisse l'annuler. L'arrêt réel et le nettoyage sont vérifiés par `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api` et `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted`.
 
 ### S-0015-06 — L'arrondi n'est qu'à l'affichage
 Plan 0015, critère 6 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-06]`
@@ -1161,20 +1166,22 @@ Plan 0015, critère 11 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-11]`
 - Limite : le setup et l'aperçu sont les vraies réponses du serveur, modifiées pour annoncer 8 % ; le suivi et le lancement sont simulés. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-11]` couvrent aussi la borne haute pour une tolérance de 7,25 % et l'envoi de la valeur choisie.
 
 ### S-0015-12 — Un accès perdu pendant le lancement est expliqué et mène à la reconnexion
-Plan 0015, critère 12 · Test : `app/src/screens/Comparison.test.tsx` › `[S-0015-12]` (Vitest)
-- **Étant donné** une comparaison dont le lancement est refusé par le serveur avec `access_expired` (409), l'accès ayant expiré entre l'aperçu et le clic
+Plan 0015, critère 12 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-12]` ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0015-12]`
+- **Étant donné** l'écran Comparaison prêt à lancer, dont le lancement est refusé par le serveur avec `access_expired` (409, texte brut « Accès expiré : texte brut du serveur. »), l'accès ayant expiré entre l'aperçu et le clic ; l'aperçu relu ensuite signale l'accès manquant à dbx-fr
 - **Quand** je clique « Lancer la comparaison »
-- **Alors** le bandeau « Accès expiré » donne la consigne (se reconnecter depuis Mes connexions) sans recopier le texte brut du serveur, et son lien « Reconnecter dans Mes connexions » ouvre `#/w/groupe-nordis/connexions`
-- **Et** l'aperçu est relu : le bandeau « Connexion requise » et son bouton « Se connecter à dbx-de » (le mécanisme de S-0015-04) apparaissent, sans second lancement
-- Limite : le serveur est simulé. Le parcours réel d'une connexion perdue est S-0016-08 (e2e), sur l'écran Mes connexions.
+- **Alors** l'alerte « Accès expiré » donne la consigne (« Reconnectez-vous depuis Mes connexions, puis réessayez. ») sans recopier le texte brut du serveur, et son lien « Reconnecter dans Mes connexions » pointe vers `#/w/groupe-nordis/connexions`
+- **Et** l'aperçu est relu : le bandeau « Connexion requise » et son bouton « Se connecter à dbx-fr » (le mécanisme de S-0015-04) apparaissent, sans second lancement ; le lien ouvre Mes connexions ; axe-core ne relève aucune violation sérieuse
+- Limite : le lancement et l'aperçu sont simulés (`page.route`) ; le parcours réel d'une connexion perdue est S-0016-08, sur l'écran Mes connexions.
 
 ### S-0015-13 — Deux clics rapides sur « Se connecter à… » ne lancent qu'une autorisation
-Plan 0015, critère 13 · Test : `app/src/screens/Comparison.test.tsx` › `[S-0015-13]` (Vitest)
-- **Étant donné** un aperçu qui signale l'accès manquant à dbx-de et une autorisation dont la réponse tarde
-- **Quand** je clique deux fois, dans le même tick, « Se connecter à dbx-de »
-- **Alors** une seule demande d'autorisation part, le bouton est désactivé pendant le lancement, puis devient « En attente de dbx-de… » et aucun échec de connexion ne s'affiche
-- **Et** si la page d'autorisation est abandonnée, le bouton d'attente reste désactivé (il dit « En attente de dbx-de… ») et « Recommencer la connexion à dbx-de » relance l'autorisation : la garde ne couvre que le lancement
-- Limite : le serveur est simulé ; le même garde-fou sur l'écran Mes connexions est S-0016-07 (e2e). Le remplacement du premier flux côté serveur, dont le retour tardif refusé, est couvert par `core/tests/connections/test_connections.py::test_relaunching_replaces_the_flow_still_listening` et `::test_a_replaced_flow_cannot_connect_late`.
+Plan 0015, critère 13 · Tests : `app/e2e/comparaison-auth.spec.ts` › `[S-0015-13]` (deux tests) ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0015-13]` (deux tests)
+- **Étant donné** un espace isolé dont seule nordis-fr est cochée : « Connexion requise » demande dbx-fr (faux Databricks), et la demande d'autorisation du serveur tarde de 700 ms
+- **Quand** je double-clique « Se connecter à dbx-fr »
+- **Alors** une seule demande d'autorisation part et une seule fenêtre s'ouvre, le bouton est désactivé pendant le lancement puis devient « En attente de dbx-fr… » (désactivé), aucun « Connexion échouée » ne s'affiche ; la fenêtre revient sur « Connexion réussie » et la demande de connexion disparaît d'elle-même
+- **Étant donné** une page d'autorisation abandonnée (la requête vers le faux Databricks est interrompue)
+- **Quand** j'attends, puis clique « Recommencer la connexion à dbx-fr »
+- **Alors** le bouton d'attente reste désactivé et dit « Terminer la connexion dans le navigateur » ; le clic relance l'autorisation (deux demandes au total), la seconde fenêtre aboutit, et aucun échec ne s'affiche
+- Limite : le même garde-fou sur l'écran Mes connexions est S-0016-07. Le remplacement du premier flux côté serveur, dont le retour tardif refusé, est couvert par `core/tests/connections/test_connections.py::test_relaunching_replaces_the_flow_still_listening` et `::test_a_replaced_flow_cannot_connect_late`.
 
 **Plan 0022**
 
@@ -1259,7 +1266,7 @@ Plan 0008, critère 2 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0
 Plan 0008, critère 3 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-03]`
 - **Étant donné** un espace isolé où dbx-fr pointe, par un commit poussé, vers un port local libre où rien n'écoute ; un token personnel factice est rangé par l'API
 - **Quand** je clique « Tester Databricks · dbx-fr »
-- **Alors** le statut de la ligne affiche « Hôte injoignable »
+- **Alors** le statut de la ligne affiche « Hôte injoignable » et la consigne « Vérifiez l'adresse et la connexion réseau » (S-0016-09)
 - Limite : `ok` sur un warehouse réel exige un compte : `core/tests/connections/test_connections.py::test_real_warehouse` (marqué `databricks`) ; le cas du faux serveur par `::test_test_is_ok_then_explicit_for_an_unreachable_host`.
 
 ### S-0008-04 — Un jeton expiré est rafraîchi ; un refus donne « Session expirée »
@@ -1352,15 +1359,15 @@ Plan 0016, critère 8 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0
 - **Quand** je clique « Tester Databricks · dbx-fr »
 - **Alors** le statut de la ligne dit « Accès expiré. » et donne la consigne (se reconnecter depuis Mes connexions), la cellule passe à « Token expiré » et le bouton « Reconnecter Databricks · dbx-fr » apparaît sans recharger
 - **Et** « Reconnecter » mène à l'OAuth : la ligne revient à « Connecté · session OAuth » et « Tester » donne « Connexion OK · N ms »
-- Limite : le test d'un brouillon jamais connecté (`not_connected` : « Pas encore connecté. … Connectez-vous depuis Mes connexions ») et un code du serveur non traduit, qui garde son message, sont rendus en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0016-08]`.
+- Limite : le test d'un accès retiré ailleurs (`not_connected`) est e2e en S-0016-09 ; un brouillon jamais connecté et un code du serveur non traduit, qui garde son message, sont rendus en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0016-08]`.
 
 ### S-0016-09 — Chaque code des connecteurs et du coffre a un titre et une consigne
-Plan 0016, critère 9 · Test : `app/src/messages.test.ts` › `[S-0016-09]` (Vitest)
-- **Étant donné** les codes `not_connected`, `access_expired`, `vault_unavailable`, `oauth_port_busy`, `query_failed`, `query_timeout`, `host_unreachable` et `host_rejected`, avec un texte brut du serveur
-- **Quand** l'application les explique
-- **Alors** chacun donne un titre propre et une consigne, jamais « L'opération a échoué » ni le texte brut du serveur
-- **Et** seuls `not_connected` et `access_expired` portent l'action de reconnexion
-- Limite : le texte propre au rattachement d'un dépôt (`host_unreachable` : « Dépôt injoignable ») reste prioritaire dans le formulaire de rattachement : `app/src/screens/Rattachement.test.tsx` › `[S-0033-02]`. Les autres codes émis par les routes de connexion (`platform_forbidden`, `platform_not_found`, `oauth_unavailable`, `oauth_failed`, les clés Snowflake) gardent le message du serveur, qui dit déjà la cause et la suite.
+Plan 0016, critère 9 · Tests : `app/e2e/connexions-testables.spec.ts` › `[S-0016-09]` (cinq tests, dont `[S-0008-03] [S-0016-09]` et `[S-0016-08] [S-0016-09]`) ; Vitest : `app/src/messages.test.ts` › `[S-0016-09]`
+- **Étant donné** un espace isolé, le faux Databricks et, selon le code, un accès retiré pendant que la page reste ouverte, un hôte local qui ne répond pas, un hôte local qui répond HTTP 500 avec un texte brut, un token refusé par la plateforme, ou le port de retour OAuth 8020 tenu par une autre application
+- **Quand** je clique « Tester Databricks · dbx-fr » (ou « Se connecter à Databricks · dbx-fr » pour le port occupé)
+- **Alors** chaque code donne son titre et sa consigne, et jamais le texte brut du serveur : `not_connected` « Pas encore connecté » et « Connectez-vous depuis Mes connexions, puis réessayez. » ; `access_expired` « Accès expiré. » et « Reconnectez-vous depuis Mes connexions, puis réessayez. » ; `host_unreachable` « Hôte injoignable » et « Vérifiez l'adresse et la connexion réseau » ; `query_failed` « La plateforme a refusé la requête » et « Vérifiez vos droits sur le schéma et l'entrepôt » ; `oauth_port_busy` « Une connexion OAuth est déjà en cours » et « Terminez-la ou fermez-la, puis réessayez. »
+- **Et** le port libéré, la connexion aboutit ; Vitest garantit que seuls `not_connected` et `access_expired` portent l'action de reconnexion
+- Limite : les trois autres codes restent en Vitest. `vault_unavailable` : le coffre des tests est en mémoire, un trousseau verrouillé ne se fabrique pas. `query_timeout` : la requête de test attend 60 s avant d'abandonner (un test de plus d'une minute pour une consigne déjà vue en Vitest). `host_rejected` : propre aux propositions GitHub, que le faux GitHub ne refuse pas en 422. Le texte propre au rattachement d'un dépôt (`host_unreachable` : « Dépôt injoignable ») reste prioritaire dans le formulaire de rattachement : `app/src/screens/Rattachement.test.tsx` › `[S-0033-02]`. Les autres codes émis par les routes de connexion (`platform_forbidden`, `platform_not_found`, `oauth_unavailable`, `oauth_failed`, les clés Snowflake) gardent le message du serveur, qui dit déjà la cause et la suite.
 
 **Plan 0018**
 
@@ -1731,28 +1738,32 @@ Plan 0034, critère 4 · Test : `app/e2e/reinitialisation.spec.ts` › `[S-0034-
 - Limite : le commit de retour (commits de l'utilisateur au-dessus), les modifications d'autres fichiers conservées, le commit retrouvé au-delà de 200 commits de gouvernance, le refus `identity_not_found` (commit non reconnu, autre référent) et la reprise après un essai interrompu sont des tests core (`core/tests/repo/test_reset_remote.py`), avec la provenance (un renommage manuel sous un autre message n'est pas défait) et l'index des autres fichiers conservé ; l'écran relit la gouvernance (toujours, même pour « rien à faire »), garde le brouillon sans renommage d'identité et ne le jette, avec la bannière « Modifications non reprises », que si le compte local y figure déjà ou si la gouvernance lue a changé : Vitest, `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-04]`.
 
 ### S-0034-05 — Un refus de la réinitialisation s'explique dans la confirmation
-Plan 0034, critère 5 · Test : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-05]`
-- **Étant donné** une confirmation ouverte et un serveur qui refuse (`workspace_dirty` d'abord, puis `remote_exists` et `reset_incomplete` dans deux cas à part)
-- **Quand** je confirme
-- **Alors** « La réinitialisation n'a pas abouti » et le message du serveur (ou sa traduction, sans sortie de git ni secret) s'affichent dans la confirmation, qui reste ouverte ; la bannière d'origine et son bouton restent ; un nouvel essai réussi la ferme
-- Limite : pas de test e2e, parce que les refus qui se fabriquent depuis l'écran sont les mêmes états que ceux de S-0033 ; les gardes avant écriture (gouvernance modifiée ou dans l'index, conflit, `MERGE_HEAD`, autre branche, `HEAD` détachée) et le refus d'un espace rattaché sont des tests core : `core/tests/repo/test_reset_remote.py`. Le refus d'un espace rattaché est aussi vérifié par S-0034-08.
+Plan 0034, critère 5 · Tests : `app/e2e/reinitialisation.spec.ts` › `[S-0034-05]` ; Vitest : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-05]` (deux tests)
+- **Étant donné** un espace dont le clone a un `origin` d'une autre adresse (refus « Adresse origin différente » au rattachement) et la confirmation de réinitialisation ouverte
+- **Quand** je confirme, le serveur de test répondant d'abord `remote_exists`, puis `reset_incomplete`, puis (réponse réelle) `workspace_dirty` parce que `governance.yaml` du clone porte une modification non enregistrée
+- **Alors** chaque fois « La réinitialisation n'a pas abouti » s'affiche dans la confirmation, qui reste ouverte : le message du serveur pour `remote_exists` (« Atlas ne le détache pas »), la consigne traduite pour `reset_incomplete` (« Réinitialisation interrompue », « Relancez la réinitialisation »), et pour `workspace_dirty` le message du serveur nommant `governance.yaml` ; jamais de sortie de git ni de secret
+- **Et** la bannière d'origine et son bouton restent derrière la confirmation, le clone garde son `origin`, axe-core ne relève aucune violation sérieuse ; la modification annulée, un nouvel essai réussit, ferme la confirmation et le clone n'a plus de remote
+- Limite : `remote_exists` et `reset_incomplete` sont simulés (`page.route`), faute de pouvoir les fabriquer depuis l'écran ; seul `workspace_dirty` vient du serveur. Les gardes avant écriture (gouvernance dans l'index, conflit, `MERGE_HEAD`, autre branche, `HEAD` détachée) et le refus d'un espace rattaché sont des tests core : `core/tests/repo/test_reset_remote.py`. Le refus d'un espace rattaché est aussi vérifié par S-0034-08.
 
 ### S-0034-06 — Le formulaire est gelé pendant la réinitialisation
-Plan 0034, critère 6 · Test : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-06]`
-- **Étant donné** l'Administration avec une confirmation ouverte
-- **Quand** je confirme et que la requête est en cours
-- **Alors** « Réinitialisation de la copie locale… » s'affiche, « Confirmer la réinitialisation », « Annuler » et les cases sont désactivés jusqu'à la fin de la requête
-- **Étant donné** un membre en cours de modification
-- **Alors** « Réinitialiser le rattachement » est désactivé
-- Limite : pas de test e2e, car il faudrait ralentir le serveur pour tenir la requête ouverte ; le verrou du clone (attente d'un rattachement en cours) est un test core (`core/tests/repo/test_reset_remote.py`).
+Plan 0034, critère 6 · Tests : `app/e2e/reinitialisation.spec.ts` › `[S-0034-06]` ; Vitest : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-06]` (deux tests)
+- **Étant donné** l'Administration d'un espace dont le rattachement est refusé (origin différent)
+- **Quand** j'ouvre la modification d'un membre
+- **Alors** « Réinitialiser le rattachement » est désactivé ; il redevient actif quand j'annule la modification
+- **Quand** je confirme la réinitialisation, la requête étant retenue par le test (`page.route`)
+- **Alors** « Réinitialisation de la copie locale… » s'affiche ; « Confirmer la réinitialisation », « Annuler », la case « Databricks », le champ d'adresse et « Rattacher le dépôt » sont désactivés, Échap ne ferme pas la confirmation, et axe-core ne relève aucune violation sérieuse
+- **Et** la requête relâchée, le message de succès s'affiche, la confirmation disparaît, les champs redeviennent actifs et une seule demande de réinitialisation est partie
+- Limite : le verrou du clone (attente d'un rattachement en cours) est un test core (`core/tests/repo/test_reset_remote.py`).
 
 ### S-0034-07 — Le panneau de création propose aussi la réinitialisation
-Plan 0034, critère 7 · Test : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-07]`
-- **Étant donné** le panneau « Créer un espace » après un refus de rattachement `origin_conflict`
-- **Alors** le refus est détaillé une fois, dans le groupe, avec son bouton ; Échap ferme la confirmation sans fermer le panneau
+Plan 0034, critère 7 · Tests : `app/e2e/reinitialisation.spec.ts` › `[S-0034-07]` ; Vitest : `app/src/screens/Reinitialisation.test.tsx` › `[S-0034-07]`
+- **Étant donné** le panneau « Créer un espace » avec une adresse de dépôt vide, où un `origin` d'une autre adresse est glissé dans le clone entre sa création et le rattachement (le test le pose dans le gestionnaire de la requête de rattachement)
+- **Quand** je crée l'espace
+- **Alors** le panneau dit « Espace créé, dépôt distant non rattaché » ; « Adresse origin différente » n'est détaillé qu'une fois, dans le groupe, avec son bouton « Réinitialiser le rattachement » ; axe-core ne relève aucune violation sérieuse
+- **Quand** j'ouvre la confirmation puis appuie sur Échap
+- **Alors** la confirmation se ferme sans fermer le panneau, et le focus revient au bouton
 - **Quand** je confirme
-- **Alors** le champ d'adresse est vide et le panneau dit « Dépôt distant non rattaché » avec « Le rattachement a été réinitialisé. »
-- Limite : pas de test e2e, parce qu'à la création aucun état de clone résiduel ne se fabrique depuis l'écran ; le panneau est rendu contre un faux serveur.
+- **Alors** le champ d'adresse est vide, le panneau dit « Rattachement réinitialisé. » et « Le rattachement a été réinitialisé. », l'ancienne erreur a disparu, le clone n'a plus de remote et les dépôts nus du test n'ont pas bougé
 
 ### S-0034-08 — Juste après, un autre dépôt vide se rattache ; un espace rattaché n'est pas réinitialisable
 Plan 0034, critère 8 · Test : `app/e2e/reinitialisation.spec.ts` › `[S-0034-08]`
@@ -1946,7 +1957,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0009-07 | Aucune table `staging_*` ne reste ; SQL relisibles dans `comparison_runs` | Tables DuckDB que l'écran n'expose pas | `core/tests/compare/test_compare.py::test_sql_is_kept_and_nothing_extracted_remains` |
 | S-0009-08 | La base d'un espace ne contient aucune donnée d'un autre | Fichiers séparés ; l'historique affiché (S-0015-07) ne le prouve pas | `core/tests/repo/test_comparisons_api.py::test_spaces_never_share_results` |
 | S-0009-09 | Lignes rapatriées par plateforme ≤ cellules du scope | Compteur du connecteur, non affiché | `core/tests/compare/test_compare.py::test_sql_is_kept_and_nothing_extracted_remains` |
-| S-0009-10 | Annuler laisse `cancelled` et aucune table temporaire | Les tables temporaires ne s'affichent pas ; l'état annulé est S-0015-05 (Vitest) | `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted` ; `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api` |
+| S-0009-10 | Annuler laisse `cancelled` et aucune table temporaire | Les tables temporaires ne s'affichent pas ; l'état annulé à l'écran est S-0015-05 | `core/tests/compare/test_compare.py::test_cancel_leaves_cancelled_and_nothing_extracted` ; `core/tests/repo/test_comparisons_api.py::test_cancel_through_the_api` |
 | S-0009-11 | À tolérance nulle, deux entiers consécutifs au-delà de 2⁵³ et deux décimaux distincts au-delà de la précision d'un double sont hors tolérance | Calcul de réconciliation : l'écran ne reçoit et n'affiche que des écarts en pourcentage déjà arrondis, jamais les entiers ou décimaux exacts | `core/tests/compare/test_compare.py::test_exact_numeric_reconciliation` |
 | S-0009-12 | Deux dimensions décimales distinctes qui donneraient le même double restent deux cellules ; deux représentations de la même valeur se rejoignent | Appariement des cellules côté serveur : l'écran affiche les cellules qu'on lui renvoie, sans refaire l'appariement | `core/tests/compare/test_compare.py::test_precise_decimal_dimensions_do_not_collapse` |
 | S-0010-08 | Aucune couleur ou taille en dur hors `tokens.css` | Contrôle statique des sources : un rendu ne prouve pas l'absence de littéraux | `app/src/tokens.test.ts` |

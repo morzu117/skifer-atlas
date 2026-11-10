@@ -16,7 +16,7 @@ h1[tabindex="-1"]:focus { outline: none; } /* focus posé par la navigation, pas
 h2 { margin: 0; font-size: var(--atlas-text-lg); font-weight: 600; }
 p { margin: 0; }
 a { color: var(--atlas-brand); }
-a:hover { color: var(--atlas-mid); }
+a:hover { color: var(--atlas-mid-text); }
 :focus-visible { outline: var(--atlas-border-strong) solid var(--atlas-mid); outline-offset: var(--atlas-border-strong); }
 .sidebar :focus-visible { outline-color: var(--atlas-mint); }
 .muted { color: var(--atlas-muted); }
@@ -87,7 +87,7 @@ a.btn { text-decoration: none; } /* lien d'action : même allure qu'un bouton */
 .boot { min-height: 100vh; display: flex; flex-direction: column; }
 .boot-card { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--atlas-space-4); }
 .boot-card .brand { color: var(--atlas-brand); }
-.boot-card .brand-sub { color: var(--atlas-mid); }
+.boot-card .brand-sub { color: var(--atlas-mid-text); }
 
 /* Marque */
 .brand { display: flex; align-items: center; gap: var(--atlas-space-3); }
@@ -281,7 +281,7 @@ a.btn { text-decoration: none; } /* lien d'action : même allure qu'un bouton */
 .row-selected .type-concept { background: var(--atlas-panel); }
 .convergence { display: inline-flex; align-items: center; gap: var(--atlas-space-2); font-weight: 600; }
 .dot { width: var(--atlas-dot); height: var(--atlas-dot); border-radius: 50%; flex: none; }
-.tone-ok { color: var(--atlas-ok); }
+.tone-ok { color: var(--atlas-mid-text); }
 .tone-ok .dot { background: var(--atlas-ok); }
 .tone-warn { color: var(--atlas-warn); }
 .tone-warn .dot { background: var(--atlas-warn); }
@@ -397,7 +397,7 @@ h3 { margin: 0; font-size: var(--atlas-text-base); font-weight: 600; }
 .graph-card.mark-removed { border-style: dashed; }
 .graph-card.mark-modified .graph-card-mark, .graph-card.mark-removed .graph-card-mark { color: var(--atlas-bad); }
 .graph-card.mark-added { border: var(--atlas-border-strong) solid var(--atlas-ok); background: var(--atlas-panel); }
-.graph-card.mark-added .graph-card-mark { color: var(--atlas-ok); }
+.graph-card.mark-added .graph-card-mark { color: var(--atlas-mid-text); }
 .graph-card[class*="mark-"] .graph-card-type, .graph-card[class*="mark-"] .graph-card-detail { color: var(--atlas-ink); }
 .graph-pair { display: flex; flex-direction: column; gap: var(--atlas-space-2); }
 
@@ -659,7 +659,7 @@ textarea.prop-input { resize: vertical; }
   flex: none; margin-left: auto; min-height: var(--atlas-control-h-xs); padding: 0 var(--atlas-space-1); border: 0; background: transparent;
   color: var(--atlas-brand); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
-.link-button:hover { color: var(--atlas-mid); text-decoration: underline; }
+.link-button:hover { color: var(--atlas-mid-text); text-decoration: underline; }
 .dialects { display: flex; gap: var(--atlas-space-3); padding: var(--atlas-space-2) var(--atlas-space-4) 0; }
 .table-dense { min-width: 0; font-size: var(--atlas-text-sm); }
 .table-dense th, .table-dense td { padding: var(--atlas-space-1) var(--atlas-space-4); }
@@ -738,7 +738,7 @@ textarea.prop-input { resize: vertical; }
 .graph-card-note { font-weight: 700; }
 .graph-card.mark-overridden { border: var(--atlas-border-strong) dashed var(--atlas-warn); background: var(--atlas-warn-bg); }
 .graph-card.mark-overridden .graph-card-mark { color: var(--atlas-warn); }
-.graph-card.mark-overridden .graph-card-note { color: var(--atlas-ok); }
+.graph-card.mark-overridden .graph-card-note { color: var(--atlas-mid-text); }
 .graph-card.mark-removed .graph-card-title { text-decoration: line-through; }
 
 /* Comparaison (guide 10.5) : lancement 340 px à gauche ; historique, matrice et détail. */
@@ -760,7 +760,7 @@ textarea.prop-input { resize: vertical; }
 .progress-item { display: flex; flex-direction: column; gap: var(--atlas-space-1); }
 .progress-head { display: flex; justify-content: space-between; gap: var(--atlas-space-2); }
 .progress-state { font-weight: 600; color: var(--atlas-muted); }
-.progress-state.state-done { color: var(--atlas-ok); }
+.progress-state.state-done { color: var(--atlas-mid-text); }
 .progress-state.state-failed, .progress-state.state-cancelled { color: var(--atlas-bad); }
 .progress-bar { height: var(--atlas-progress-h); border-radius: var(--atlas-radius-pill); background: var(--atlas-pale); overflow: hidden; }
 .progress-fill { height: 100%; background: var(--atlas-mid); transition: width 0.2s ease; }

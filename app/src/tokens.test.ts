@@ -48,6 +48,40 @@ describe("tokens", () => {
     expect(readFileSync(join(SRC, TOKENS), "utf-8")).toBe(design);
   });
 
+  it("réserve les tokens teal décoratifs aux usages autres que le texte", () => {
+    const css = readFileSync(join(SRC, "styles.css"), "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
+    // Ajouter ici un sélecteur et sa justification uniquement pour un fond sombre vérifié.
+    const darkBackgroundExceptions: Record<string, string> = {};
+    const violations = Array.from(css.matchAll(/([^{}]+)\{([^{}]*)\}/g)).flatMap(([, selector, body]) => {
+      const rule = selector.trim();
+      if (rule in darkBackgroundExceptions) return [];
+      return body.split(";").flatMap((declaration) =>
+        /^\s*color\s*:[\s\S]*\bvar\(\s*--atlas-(?:mid|ok|node-ref)\s*[,)]/i.test(declaration)
+          ? [`${rule}: ${declaration.trim()}`]
+          : [],
+      );
+    });
+    expect(violations).toEqual([]);
+  });
+
+  it("le texte teal contraste avec les fonds clairs", () => {
+    const css = readFileSync(join(SRC, TOKENS), "utf-8");
+    const luminance = (name: string): number => {
+      const hex = css.match(new RegExp(`--atlas-${name}:\\s*#([0-9a-f]{6})\\b`, "i"))?.[1];
+      if (!hex) throw new Error(`Token de couleur introuvable : ${name}`);
+      const channels = [0, 2, 4].map((offset) => {
+        const channel = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    const text = luminance("mid-text");
+    for (const background of ["ground", "panel", "pale", "warn-bg", "warn-cell", "bad-bg"]) {
+      const bg = luminance(background);
+      expect((Math.max(text, bg) + 0.05) / (Math.min(text, bg) + 0.05), background).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("aucune police chargée depuis le réseau", () => {
     expect(offenders(/fonts\.googleapis|fonts\.gstatic/)).toEqual([]);
   });

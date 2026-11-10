@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
@@ -250,4 +250,172 @@ test("[S-0034-10] un espace à moitié rattaché rouvert : la bannière de la co
   await page.reload();
   await expect(page.locator(".sidebar-user")).toContainText("Référent d'annuaire");
   await expect(page.getByRole("alert").filter({ hasText: "a été interrompu" })).toHaveCount(0);
+});
+
+/** Un espace de l'Administration dont l'origin diverge de l'adresse demandée : le rattachement
+ * est refusé, la réinitialisation proposée. */
+async function refusedAttachment(page: Page) {
+  const id = `reinit-${unique()}`;
+  const root = mkdtempSync(join(tmpdir(), "atlas-reinit-"));
+  trackWorkspace(id, root);
+  const residual = join(root, "residu.git");
+  const wanted = join(root, "voulu.git");
+  bareRepository(residual);
+  bareRepository(wanted);
+  await createSpace(page, id);
+  const repo = clone(id);
+  git(repo, "remote", "add", "origin", residual);
+  await attach(page, wanted);
+  await expect(attachment(page).getByRole("alert").first()).toContainText("Adresse origin différente");
+  return { id, repo, root };
+}
+
+const RESET_URL = (id: string) => `**/api/workspaces/${id}/remote/reset`;
+
+test("[S-0034-05] un refus de la réinitialisation s'explique dans la confirmation, qui reste ouverte, puis un nouvel essai réussit", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { id, repo } = await refusedAttachment(page);
+  const trigger = attachment(page).getByRole("alert").first().getByRole("button", { name: RESET });
+  const dialog = page.getByRole("alertdialog", { name: "Réinitialiser le rattachement ?" });
+  const confirm = dialog.getByRole("button", { name: "Confirmer la réinitialisation" });
+
+  // Refus fabriqués : des états que l'écran ne sait pas produire seul (le serveur y répond avec
+  // son message, déjà débarrassé de la sortie de git).
+  const simulated: { code: string; message: string }[] = [
+    { code: "remote_exists", message: "Cet espace est rattaché à son dépôt distant : Atlas ne le détache pas." },
+    { code: "reset_incomplete", message: "La réinitialisation n'a pas pu aller au bout (étape : références distantes)." },
+  ];
+  await page.route(RESET_URL(id), async (route) => {
+    const next = simulated.shift();
+    if (!next) return route.fallback();
+    await route.fulfill({ status: 409, json: { detail: next } });
+  });
+  await trigger.click();
+  await confirm.click();
+  const refusal = dialog.getByRole("alert");
+  await expect(refusal).toContainText("La réinitialisation n'a pas abouti");
+  await expect(refusal).toContainText("Atlas ne le détache pas");
+  await expect(refusal).not.toContainText(/gho_|fatal/);
+  await expect(dialog).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+
+  await confirm.click();
+  await expect(refusal).toContainText("Réinitialisation interrompue");
+  await expect(refusal).toContainText("Relancez la réinitialisation");
+  await expect(refusal).not.toContainText(/gho_|fatal/);
+  await expect(dialog).toBeVisible();
+
+  // Le serveur refuse pour de bon : la gouvernance du clone porte des modifications non enregistrées.
+  appendFileSync(join(repo, "governance.yaml"), "# modification locale non enregistrée\n");
+  await confirm.click();
+  await expect(refusal).toContainText("La réinitialisation n'a pas abouti");
+  await expect(refusal).toContainText("governance.yaml");
+  await expect(refusal).toContainText("modifications non enregistrées");
+  await expect(dialog).toBeVisible();
+  await expect(confirm).toBeEnabled();
+  // La bannière d'origine et son bouton restent derrière la confirmation.
+  await expect(attachment(page).getByText(/Adresse origin différente/)).toBeVisible();
+  await expect(trigger).toBeVisible();
+  expect(git(repo, "remote")).toBe("origin");
+  expect(await seriousViolations(page)).toEqual([]);
+
+  // Le défaut corrigé, un nouvel essai réussit et ferme la confirmation.
+  git(repo, "checkout", "--", "governance.yaml");
+  await confirm.click();
+  await expect(attachment(page).getByText(/Rattachement réinitialisé\. Seule la copie locale a changé/)).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  expect(git(repo, "remote")).toBe("");
+});
+
+test("[S-0034-06] pendant la réinitialisation le formulaire est gelé ; une modification de membre ouverte suspend le bouton", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { id } = await refusedAttachment(page);
+  const form = attachment(page);
+  const trigger = form.getByRole("alert").first().getByRole("button", { name: RESET });
+
+  // Un membre en cours de modification : le bouton est désactivé, puis revient.
+  await expect(trigger).toBeEnabled();
+  await page.getByRole("table", { name: "Utilisateurs et rôles" }).getByRole("button", { name: /^Modifier / }).click();
+  await expect(trigger).toBeDisabled();
+  await page.getByRole("group", { name: /^Membre / }).getByRole("button", { name: "Annuler" }).click();
+  await expect(trigger).toBeEnabled();
+
+  // La requête est retenue : l'écran dit ce qui se passe et ne laisse rien changer.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let resets = 0;
+  await page.route(RESET_URL(id), async (route) => {
+    resets += 1;
+    await held;
+    await route.fallback();
+  });
+  await trigger.click();
+  const dialog = page.getByRole("alertdialog", { name: "Réinitialiser le rattachement ?" });
+  await dialog.getByRole("button", { name: "Confirmer la réinitialisation" }).click();
+  await expect(page.getByText("Réinitialisation de la copie locale…")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Confirmer la réinitialisation" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Annuler" })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "Databricks" })).toBeDisabled();
+  await expect(form.getByLabel(/^Adresse du dépôt vide/)).toBeDisabled();
+  await expect(form.getByRole("button", { name: "Rattacher le dépôt" })).toBeDisabled();
+  expect(await seriousViolations(page)).toEqual([]);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible(); // pas de fermeture en cours de requête
+  release();
+  await expect(form.getByText(/Rattachement réinitialisé\. Seule la copie locale a changé/)).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { name: "Databricks" })).toBeEnabled();
+  await expect(form.getByLabel(/^Adresse du dépôt vide/)).toBeEnabled();
+  expect(resets).toBe(1);
+});
+
+test("[S-0034-07] le panneau « Créer un espace » propose la réinitialisation après un origin différent ; Échap ne ferme que la confirmation", async ({ page }) => {
+  test.setTimeout(120_000);
+  const id = `reinit-${unique()}`;
+  const root = mkdtempSync(join(tmpdir(), "atlas-reinit-"));
+  trackWorkspace(id, root);
+  const residual = join(root, "residu.git");
+  const wanted = join(root, "voulu.git");
+  bareRepository(residual);
+  bareRepository(wanted);
+  const published = [refs(residual), refs(wanted)];
+  // Le clone vient d'être créé quand le rattachement part : un origin d'une autre adresse s'y
+  // glisse juste avant, comme le laisserait un rattachement interrompu d'un essai précédent.
+  await page.route(`**/api/workspaces/${id}/remote`, async (route) => {
+    if (route.request().method() === "POST") git(clone(id), "remote", "add", "origin", residual);
+    await route.fallback();
+  });
+
+  await page.goto("/#/");
+  await page.getByRole("button", { name: "Créer un espace" }).click();
+  const dialog = page.getByRole("dialog", { name: "Créer un espace" });
+  await dialog.getByLabel(/^Nom/).fill(`Réinitialisation ${id}`);
+  await dialog.getByLabel(/^Identifiant/).fill(id);
+  await dialog.getByLabel("Entités").fill("perrault-fr");
+  await dialog.getByLabel("Dépôt distant").fill(wanted);
+  await dialog.getByRole("button", { name: "Créer l'espace" }).click();
+
+  await expect(dialog.getByText("Espace créé, dépôt distant non rattaché")).toBeVisible();
+  // Le refus est détaillé une fois, dans le groupe, avec le bouton qui le défait.
+  await expect(dialog.getByText("Adresse origin différente")).toHaveCount(1);
+  const trigger = dialog.getByRole("button", { name: RESET });
+  await expect(trigger).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+
+  await trigger.click();
+  const confirmation = page.getByRole("alertdialog", { name: "Réinitialiser le rattachement ?" });
+  await expect(confirmation).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(confirmation).toHaveCount(0);
+  await expect(dialog).toBeVisible(); // Échap n'a fermé que la confirmation
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await confirmation.getByRole("button", { name: "Confirmer la réinitialisation" }).click();
+  await expect(dialog.getByText(/Rattachement réinitialisé\./)).toBeVisible();
+  await expect(dialog.getByLabel(/^Adresse du dépôt vide/)).toHaveValue("");
+  await expect(dialog.getByText("Le rattachement a été réinitialisé.")).toBeVisible(); // plus l'ancienne erreur
+  await expect(dialog.getByText("Adresse origin différente")).toHaveCount(0);
+  expect(git(clone(id), "remote")).toBe("");
+  expect([refs(residual), refs(wanted)]).toEqual(published);
 });

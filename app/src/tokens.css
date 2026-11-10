@@ -6,6 +6,7 @@
   --atlas-deep: #163f3f;       /* sélecteur d'espace, fonds profonds */
   --atlas-brand: #1c4f4d;      /* barre latérale, boutons primaires, textes de marque */
   --atlas-mid: #297e76;        /* élément de navigation actif, succès, sélection */
+  --atlas-mid-text: #246e67;   /* texte teal sur fonds clairs */
   --atlas-mint: #9fe1cf;       /* accents sur fond sombre, avatars */
   --atlas-pale: #e3f5f0;       /* fonds de badges, ligne sélectionnée, cellule « OK » */
 
