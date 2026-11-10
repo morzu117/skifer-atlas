@@ -554,11 +554,24 @@ def test_unknown_variant(db):
 
 def test_too_many_rows_fail_the_variant_only(db):
     _, found = compare(EXAMPLE, db, "nordis-de", "nordis-fr", runner=LocalRunner(DATA, 10))
-    assert found["status"] == "partial" and found["error"].startswith("result_too_large")
+    assert found["status"] == "partial"
+    assert found["error"] == "result_too_large: Le résultat dépasse 10 lignes."
     assert [r["entity"] for r in found["results"]] == ["nordis-fr"]
     statuses = {(r["variant_id"], r["side"]): r["status"] for r in found["runs"]}
     assert statuses[("revenu-net--nordis-de", "canonical")] == "failed"
     assert statuses[("revenu-net--nordis-de", "variant")] == "skipped"
+    assert next(r for r in found["runs"] if r["status"] == "failed")["error"] == found["error"]
+
+
+def test_too_many_rows_does_not_persist_engine_message(db):
+    def failing(plan, compiled, cancel):
+        raise RepoError("result_too_large", "la valeur secrète est 12345")
+
+    _, found = compare(EXAMPLE, db, runner=failing)
+    # Contrat avec le test « traduit la limite disponible » dans app/src/messages.test.ts.
+    assert found["error"] == "result_too_large: Le résultat dépasse 50000 lignes."
+    assert all(r["error"] == found["error"] for r in found["runs"] if r["status"] == "failed")
+    assert "12345" not in json.dumps(found, default=str)
 
 
 def test_platform_error_does_not_persist_returned_values(db):

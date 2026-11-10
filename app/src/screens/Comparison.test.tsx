@@ -170,6 +170,38 @@ describe("seuils de la matrice", () => {
 });
 
 describe("comparaison", () => {
+  it.each([
+    ["result_too_large: Le résultat dépasse la limite de lignes.", "Le résultat dépasse la limite de lignes", "Restreignez la période ou les entités"],
+    ["code_inconnu: Détail du serveur.", "La comparaison a échoué", "Détail du serveur."],
+  ])("affiche l'échec enregistré dans le détail : %s", async (error, title, message) => {
+    window.location.hash = "#/w/groupe-nordis/comparaison?id=7";
+    comparisonServer(({ path }) => path === `${API}/7` ? { json: { ...RUN, status: "failed", error, results: [] } } : undefined);
+    const { container } = render(<Harness />);
+    expect(await screen.findByText("Comparaison n° 7 en échec")).toBeInTheDocument();
+    expect(screen.getByText(title, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(message, { exact: false })).toBeInTheDocument();
+    expect(container.textContent).not.toContain(error.split(":")[0]);
+  });
+
+  it.each([
+    ["partial", "partielle"],
+    ["failed", "en échec"],
+    ["cancelled", "annulée"],
+  ])("affiche le statut %s et l'erreur secondaire après le suivi et dans le détail", async (status, label) => {
+    comparisonServer(({ method, path }) => {
+      if (method === "POST" && path === API) return { json: { id: 8 } };
+      if (path === `${API}/8`) return { json: { ...RUN, id: 8, status, error: "result_too_large: Le résultat dépasse 50000 lignes." } };
+      return undefined;
+    });
+    const { container } = render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    await userEvent.click(await launchButton());
+    await waitFor(() => expect(screen.getAllByText(`Comparaison n° 8 ${label}`).length).toBeGreaterThanOrEqual(2));
+    expect(screen.getAllByText(/Le résultat dépasse 50 000 lignes/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Restreignez la période ou les entités/).length).toBeGreaterThanOrEqual(2);
+    expect(container.textContent).not.toContain("result_too_large");
+  });
+
   it("évite les repères dupliqués et rend les tableaux accessibles", async () => {
     comparisonServer();
     render(<Harness />);
