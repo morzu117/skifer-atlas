@@ -616,6 +616,8 @@ def _sync(workspace_id: str) -> dict:
     workspace = _workspace(workspace_id)
     repo = repo_dir(workspace_id)
     branch = _valid_meta(repo).main_branch
+    if run_git(["branch", "--show-current"], repo).strip() != branch:
+        raise RepoError("sync_wrong_branch", "La copie locale n’est pas sur la branche principale.")
     if not run_git(["remote"], repo).split():
         raise RepoError("no_remote", "Cet espace n'a pas encore de dépôt distant.")
     run_git(["fetch", "--quiet", "--prune", "--tags", "origin"], repo,

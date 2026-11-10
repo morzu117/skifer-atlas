@@ -52,6 +52,7 @@ ERROR_STATUS = {
     "remote_not_found": 422,
     "remote_not_writable": 422,
     "sync_conflict": 409,
+    "sync_wrong_branch": 409,
     "stale_base": 409,
     "document_exists": 409,
     "draft_exists": 409,

@@ -409,7 +409,7 @@ describe("administration", () => {
     render(screenFor());
     await userEvent.click(await screen.findByRole("checkbox", { name: "Redshift" }));
     await userEvent.click(saveButton());
-    expect(await screen.findByText(/a changé sur la branche principale/)).toBeInTheDocument();
+    expect(await screen.findByText("Cette version n’est plus à jour. governance.yaml a changé sur la branche principale depuis son ouverture : recharger les paramètres.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Relire les paramètres" }));
     await waitFor(() => expect(api.calls.filter((c) => c.path === `${API}/admin`)).toHaveLength(2));
   });
