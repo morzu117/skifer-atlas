@@ -64,3 +64,32 @@ test("[S-0030-01] [S-0030-02] [S-0030-04] [S-0031-01] [S-0031-04] Horodatage d'u
     await request.delete(`${editor}/documents/${id}/draft`);
   }
 });
+
+test("[S-0030-01] [S-0031-01] Fuseau UTC : Databricks s'arrête à l'heure UTC, Snowflake garde CONVERT_TIMEZONE", async ({ page, request }) => {
+  await ensureNordis(request);
+  const editor = `${API}/api/workspaces/groupe-nordis/editor`;
+  const doc = JSON.parse(python(
+    "import sys,json; sys.path.insert(0,sys.argv[1]+'/tests/compile'); from test_ecarts import orders; print(json.dumps(orders().model_dump(mode='json',exclude_none=True)))", CORE)) as Raw;
+  const id = `fuseau-utc-${Date.now().toString(36)}`;
+  (doc.data_product as Record<string, unknown>).id = id;
+  expect((await request.put(`${editor}/documents/${id}/draft`, { data: { document: doc, positions: {}, highest: 5, base_version: null } })).ok()).toBe(true);
+  try {
+    await page.goto(`/#/w/groupe-nordis/editeur?from=${id}`);
+    const panel = page.getByRole("region", { name: "Validation du document" });
+    await panel.getByRole("tab", { name: "SQL compilé" }).click();
+    await panel.getByRole("radio", { name: "Databricks" }).check();
+    await expect(panel.getByLabel("SQL databricks")).toContainText(id);
+    const dbx = flatten((await panel.getByLabel("SQL databricks").textContent())!);
+    expect(dbx).toContain(
+      "THEN DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)) ELSE",
+    );
+    expect(dbx).not.toContain("CONVERT_TIMEZONE('UTC', 'UTC'");
+    await panel.getByRole("radio", { name: "Snowflake" }).check();
+    await expect(panel.getByLabel("SQL snowflake")).toContainText(id);
+    const snow = flatten((await panel.getByLabel("SQL snowflake").textContent())!);
+    expect(snow).toContain("THEN CAST(CONVERT_TIMEZONE('UTC', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)");
+  } finally {
+    await page.goto("/");
+    await request.delete(`${editor}/documents/${id}/draft`);
+  }
+});

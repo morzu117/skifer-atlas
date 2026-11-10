@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, type Page, type APIRequestContext } from "@playwright/test";
-import { FAKE_DATABRICKS } from "./demo";
+import { FAKE_DATABRICKS, FAKE_SNOWFLAKE, SNOWFLAKE_KEY, SNOWFLAKE_PASSPHRASE } from "./demo";
 import { AUTH_API, isolatedDemo, relay, python, git, test } from "./isolation";
 
 const row = (page: Page) => page.getByRole("row").filter({ hasText: "gold.finance" });
@@ -15,7 +15,27 @@ async function authorize(page: Page, name = "Se connecter à Databricks · dbx-f
   await expect(popup.getByText(/Connexion réussie/)).toBeVisible();
   await popup.close();
 }
-test.afterEach(async ({ request }) => { await configure(request); });
+async function configureSnowflake(request: APIRequestContext, data = {}) {
+  expect((await request.post(`${FAKE_SNOWFLAKE}/__test__/configure`, { data })).ok()).toBe(true);
+}
+const snowRow = (page: Page, schema: string) => page.getByRole("row").filter({ hasText: schema });
+async function ssoLogin(page: Page, schema: string, id: string) {
+  const line = snowRow(page, schema);
+  await line.getByRole("button", { name: new RegExp(`(Se connecter à|Reconnecter) Snowflake · ${id}`) }).click();
+  await line.getByLabel("Identifiant Snowflake").fill("anna@nordis.example");
+  await line.getByRole("button", { name: "Ouvrir le SSO" }).click();
+  await expect(line.getByRole("cell", { name: /^Connecté ?· ?session SSO$/ })).toBeVisible();
+}
+async function keyPairLogin(page: Page, schema: string, id: string) {
+  const line = snowRow(page, schema);
+  await line.getByRole("button", { name: new RegExp(`(Se connecter à|Reconnecter) Snowflake · ${id}`) }).click();
+  await line.getByLabel("Identifiant Snowflake").fill("svc_es");
+  await line.getByLabel("Fichier de clé privée").fill(SNOWFLAKE_KEY);
+  await line.getByLabel("Passphrase (si la clé est chiffrée)").fill(SNOWFLAKE_PASSPHRASE);
+  await line.getByRole("button", { name: "Ranger dans le coffre" }).click();
+  await expect(line.getByRole("cell", { name: /^Connecté ?· ?paire de clés$/ })).toBeVisible();
+}
+test.afterEach(async ({ request }) => { await configure(request); await configureSnowflake(request); });
 
 test("[S-0008-05] Échec OAuth : champ masqué, vidé avant réponse, token personnel sans fuite", async ({ page, request, context }) => {
   const ws = await isolatedDemo(request, AUTH_API);
@@ -296,4 +316,100 @@ test("[S-0016-09] Le port de retour OAuth occupé : « Une connexion OAuth est d
   // Le port libéré, la connexion aboutit.
   await authorize(page);
   await expect(row(page).getByRole("cell", { name: /^Connecté\s*·\s*session OAuth$/ })).toBeVisible();
+});
+
+test("[S-0018-02] Paire de clés Snowflake : chaque erreur dit quoi corriger, le champ passphrase est vidé", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  await page.goto(`${ws.root}/connexions`);
+  const es = page.getByRole("row").filter({ hasText: "VENTAS.GOLD" });
+  await es.getByRole("button", { name: "Se connecter à Snowflake · snow-es" }).click();
+  await es.getByLabel("Identifiant Snowflake").fill("svc_es");
+  const keyField = es.getByLabel("Fichier de clé privée");
+  const passphrase = es.getByLabel("Passphrase (si la clé est chiffrée)");
+  const submit = es.getByRole("button", { name: "Ranger dans le coffre" });
+  const fail = async (key: string, secret: string) => {
+    await keyField.fill(key);
+    if (secret) await passphrase.fill(secret);
+    await submit.click();
+    await expect(es.getByRole("alert")).toBeVisible();
+    await expect(passphrase).toHaveValue("");
+    await expect(es.getByRole("cell", { name: "Jamais connecté" })).toBeVisible();
+    return (await es.getByRole("alert").textContent()) ?? "";
+  };
+
+  const wrong = await fail(SNOWFLAKE_KEY, "pas-la-bonne-passphrase");
+  expect(wrong).toMatch(/passphrase/i);
+  expect(wrong).not.toContain("pas-la-bonne-passphrase");
+  const missing = await fail(SNOWFLAKE_KEY, "");
+  expect(missing).toMatch(/passphrase/i);
+  const unreadable = await fail("/introuvable/rsa_key.p8", "");
+  expect(unreadable).toMatch(/introuvable|lire/i);
+  const notKey = await fail(`${ws.work}/access_points.yaml`, "");
+  expect(notKey).not.toBe("");
+  // Les messages se distinguent : chaque cause a sa consigne.
+  expect(new Set([wrong, missing, unreadable, notKey]).size).toBe(4);
+  // Rien n'a été rangé dans le coffre : le test de connexion ne propose pas de reconnexion réussie.
+  expect(await request.get(`${ws.api}/connections`).then(r => r.text())).not.toContain("pas-la-bonne-passphrase");
+
+  // La bonne passphrase aboutit.
+  await keyField.fill(SNOWFLAKE_KEY);
+  await passphrase.fill(SNOWFLAKE_PASSPHRASE);
+  await submit.click();
+  await expect(es.getByRole("cell", { name: /^Connecté ?· ?paire de clés$/ })).toBeVisible();
+  await expect(es.getByRole("alert")).toHaveCount(0);
+  await page.goto("about:blank");
+});
+
+test("[S-0018-07] Un jeton de session recopié par Snowflake dans son erreur n'arrive jamais à l'écran", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  const bodies: Promise<string>[] = [];
+  page.on("response", response => { if (response.url().includes("/api/")) bodies.push(response.text().catch(() => "")); });
+  await page.goto(`${ws.root}/connexions`);
+  await ssoLogin(page, "FIN_GOLD.PUBLIC", "snow-de");
+  await configureSnowflake(request, { echo_token: true });
+  const line = snowRow(page, "FIN_GOLD.PUBLIC");
+  await line.getByRole("button", { name: "Tester Snowflake · snow-de" }).click();
+  const status = line.getByRole("status");
+  await expect(status).toContainText("La plateforme a refusé la requête");
+  const shown = await page.evaluate(() => document.documentElement.outerHTML);
+  expect(shown).not.toMatch(/sf-(session|master)-\d/);
+  expect((await Promise.all(bodies)).join("\n")).not.toMatch(/sf-(session|master)-\d/);
+  expect(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]))).not.toMatch(/sf-(session|master)-\d/);
+  await page.goto("about:blank");
+});
+
+test("[S-0018-07] Une session SSO expirée : « Session expirée », puis « Reconnecter » la rétablit", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  await page.goto(`${ws.root}/connexions`);
+  await ssoLogin(page, "FIN_GOLD.PUBLIC", "snow-de");
+  await configureSnowflake(request, { expire_sessions: true });
+  const line = snowRow(page, "FIN_GOLD.PUBLIC");
+  await line.getByRole("button", { name: "Tester Snowflake · snow-de" }).click();
+  await expect(line.getByRole("status")).toContainText("Accès expiré");
+  await expect(line.getByRole("status")).toContainText("Reconnectez-vous depuis Mes connexions");
+  await expect(line.getByRole("cell", { name: /^Session expirée/ })).toBeVisible();
+  await ssoLogin(page, "FIN_GOLD.PUBLIC", "snow-de");
+  await line.getByRole("button", { name: "Tester Snowflake · snow-de" }).click();
+  await expect(line.getByText(/^Connexion OK · \d+ ms$/)).toBeVisible();
+  await page.goto("about:blank");
+});
+
+test("[S-0018-07] Une clé publique retirée chez Snowflake : « Clé refusée », puis la même clé rétablit l'accès", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  await page.goto(`${ws.root}/connexions`);
+  await keyPairLogin(page, "VENTAS.GOLD", "snow-es");
+  await configureSnowflake(request, { hide_keys: true });
+  const line = snowRow(page, "VENTAS.GOLD");
+  await line.getByRole("button", { name: "Tester Snowflake · snow-es" }).click();
+  await expect(line.getByRole("status")).toContainText("Accès expiré");
+  await expect(line.getByRole("cell", { name: /^Clé refusée/ })).toBeVisible();
+  await configureSnowflake(request);
+  await keyPairLogin(page, "VENTAS.GOLD", "snow-es");
+  await line.getByRole("button", { name: "Tester Snowflake · snow-es" }).click();
+  await expect(line.getByText(/^Connexion OK · \d+ ms$/)).toBeVisible();
+  await page.goto("about:blank");
 });

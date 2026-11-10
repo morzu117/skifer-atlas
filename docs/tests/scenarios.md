@@ -39,7 +39,7 @@
 | 0015 | 13 | 13 | 0 | 0 | 0 |
 | 0016 | 12 | 12 | 0 | 0 | 0 |
 | 0017 | 13 | 13 | 0 | 0 | 0 |
-| 0018 | 7 | 1 | 0 | 6 | 0 |
+| 0018 | 7 | 2 | 0 | 5 | 0 |
 | 0019 | 9 | 1 | 0 | 8 | 0 |
 | 0020 | 4 | 4 | 0 | 0 | 0 |
 | 0021 | 7 | 5 | 0 | 2 | 0 |
@@ -57,7 +57,7 @@
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | 0035 | 12 | 10 | 0 | 2 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **332** | **259** | **6** | **67** | **0** |
+| **Total** | **332** | **260** | **6** | **66** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -590,11 +590,16 @@ Plan 0007, critère 7 · Test : `app/e2e/sql.spec.ts` › `[S-0007-07]`
 **Plan 0032**
 
 ### S-0032-01 — Créer une surcharge depuis la fiche du KPI
-Plan 0032, critère 1 · Test : `app/e2e/editor.spec.ts` › `[S-0032-01]`
+Plan 0032, critère 1 · Tests : `app/e2e/editor.spec.ts` › `[S-0032-01]` (trois tests)
 - **Étant donné** un espace isolé où l'entité `nordis-it` n'a pas de déclinaison de Revenu net
 - **Quand** j'ouvre l'onglet Déclinaisons, choisis cette entité, le mode Surcharge du canonique et sa justification, puis crée le brouillon
 - **Alors** l'éditeur ouvre `revenu-net--nordis-it` en v1, lié au canonique v4 et dont les surcharges sont vides
-- Limite : les refus d'entité inconnue, de doublon dans le dépôt et de brouillon local sont vérifiés par `core/tests/repo/test_editor_api.py`.
+- **Étant donné** ce même espace, où `nordis-it` est ajoutée aux entités
+- **Quand** j'ouvre le formulaire, crée un premier brouillon pour `nordis-it`, puis tente d'en créer un second
+- **Alors** la liste d'entités ne propose que « Choisir… » et `nordis-it` (les entités déjà déclinées en sont absentes) ; le second brouillon est refusé avec un champ en erreur (`aria-invalid`) et un message qui nomme le brouillon, avec le lien « Reprendre le brouillon » vers `editeur?from=revenu-net--nordis-it`
+- **Et** par l'API, une entité qui a déjà sa déclinaison (nordis-fr) répond `document_exists`, une entité inconnue (nordis-xx) `invalid_entity`
+- **Étant donné** le rôle lecteur (réponses de l'espace réécrites), **Alors** l'action « Créer une déclinaison » n'est plus proposée, alors que la contributrice la voit
+- Limite : la copie du canonique v4 dans le brouillon et les refus au niveau du dépôt sont aussi vérifiés par `core/tests/repo/test_editor_api.py`.
 
 ### S-0032-02 — Commencer un graphe indépendant
 Plan 0032, critère 2 · Test : `app/e2e/editor.spec.ts` › `[S-0032-02]`
@@ -957,18 +962,23 @@ Plan 0013, critère 34 · Test : `app/e2e/creation.spec.ts` › `[S-0013-34]`
 **Plan 0021**
 
 ### S-0021-02 — Une division d'entiers est castée en DOUBLE
-Plan 0021, critère 2 · Test : `app/e2e/sql.spec.ts` › `[S-0021-02]`
+Plan 0021, critère 2 · Tests : `app/e2e/sql.spec.ts` › `[S-0021-02]` (deux tests)
 - **Étant donné** un brouillon de trois nœuds : source `gold.finance.mesures` (`entite`, `a` et `b` entiers), n02 calcul `a / NULLIF(b, 0)` sans type déclaré, agrégation
 - **Quand** je sélectionne n02 et affiche le SQL Databricks, puis Snowflake
 - **Alors** chacun contient `CAST(a AS DOUBLE) / NULLIF(b, 0)`
+- **Étant donné** un second brouillon qui aligne les cas limites de la réécriture (`a`, `b`, `x` entiers ou décimaux)
+- **Quand** j'affiche le SQL Databricks, puis Snowflake
+- **Alors** un diviseur entier seul est casté (`CAST(a AS DOUBLE) / 2 AS q1`), un opérande déjà `double` n'est pas recasté (`x / NULLIF(a, 0) AS q2`, `a / NULLIF(x, 0) AS q3`), une chaîne de divisions garde un seul cast (`CAST(a AS DOUBLE) / NULLIF(b, 0) / 2 AS q4`), le littéral `0` donne `CAST(a AS DOUBLE) / NULLIF(0, 0) AS q5`, le modulo `a % NULLIF(b, 0) AS q6`
+- **Et** la division écrite dans un filtre (`CAST(a AS DOUBLE) / NULLIF(b, 0) > 1`) et dans une opération de métrique (`/ NULLIF(sb, 0) AS taux`) est réécrite de la même façon
 - Limite : le même `DOUBLE` dans les trois dialectes et la relecture par SQLGlot sont vérifiés par `core/tests/compile/test_ecarts.py::test_integer_division_is_a_double_everywhere`.
 
 ### S-0021-03 — Le `NULLIF` de l'auteur n'est pas doublé
-Plan 0021, critère 3 · Test : `app/e2e/sql.spec.ts` › `[S-0021-03]`
+Plan 0021, critère 3 · Tests : `app/e2e/sql.spec.ts` › `[S-0021-03]` (deux tests)
 - **Étant donné** le même brouillon, dont l'expression porte déjà `NULLIF(b, 0)`
 - **Quand** j'affiche le SQL Databricks, puis Snowflake
 - **Alors** aucun ne contient `NULLIF(NULLIF`
-- Limite : le littéral non nul et l'opérande `double` sont vérifiés par `core/tests/compile/test_ecarts.py::test_division_rewrite_adds_nothing_superfluous`.
+- **Et** dans le brouillon des cas limites de S-0021-02, un littéral non nul ou un opérande `double` n'est pas enveloppé ni recasté, dans les deux dialectes
+- Limite : le même contrôle sur l'arbre de compilation est dans `core/tests/compile/test_ecarts.py::test_division_rewrite_adds_nothing_superfluous`.
 
 ### S-0021-04 — Le type inféré d'une division d'entiers est `double`
 Plan 0021, critère 4 · Test : `app/e2e/sql.spec.ts` › `[S-0021-04]`
@@ -982,6 +992,7 @@ Plan 0021, critère 5 · Test : `app/e2e/sql.spec.ts` › `[S-0021-05]`
 - **Étant donné** un brouillon hebdomadaire construit par `weekly()` de `core/tests/compile/test_ecarts.py`
 - **Quand** j'affiche le SQL Snowflake
 - **Alors** il contient `DAYOFWEEKISO` et pas `DATE_TRUNC('WEEK'`
+- **Et** le SQL Databricks, lui, garde `DATE_TRUNC('WEEK'` et ne contient pas `DAYOFWEEKISO`
 - Limite : l'égalité avec `DATE_TRUNC('WEEK', …)` de DuckDB sur plus d'un an de dates est vérifiée par `core/tests/compile/test_ecarts.py::test_snowflake_week_formula_matches_iso_weeks_over_a_year`.
 
 ### S-0021-06 — La garde est lue dans une branche indépendante
@@ -996,10 +1007,11 @@ Plan 0021, critère 6 · Test : `app/e2e/sql.spec.ts` › `[S-0021-06]`
 Les trois scénarios partent du même test (`app/e2e/fuseau-de-session.spec.ts`). Le brouillon est le KPI `fuseau` construit par `orders('Europe/Paris', …)` de `core/tests/compile/test_ecarts.py` : colonne `passee_le` déclarée `Europe/Paris`, plus un filtre n05 sur `passee_le:greater_than:2025-01-01 00:00:00`. Il est déposé sur `groupe-nordis`, puis supprimé en fin de test. J'ouvre l'onglet « SQL compilé ».
 
 ### S-0030-01 — En Databricks, une colonne `timestamp` est lue en heure murale de son fuseau
-Plan 0030, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-01]`
+Plan 0030, critère 1 · Tests : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-01]` (deux tests)
 - **Quand** j'affiche le SQL Databricks
 - **Alors** la source lit `passee_le` par `WHEN TYPEOF(passee_le) = 'timestamp'`, `THEN CONVERT_TIMEZONE('UTC', 'Europe/Paris', DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), …))` et `ELSE CAST(passee_le AS TIMESTAMP_NTZ)`
-- Limite : la relecture par SQLGlot et le fuseau `UTC` sont vérifiés par `core/tests/compile/test_ecarts.py::test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
+- **Et** pour une source déclarée en `UTC`, la branche instant s'arrête à l'heure UTC : `THEN DATE_ADD(MICROSECOND, UNIX_MICROS(CAST(passee_le AS TIMESTAMP)), CAST('1970-01-01 00:00:00' AS TIMESTAMP_NTZ)) ELSE`, sans `CONVERT_TIMEZONE`
+- Limite : la relecture par SQLGlot est vérifiée par `core/tests/compile/test_ecarts.py::test_databricks_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
 
 ### S-0030-02 — Aucun cast d'horodatage ne dépend de la session
 Plan 0030, critère 2 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030-02]`
@@ -1018,10 +1030,11 @@ Plan 0030, critère 4 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0030
 Même test et même brouillon que pour le plan 0030 (`app/e2e/fuseau-de-session.spec.ts`) : colonne `passee_le` déclarée `Europe/Paris`, onglet « SQL compilé ».
 
 ### S-0031-01 — En Snowflake, une colonne `timestamp` est lue en heure murale de son fuseau
-Plan 0031, critère 1 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0031-01]`
+Plan 0031, critère 1 · Tests : `app/e2e/fuseau-de-session.spec.ts` › `[S-0031-01]` (deux tests)
 - **Quand** j'affiche le SQL Snowflake
 - **Alors** la source lit `passee_le` par `WHEN TYPEOF(CAST(passee_le AS VARIANT)) IN ('TIMESTAMP_LTZ', 'TIMESTAMP_TZ')`, `THEN CAST(CONVERT_TIMEZONE('Europe/Paris', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)` et `ELSE CAST(passee_le AS TIMESTAMPNTZ)`
-- Limite : la relecture par SQLGlot et le fuseau `UTC` sont vérifiés par `core/tests/compile/test_ecarts.py::test_snowflake_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
+- **Et** pour une source déclarée en `UTC`, la branche instant devient `THEN CAST(CONVERT_TIMEZONE('UTC', CAST(passee_le AS TIMESTAMPTZ)) AS TIMESTAMPNTZ)`
+- Limite : la relecture par SQLGlot est vérifiée par `core/tests/compile/test_ecarts.py::test_snowflake_reads_a_source_timestamp_as_wall_clock_of_its_zone`.
 
 ### S-0031-04 — Le panneau SQL montre la lecture Snowflake en heure murale
 Plan 0031, critère 4 · Test : `app/e2e/fuseau-de-session.spec.ts` › `[S-0031-04]`
@@ -1045,10 +1058,14 @@ Plan 0024, critère 2 · Test : `app/src/editor/Canvas.test.tsx` › `[S-0024-02
 - Limite : Vitest seulement, pour la même raison que S-0024-01 : redessiner une carte inchangée ne se voit pas à l'écran.
 
 ### S-0024-03 — Sur 200 nœuds, seules les cartes visibles sont dans le DOM
-Plan 0024, critère 3 · Test : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024-03]`
+Plan 0024, critère 3 · Tests : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024-03]` (trois tests)
 - **Étant donné** un brouillon de 200 nœuds construit par `longKpi`
 - **Quand** je l'ouvre dans l'éditeur
 - **Alors** le canevas dessine au moins une carte et moins de 200
+- **Étant donné** un brouillon de 120 nœuds en chaîne
+- **Quand** je l'ouvre, puis déplace la vue au bouton droit sur le fond
+- **Alors** moins de 120 cartes sont dessinées et chacune coupe la zone visible du graphe ; après le déplacement, la liste des cartes dessinées a changé (d'autres entrent, d'autres sortent)
+- **Étant donné** un brouillon de 50 nœuds, **Alors** les 50 cartes sont dessinées, y compris celles hors de l'écran (le seuil de virtualisation n'est pas atteint)
 
 ### S-0024-04 — Sur 200 nœuds, ouvrir, sélectionner et déplacer aboutissent
 Plan 0024, critère 4 · Test : `app/e2e/graphe-volumineux.spec.ts` › `[S-0024-04]`
@@ -1273,11 +1290,15 @@ Plan 0009, critère 13 · Test : `app/e2e/comparaison.spec.ts` › `[S-0009-13]`
 **Plan 0015**
 
 ### S-0015-01 — Lancer, voir la progression, lire 94 % / 6,1 %
-Plan 0015, critère 1 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-01]`
+Plan 0015, critère 1 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-01]` ; `app/e2e/comparaison-resultats.spec.ts` › `[S-0015-01]`
 - **Étant donné** l'écran Comparaison, KPI Revenu net, nordis-de et nordis-es cochées, et l'avertissement « Surcharge hors des points déclarés » affiché avant tout lancement
 - **Quand** je clique « Lancer la comparaison »
 - **Alors** les barres « Databricks · nordis-de, nordis-fr » et « Snowflake · nordis-es » apparaissent, puis « Relancer » ; l'adresse porte `id=…&variant=nordis-de`
 - **Et** la cellule « Revenu net × nordis-de : 94 % de validation, écart max 6,1 % » est la cellule courante, et nordis-fr est à 100 %
+- **Étant donné** une copie isolée de la démonstration, dont l'historique est vide, et la comparaison lancée sur la période par défaut
+- **Alors** les cellules suivent les seuils de couleur : nordis-fr à 100 % (`tone-cell-pass`), nordis-de à 94 % (`tone-cell-warn`), nordis-es à 75 % (`tone-cell-bad`)
+- **Quand** je ramène la période du 2026-02-01 au 2026-08-31 et relance
+- **Alors** nordis-de passe à 100 % et sa ligne « Sept. 2026 DE » disparaît du détail ; l'historique ne compte que ces deux lancements (« nordis-de 100 % » puis « nordis-de 94 % »)
 
 ### S-0015-02 — Le détail : Sept. 2026 hors tolérance, lien vers n02
 Plan 0015, critère 2 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-02]`
@@ -1315,11 +1336,14 @@ Plan 0015, critère 6 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-06]`
 - **Alors** il s'affiche « +6,1 % », et son infobulle donne la valeur exacte, qui commence par `6.1001`
 
 ### S-0015-07 — L'historique complet et ses filtres
-Plan 0015, critère 7 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-07]`
+Plan 0015, critère 7 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-07]` ; `app/e2e/comparaison-resultats.spec.ts` › `[S-0015-07]`
 - **Étant donné** au moins une comparaison de Revenu net dans l'espace
 - **Quand** je clique « Tout voir » dans « Dernières comparaisons », choisis l'utilisateur anna.k, puis « Depuis le » 2999-01-01
 - **Alors** « Historique des comparaisons » s'ouvre ; la première ligne nomme anna.k et « nordis-de 94 % · nordis-es 75 % · nordis-fr 100 % » ; l'adresse porte `user=anna.k`
 - **Et** la date future donne « Aucune comparaison ne correspond à ces filtres. »
+- **Étant donné** une copie isolée de la démonstration, sans aucune comparaison
+- **Alors** la matrice dit « non comparé » dans les trois cellules de Revenu net ; la mention « Exécutée avec vos droits · résultats agrégés uniquement · historique local (DuckDB, espace Groupe Nordis) » est affichée ; « Dernières comparaisons » et l'historique complet disent « Aucune comparaison dans cet espace. »
+- **Et** un domaine sans KPI décliné affiche « Aucun KPI décliné dans ce domaine. » à la place de la matrice
 - Limite : « seulement celles de l'espace » est vérifié par `core/tests/repo/test_comparisons_api.py::test_spaces_never_share_results`.
 
 ### S-0015-08 — Un double clic sur le lancement n'envoie qu'une seule demande
@@ -1347,12 +1371,13 @@ Plan 0015, critère 10 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-10]`
 - Limite : le serveur est simulé ; l'annulation réussie est S-0015-05. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-10]` couvrent aussi l'effacement de l'erreur en fin de suivi et le cas `not_running`.
 
 ### S-0015-11 — Une tolérance de 8 % règle le curseur sur 8 et la comparaison l'utilise
-Plan 0015, critère 11 · Test : `app/e2e/comparaison.spec.ts` › `[S-0015-11]`
+Plan 0015, critère 11 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-11]` ; `app/e2e/comparaison-resultats.spec.ts` › `[S-0015-11]`
 - **Étant donné** l'écran Comparaison de Revenu net, dont le KPI et l'aperçu annoncent une tolérance de 8 %
 - **Quand** je lis le curseur de tolérance, le recule d'un cran au clavier, puis le ramène à sa butée haute (touche Fin), et lance la comparaison
 - **Alors** le curseur indique 8 (butée haute 8, intitulé « Tolérance : 8 % »), passe à 7,9 puis revient à 8 et non à 5
 - **Et** la demande de lancement porte `tolerance: 8` ; axe-core ne relève aucune violation sérieuse
-- Limite : le setup et l'aperçu sont les vraies réponses du serveur, modifiées pour annoncer 8 % ; le suivi et le lancement sont simulés. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-11]` couvrent aussi la borne haute pour une tolérance de 7,25 % et l'envoi de la valeur choisie.
+- **Étant donné** une copie isolée de la démonstration et le serveur réel, **Quand** je règle le curseur à 5 et lance la comparaison, **Alors** le calcul réel applique 5 % et non le 1 % du KPI : nordis-es passe de 75 % à 100 % (aucune ligne hors tolérance dans son détail), nordis-de reste à 94 %, nordis-fr à 100 %
+- Limite : dans le premier test, le setup et l'aperçu sont les vraies réponses du serveur, modifiées pour annoncer 8 % ; le suivi et le lancement sont simulés. Les tests Vitest `app/src/screens/Comparison.test.tsx` › `[S-0015-11]` couvrent aussi la borne haute pour une tolérance de 7,25 % et l'envoi de la valeur choisie.
 
 ### S-0015-12 — Un accès perdu pendant le lancement est expliqué et mène à la reconnexion
 Plan 0015, critère 12 · Tests : `app/e2e/comparaison.spec.ts` › `[S-0015-12]` ; Vitest : `app/src/screens/Comparison.test.tsx` › `[S-0015-12]`
@@ -1586,22 +1611,37 @@ Plan 0016, critère 9 (code `access_point_exists`) · Test : `app/e2e/connexions
 **Plan 0018**
 
 ### S-0018-02 — Paire de clés avec passphrase
-Plan 0018, critère 2 · Test : `app/e2e/connexions.spec.ts` › `[S-0018-02]`
+Plan 0018, critère 2 · Tests : `app/e2e/connexions.spec.ts` › `[S-0018-02]` ; `app/e2e/connexions-testables.spec.ts` › `[S-0018-02]`
 - **Étant donné** le faux Snowflake : SSO automatique pour snow-de, clé chiffrée de `svc_es` pour snow-es
 - **Quand** je connecte snow-de par « Ouvrir le SSO » et le teste ; puis, sur snow-es, saisis l'identifiant `svc_es`, le fichier de clé et sa passphrase, clique « Ranger dans le coffre » et teste ; enfin révoque les deux
 - **Alors** snow-de passe à « Connecté · session SSO », snow-es à « Connecté · paire de clés », chaque test donne « Connexion OK · N ms »
 - **Et** la passphrase n'apparaît ni dans le HTML ni dans les stockages ; la révocation affiche « Accès révoqué, ici et chez Snowflake. » et ramène les deux lignes à « Jamais connecté »
+- **Étant donné** un espace isolé et le formulaire de paire de clés de snow-es ouvert, l'identifiant `svc_es` saisi
+- **Quand** je range une clé avec une mauvaise passphrase, puis sans passphrase (clé chiffrée), puis avec un chemin introuvable, puis avec un fichier qui n'est pas une clé
+- **Alors** chaque essai affiche une alerte distincte (passphrase incorrecte, passphrase requise, fichier introuvable, fichier qui n'est pas une clé RSA), la passphrase n'est jamais renvoyée dans l'alerte, le champ passphrase est vidé et la ligne reste « Jamais connecté »
+- **Et** la bonne passphrase aboutit ensuite à « Connecté · paire de clés », sans alerte
 - Limite : « au coffre et nulle part ailleurs » est vérifié par `core/tests/connections/test_snowflake.py::test_key_pair_with_passphrase_only_in_the_vault`.
+
+### S-0018-07 — Un jeton de session Snowflake n'arrive jamais à l'écran ; session ou clé refusée se reconnecte
+Plan 0018, critère 7 · Tests : `app/e2e/connexions-testables.spec.ts` › `[S-0018-07]` (trois tests)
+- **Étant donné** snow-de connecté par le SSO du faux Snowflake, qui répond désormais à toute requête par une erreur recopiant le jeton de session reçu
+- **Quand** je clique « Tester Snowflake · snow-de »
+- **Alors** la ligne dit « La plateforme a refusé la requête » ; aucun jeton de session ou maître (`sf-session-…`, `sf-master-…`) n'est dans le HTML, les réponses de l'API ni les stockages du navigateur
+- **Étant donné** la session SSO de snow-de expirée chez Snowflake, **Quand** je la teste, **Alors** « Accès expiré » et la consigne de reconnexion s'affichent, la cellule dit « Session expirée » ; « Reconnecter » ramène à « Connecté · session SSO » et le test redonne « Connexion OK »
+- **Étant donné** la clé publique de svc_es oubliée chez Snowflake après une connexion par paire de clés de snow-es, **Quand** je la teste, **Alors** « Accès expiré » et la cellule « Clé refusée » ; une fois la clé rétablie, la même clé et sa passphrase rétablissent « Connecté · paire de clés » et le test réussit
+- Limite : le masquage au niveau du connecteur, y compris la troncature, est vérifié par `core/tests/connections/test_snowflake.py::test_session_tokens_echoed_in_an_error_are_masked` et `::test_connector_translates_with_its_session_tokens`. Le faux Snowflake est piloté par sa route `/__test__/configure` (`core/tests/connections/test_snowflake.py::test_the_fake_is_driven_through_its_test_route`).
 
 **Plan 0025**
 
 Les cinq scénarios suivants viennent d'un même test : deux espaces isolés sur le serveur 8793, dont l'adresse déclarée devient `https://github.com/nordis/<espace>.git` ; le dépôt reste local et aucune requête ne part vers github.com. Toutes les réponses de l'API sont relevées.
 
 ### S-0025-01 — Un code s'affiche, GitHub s'ouvre, aucun champ de jeton
-Plan 0025, critère 1 · Test : `app/e2e/github.spec.ts` › `[S-0025-01]`
+Plan 0025, critère 1 · Tests : `app/e2e/github.spec.ts` › `[S-0025-01]` (deux tests)
 - **Étant donné** les connexions du premier espace, région « Dépôt de l'espace »
 - **Quand** je clique « Se connecter à GitHub », puis « Ouvrir GitHub »
 - **Alors** le groupe « Connexion à GitHub » montre le code (« … code sur GitHub »), la région ne contient aucun champ texte, et une fenêtre s'ouvre sur `http://127.0.0.1:8792/login/device?code=…`
+- **Étant donné** un espace dont l'adresse déclarée est `https://github.com/…`, sur le serveur d'accueil lancé sans client OAuth GitHub
+- **Alors** la région « Dépôt de l'espace » affiche « Connexion GitHub non configurée pour cette installation » et « Jamais connecté », sans bouton « Se connecter à GitHub » ; l'API répond `applies: true`, `configured: false`
 
 ### S-0025-02 — Une fois autorisé, le jeton est au coffre et jamais rendu
 Plan 0025, critère 2 · Test : `app/e2e/github.spec.ts` › `[S-0025-02]`
@@ -2329,7 +2369,6 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0018-04 | Le contrôle de cardinalité échoue sur Snowflake avec une table dupliquée | Exécution sur Snowflake | `core/tests/repo/test_snowflake_compare.py::test_cardinality_check_fails_on_snowflake` |
 | S-0018-05 | Le binaire figé s'authentifie et exécute ; taille sous 200 Mo | CI de release, binaire PyInstaller | `core/tests/test_sidecar.py::test_frozen_binary_authenticates_and_runs` |
 | S-0018-06 | Aucun cache de jeton Snowflake sur le poste | Disque du poste, hors du DOM | `core/tests/connections/test_snowflake.py::test_connection_params_never_cache_tokens`, `::test_sso_stores_the_session_in_the_vault_and_no_token_cache` |
-| S-0018-07 | Un jeton de session Snowflake recopié par une erreur du connecteur n'est jamais restitué, même coupé par la troncature | Le faux Snowflake ne recopie pas les jetons ; aucun écran ne montre ce canal (le Databricks l'est par S-0008-10) | `core/tests/connections/test_snowflake.py::test_session_tokens_echoed_in_an_error_are_masked`, `::test_connector_translates_with_its_session_tokens` |
 | S-0019-01 | Trois installateurs signés ; notarisation macOS | CI de release, certificats réels | `.github/workflows/release.yml` |
 | S-0019-02 | Test de fumée du binaire sur chaque plateforme, `_selftest` compris | CI de release | `core/tests/test_sidecar.py::test_frozen_binary_smoke` ; `core/tests/test_release.py::test_selftest_route_is_protected_and_checks_dynamic_imports` ; `.github/workflows/release.yml` |
 | S-0019-03 | L'app release démarre en moins de 10 s et ne laisse aucun serveur après fermeture | Fenêtre native Tauri, mesure sur machine de référence | `core/tests/test_sidecar.py::test_frozen_binary_stops_when_the_app_disappears` ; `core/tests/test_release.py::test_server_stops_when_its_parent_disappears` (le temps de démarrage reste une mesure manuelle) |

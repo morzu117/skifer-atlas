@@ -148,3 +148,22 @@ update_workspace(w.model_copy(update={'git_remote':'https://github.com/nordis/'+
   expect(failed).toBe(2);
   await expect(section.getByRole("alert")).toHaveCount(0);
 });
+
+test("[S-0025-01] sans client OAuth GitHub dans cette installation, l'écran le dit au lieu de proposer une connexion", async ({ page, request }) => {
+  // Le serveur d'accueil (8791) est lancé sans ATLAS_GITHUB_CLIENT_ID.
+  const server = "http://127.0.0.1:8791";
+  const ws = await isolatedDemo(request, server);
+  python(`import os,sys
+from skifer_atlas.workspaces import get_workspace,update_workspace
+os.environ['ATLAS_DATA_DIR']=sys.argv[1]
+w=get_workspace(sys.argv[2])
+update_workspace(w.model_copy(update={'git_remote':'https://github.com/nordis/'+sys.argv[2]+'.git'}))`, join(process.env.ATLAS_E2E_DATA!, "accueil"), ws.id);
+  await relay(page, server);
+  await page.goto(`${ws.root}/connexions`);
+  const section = page.getByRole("region", { name: "Dépôt de l'espace" });
+  await expect(section.getByText("Connexion GitHub non configurée pour cette installation")).toBeVisible();
+  await expect(section.getByRole("button", { name: /Se connecter à GitHub/ })).toHaveCount(0);
+  await expect(section.getByText("Jamais connecté")).toBeVisible();
+  expect(await (await request.get(`${ws.api}/github`)).json()).toMatchObject({ applies: true, configured: false });
+  await page.goto("about:blank");
+});
