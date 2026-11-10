@@ -1532,12 +1532,12 @@ Plan 0008, critère 5 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0
 - Limite : coffre en mémoire ; le trousseau est vérifié par `core/tests/connections/test_connections.py::test_personal_token_goes_to_the_vault_and_never_comes_back`. Le même repli est rendu en Vitest : `app/src/screens/Connections.test.tsx` › `[S-0008-05]`. C'est une exception assumée à la règle du guide 10.6 (voir plus bas).
 
 ### S-0008-06 — Au-delà de la limite de lignes, la comparaison échoue sans rapatrier le résultat
-Plan 0008, critère 6 · Test : `app/e2e/comparaison-reelle.spec.ts` › `[S-0008-06]` (rouge tant que l'issue sur `result_too_large` n'est pas corrigée)
+Plan 0008, critère 6 · Test : `app/e2e/comparaison-reelle.spec.ts` › `[S-0008-06]`
 - **Étant donné** un espace isolé sur le serveur 8793, nordis-fr seule cochée, l'accès dbx-fr obtenu par l'OAuth du faux Databricks, et le faux qui annonce 60 000 lignes en un seul bloc (limite : 50 000)
 - **Quand** je lance la comparaison
-- **Alors** le statut « en échec » cite la limite de lignes dans un message traduit (« … dépasse … 50 000 lignes »), sans le code technique `result_too_large`
-- **Et** l'alerte « Comparaison en échec » s'affiche, la requête a été annulée chez la plateforme, axe-core ne relève aucune violation sérieuse, et l'historique garde l'exécution en échec
-- Limite : le test est rouge aujourd'hui, car l'écran affiche `result_too_large: Le résultat dépasse la limite de lignes.` : `app/src/messages.ts` n'a pas d'entrée pour ce code et le texte ne cite pas la limite. Le refus sans rapatriement du premier bloc est aussi vérifié par `core/tests/connections/test_connections.py::test_too_many_rows_are_refused_without_fetching` et `core/tests/compare/test_compare.py::test_too_many_rows_fail_the_variant_only`.
+- **Alors** la bannière « Comparaison n° N en échec » s'affiche dans le panneau de lancement puis dans le détail, et son message traduit cite la limite (« Le résultat dépasse 50 000 lignes »), sans le code technique `result_too_large`
+- **Et** la requête a été annulée chez la plateforme, axe-core ne relève aucune violation sérieuse, et l'historique garde l'exécution en échec
+- Limite : le faux annonce le dépassement dès le premier bloc ; le refus sans rapatriement du premier bloc est aussi vérifié par `core/tests/connections/test_connections.py::test_too_many_rows_are_refused_without_fetching` et `core/tests/compare/test_compare.py::test_too_many_rows_fail_the_variant_only`.
 
 ### S-0008-07 — Une plateforme non autorisée est refusée à la déclaration
 Plan 0008, critère 7 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0008-07]`

@@ -100,12 +100,14 @@ test("[S-0008-06] Un résultat au-delà de la limite de lignes n'est pas rapatri
   await configure(request, { rows: 60_000, chunk_size: 60_000 });
   await launchButton(page).click();
   await expect(page.getByRole("button", { name: "Relancer" })).toBeVisible({ timeout: 30_000 });
-  // Comportement attendu : un message traduit qui cite la limite de lignes, sans code technique.
-  // Rouge tant que l'écran affiche le code brut `result_too_large` (issue à corriger).
-  const failure = page.getByRole("status").filter({ hasText: /en échec/ });
-  await expect.soft(failure).toContainText(/dépasse.*50[\s\u00a0\u202f]?000 lignes/);
-  await expect.soft(failure).not.toContainText("result_too_large");
-  await expect(page.getByRole("alert").filter({ hasText: "Comparaison en échec" })).toBeVisible();
+  // La bannière d'échec : titre « Comparaison n° N en échec », puis le message traduit qui cite la limite.
+  // Le panneau de lancement et le détail de la comparaison affichent la même bannière.
+  for (const region of [page.getByRole("region", { name: "Lancement" }), page.getByRole("region", { name: /^Détail/ })]) {
+    const failure = region.getByRole("alert").filter({ hasText: /Comparaison n° \d+ en échec/ });
+    await expect(failure).toBeVisible();
+    await expect(failure).toContainText(/dépasse 50[\s\u00a0\u202f]?000 lignes/);
+    await expect(failure).not.toContainText("result_too_large");
+  }
   await expect.poll(async () => (await state(request)).canceled.length).toBeGreaterThan(0);
   expect(await seriousViolations(page)).toEqual([]);
   await page.goto(`${ws.root}/comparaison?vue=historique`);
