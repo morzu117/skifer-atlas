@@ -47,6 +47,17 @@ Brief 3.3, 3.5, 3.6, 4.1, 10.3 ; guide 1.2, 3.2, 3.3, 4 (nœud en édition, arê
 22. Saisir du YAML ne désactive pas « Revenir au canevas » pendant la validation. Une saisie arrivée pendant l'analyse de retour, ou un remplacement refusé, conserve la vue YAML, le dernier texte et un avis explicite.
 
 23. Si la proposition est créée mais que la suppression du brouillon échoue, un avis non bloquant l'indique ; les liens vers la proposition et la fiche restent accessibles, sans nouvelle sauvegarde du brouillon.
+24. Le formulaire « Nouveau concept ou KPI » refuse chaque champ invalide avec un message lisible rattaché au champ (libellé, identifiant hors format, identifiant pris dans l'espace, identifiant que le serveur refuse, domaine, propriétaire), propose de reprendre le brouillon lorsque celui-ci occupe l’identifiant, déduit l'identifiant du libellé, ne crée rien quand on le quitte et crée un concept comme un KPI, à la v1.
+25. La sémantique d'un KPI se déclare dans les propriétés du document : calendrier civil ou fiscal, fuseau horaire, devise, synonymes. Un fuseau ou une devise invalides bloquent le schéma jusqu'à correction. Une fois le KPI soumis et fusionné par le seul compte habilité du domaine, sa fiche montre ces déclarations.
+26. Les nœuds Source, Filtre (colonne et opérateur, ou expression SQL), Dédoublonnage, Calcul de colonne et Agrégation se renseignent depuis leur formulaire ; le YAML et le SQL compilé (Databricks et Snowflake) du graphe construit sont produits.
+27. Les quatre opérations temporelles (conversion en date, changement de fuseau, découpage en périodes, fenêtre glissante) se renseignent et s'enchaînent dans un graphe compilable ; un cadre de fenêtre illisible est une erreur de validation du nœud.
+28. Une jointure se câble par ses entrées gauche et droite, ses paires de clés et sa cardinalité ; contourner le contrôle de cardinalité exige une raison, qui s'annonce ensuite comme information.
+29. Une union ordonne ses entrées, fait correspondre les colonnes de chacune et passe du mode « toutes les lignes » à « sans doublons ».
+30. Une référence à un KPI et une opération entre métriques compilent ; une version de KPI introuvable est signalée sur le nœud, avec le chemin « Aller au nœud », puis se corrige.
+31. Un concept (entité, attributs, clé) se crée sans graphe, se fusionne et se rattache à un KPI par le « Concept rattaché » d'une source (un concept inexistant est une erreur de validation qui bloque la soumission) ; la fiche du KPI liste le concept dans ses références, celle du concept liste le KPI.
+32. Une erreur de construction (découpage en périodes sur une colonne sans fuseau explicite) se lit dans les problèmes, mène au nœud, bloque la soumission, puis disparaît une fois corrigée.
+33. Un brouillon de création qu'on quitte se retrouve intact (retour en arrière, rechargement) ; l'identifiant ne se recrée pas tant que le brouillon existe, et la région « Mes brouillons » du catalogue propose de le reprendre ou de l'abandonner.
+34. Un nouveau KPI soumis par un compte sans pouvoir de validation attend deux validateurs du domaine : l'auteur ne peut pas approuver, la fusion se fait une fois les deux approbations reçues, puis le catalogue et la fiche affichent le KPI en v1.
 
 ## Suivi de la revue globale (#150) — 6 novembre 2026
 
@@ -61,6 +72,7 @@ Le catalogue réserve le message de serveur injoignable et sa relance à la coqu
 ## Tests
 - Composants : formulaires par type (dix cas), opérations sur le document (tests purs), pile d'annulation.
 - Bout en bout : Playwright pour la construction complète de la fixture, le mode surcharge et la soumission.
+- Bout en bout, création (critères 23 à 34, `app/e2e/creation.spec.ts`) : un parcours par thème, chacun sur un espace isolé. Suppression de brouillon refusée après soumission (23) ; formulaire et refus (24) ; sémantique du KPI jusqu'à la fiche, fusionné par le référent seul (25) ; un test par famille de nœuds, avec son YAML et son SQL : lignes (26), temporels (27), jointure (28), union (29), référence à un KPI et métriques (30) ; concept puis KPI rattaché (31) ; erreur de construction corrigée (32) ; brouillon quitté et repris (33) ; soumission revue par deux validateurs, fusion, catalogue et fiche (34). Les comptes claire.m, marc.d et julien.h passent par leur serveur de la suite.
 - À la main : session d'édition avec un utilisateur métier ; vérifier que rien hors vocabulaire n'est proposé.
 
 ## Dépendances

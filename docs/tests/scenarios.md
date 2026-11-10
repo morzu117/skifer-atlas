@@ -34,7 +34,7 @@
 | 0010 | 12 | 11 | 0 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 7 | 7 | 0 | 0 | 0 |
-| 0013 | 22 | 21 | 1 | 0 | 0 |
+| 0013 | 34 | 33 | 1 | 0 | 0 |
 | 0014 | 9 | 9 | 0 | 0 | 0 |
 | 0015 | 13 | 13 | 0 | 0 | 0 |
 | 0016 | 9 | 9 | 0 | 0 | 0 |
@@ -56,7 +56,7 @@
 | 0033 | 12 | 9 | 2 | 1 | 0 |
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **298** | **226** | **6** | **66** | **0** |
+| **Total** | **310** | **238** | **6** | **66** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -774,6 +774,162 @@ Plan 0013, critère 22 · Tests : `app/e2e/editor.spec.ts` › `[S-0013-22]` ; V
 - **Quand** le remplacement du canevas est refusé (Vitest)
 - **Alors** la vue YAML, le texte saisi et l'avis « Remplacement refusé. » restent affichés
 - Limite : le refus du remplacement (`OpError`) ne se fabrique pas depuis l'écran avec un YAML que le serveur accepte : Vitest seulement. Les parcours e2e qui attendent l'état stable du bouton `aria-disabled` (analyse en échec, cause affichée) cliquent avec `force` : `[S-0013-06]` et `[S-0001-10]`.
+
+### S-0013-23 — Une suppression de brouillon refusée après la soumission s'annonce sans bloquer
+Plan 0013, critère 23 · Test : `app/e2e/creation.spec.ts` › `[S-0013-23]`
+- **Étant donné** le brouillon v5 de Revenu net dont la description est modifiée, « Compilable Databricks, Snowflake », « Enregistré … (local) », et la suppression du brouillon refusée par le serveur (500, `page.route`)
+- **Quand** je soumets la proposition avec la justification « Description de Revenu net précisée. »
+- **Alors** « Proposition n° N créée » s'affiche, avec l'avis « La proposition est créée, mais le brouillon local n'a pas pu être supprimé. »
+- **Et** le lien « Voir les propositions » mène à `#/w/<espace>/propositions`, « Retour à la fiche » à `#/w/<espace>/fiche/revenu-net`, et le contrôle axe ne relève rien de sérieux
+- **Et** aucune requête `PUT` de brouillon ne part dans la seconde et demie qui suit, et « Voir les propositions » ouvre la file
+
+### S-0013-24 — Le formulaire « Nouveau concept ou KPI » refuse lisiblement, déduit l'identifiant et s'annule sans rien créer
+Plan 0013, critère 24 · Test : `app/e2e/creation.spec.ts` › `[S-0013-24]`
+- **Étant donné** le catalogue de Groupe Nordis, compte anna.k (contributrice), et le formulaire ouvert par « Nouveau concept ou KPI » : le type KPI est coché et le propriétaire vaut `anna.k`
+- **Quand** je clique « Créer et ouvrir l'éditeur » sans rien saisir
+- **Alors** « Donner un libellé. » et « De 2 à 64 caractères : minuscules, chiffres et tirets, en commençant par une lettre ou un chiffre, sans double tiret. » s'affichent, et Libellé et Identifiant sont `aria-invalid`
+- **Quand** je choisis « Choisir… » dans Domaine, remplace le propriétaire par des espaces et valide
+- **Alors** « Choisir un domaine. » et « Indiquer le propriétaire. » s'affichent, et le contrôle axe ne relève rien de sérieux
+- **Quand** je saisis le libellé « Taux de conversion été »
+- **Alors** l'identifiant vaut `taux-de-conversion-ete`
+- **Quand** je saisis l'identifiant `Taux_Conversion` et valide, puis `revenu-net` (déjà pris) et valide
+- **Alors** le format est refusé sur le champ, puis « « revenu-net » existe déjà dans l'espace » s'affiche sur Identifiant, `aria-invalid`
+- **Quand** je saisis l'identifiant `a` (un seul caractère), puis un identifiant de 65 caractères, et valide chaque fois
+- **Alors** Identifiant est `aria-invalid` avec le même message de format, et le formulaire reste ouvert
+- **Quand** je saisis l'identifiant `ab--cd` (deux tirets de suite, réservés aux déclinaisons) et valide
+- **Alors** Identifiant est `aria-invalid` avec le même message de format, et le formulaire reste ouvert
+- **Quand** je clique le lien « Catalogue » du formulaire
+- **Alors** l'adresse redevient `#/w/<espace>/catalogue` et l'API ne connaît aucun brouillon `taux-de-conversion-ete`, `taux_conversion`, `a`, `ab--cd` ni l'identifiant de 65 caractères
+- **Quand** je recommence en choisissant le type Concept, le libellé « Taux de conversion été », le domaine Finance
+- **Alors** l'éditeur affiche « Taux de conversion été : v1 · brouillon » et le brouillon relu par l'API est un concept `taux-de-conversion-ete` v1, propriétaire `anna.k`, domaine `finance`
+
+### S-0013-25 — La sémantique d'un KPI se déclare (calendrier civil puis fiscal, fuseau, devise, synonymes) et se retrouve sur la fiche après la fusion par le référent seul
+Plan 0013, critère 25 · Test : `app/e2e/creation.spec.ts` › `[S-0013-25]`
+- **Étant donné** un espace isolé que le compte julien.h (référent de l'espace) a rejoint : il est le seul compte habilité sur le domaine Marketing
+- **Quand** je crée le KPI « Visites par mois » (`visites-par-mois`, domaine Marketing, propriétaire par défaut `julien.h`), saisis une description, les synonymes « trafic mensuel » et « monthly visits », la devise EUR, le calendrier `civil` et le fuseau Europe/Paris, puis construis une source (`jour_visite` de type date), une opération temporelle `period` au grain mois et une agrégation `count` par `mois` et `canal`
+- **Alors** le brouillon relu par l'API porte `calendar: {key: civil}`, le fuseau et la devise, et le statut est « Compilable Databricks, Snowflake » sans erreur
+- **Quand** je désélectionne le nœud et choisis le calendrier `fiscal-nordis@2026.1`
+- **Alors** le brouillon porte `{key: fiscal-nordis, version: "2026.1"}` et le statut reste « Compilable Databricks, Snowflake »
+- **Quand** je saisis le fuseau `Mars/Phobos`, puis la devise `euro`
+- **Alors** « Schéma invalide » s'affiche et une erreur apparaît ; une fois le fuseau Europe/Paris et la devise EUR rétablis, « Schéma valide » et « Compilable Databricks, Snowflake » reviennent
+- **Et** le YAML relu par `/editor/check` contient `synonyms: [trafic mensuel, monthly visits]`, `calendar: {key: fiscal-nordis, version: '2026.1'}`, `timezone: Europe/Paris` et `currency: EUR`, et le contrôle axe ne relève rien de sérieux
+- **Quand** je soumets avec la justification « Visites par mois, sur le calendrier fiscal. », ouvre la proposition dans la file et clique « Fusionner »
+- **Alors** « Fusionnée sans revue : aucun autre compte habilité » s'affiche avant la fusion, « Proposition n° N fusionnée » après, et `kpis/visites-par-mois.yaml` du dépôt contient `domain: marketing`
+- **Et** le catalogue liste le KPI au domaine Marketing, et sa fiche montre « Synonymes : trafic mensuel, monthly visits », le calendrier « fiscal-nordis 2026.1 », le fuseau d'évaluation Europe/Paris et la devise EUR
+
+### S-0013-26 — Les nœuds Source, Filtre, Dédoublonnage, Calcul de colonne et Agrégation produisent un YAML et un SQL compilables
+Plan 0013, critère 26 · Test : `app/e2e/creation.spec.ts` › `[S-0013-26]`
+- **Étant donné** un nouveau KPI civil, fuseau Europe/Paris, de l'espace de démonstration
+- **Quand** j'ajoute depuis la palette, chacun relié au précédent : n01 Source (six colonnes dont `date_facture` de type date), n02 Filtre `statut:equals:validée` nulls exclus, n03 Filtre en Expression SQL `montant_ttc > 0` nulls gardés, n04 Dédoublonnage (clé `facture_id`, ligne gardée la première selon `date_facture` décroissant), n05 Calcul de colonne `montant_ht = montant_ttc - montant_taxes` (decimal) et n06 Agrégation (`sum` de `montant_ht` en `revenu_ht`, `count` de `*` en `nb_factures`, par `entite`)
+- **Alors** la barre d'état affiche « schéma 1 · 6 nœuds · 5 arêtes », aucune erreur, « Compilable Databricks, Snowflake », et le contrôle axe ne relève rien de sérieux
+- **Et** le brouillon relu par l'API porte les six nœuds avec leurs entrées, conditions, clés, mesures et la sortie n06, et son YAML contient chaque `type:` et `condition: statut:equals:validée`
+- **Et** « YAML du nœud » de n04 montre `order_by`, et « SQL compilé » montre `montant_ht` pour Databricks puis pour Snowflake
+
+### S-0013-27 — Les quatre opérations temporelles s'enchaînent jusqu'à une agrégation compilable
+Plan 0013, critère 27 · Test : `app/e2e/creation.spec.ts` › `[S-0013-27]`
+- **Étant donné** un nouveau KPI civil, fuseau Europe/Paris, et une source de colonnes `jour` (texte), `horodatage` (timestamp, UTC) et `montant`
+- **Quand** j'ajoute n02 `to_date` (`jour` → `date_jour`, fuseau Europe/Paris, format `yyyy-MM-dd`), n03 `convert_timezone` (`horodatage` → `horodatage_paris`, vers Europe/Paris), n04 `period` (`date_jour` → `mois`, grain mois), n05 `window` (`sum` de `montant` en `montant_glissant`, cadre `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW`, ordre `horodatage_paris` croissant) et n06 Agrégation (`max` de `montant_glissant` en `total_glissant`, par `mois`)
+- **Alors** « schéma 1 · 6 nœuds · 5 arêtes », aucune erreur, « Compilable Databricks, Snowflake », et aucune violation axe sérieuse
+- **Et** le brouillon relu par l'API porte les quatre opérations avec leurs champs propres, et son YAML contient `operation: to_date`, `convert_timezone`, `period` et `window`
+- **Quand** je sélectionne n05, lis l'aide du champ « Fenêtre » (« Ex. ROWS BETWEEN 2 PRECEDING AND CURRENT ROW ») et saisis un cadre illisible, `3 rows preceding`
+- **Alors** une erreur nomme n05 et aucune alerte « Serveur local injoignable » n'apparaît
+- **Quand** je rétablis le cadre `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW`
+- **Alors** il n'y a plus d'erreur et le statut redevient « Compilable Databricks, Snowflake »
+
+### S-0013-28 — Une jointure se câble par ses entrées gauche et droite, ses clés et sa cardinalité ; contourner le contrôle exige une raison
+Plan 0013, critère 28 · Test : `app/e2e/creation.spec.ts` › `[S-0013-28]`
+- **Étant donné** un nouveau KPI civil avec deux sources : n01 (`vente_id`, `client_id`, `montant`) et n02 (`client_id`, `segment`)
+- **Quand** je sélectionne n01, ajoute une Jointure n03, ouvre l'onglet Entrées, choisis n02 comme entrée droite, puis dans Propriétés le type `inner`, la paire de clés `client_id` = `client_id`, la cardinalité N:1 et le contrôle « requis », puis ajoute n04 Agrégation (`sum` de `montant` en `ca`, par `segment`)
+- **Alors** l'entrée gauche proposée est n01 (reliée par l'ajout), « schéma 1 · 4 nœuds · 3 arêtes », aucune erreur, « Compilable Databricks, Snowflake »
+- **Et** le brouillon porte `inputs: {left: n01, right: n02}`, `how: inner`, `keys: [[client_id, client_id]]`, `cardinality: N:1`, `check: required`, la sortie est n04, et « YAML du nœud » de n03 montre `inputs: {left: n01, right: n02}` et `cardinality: N:1`
+- **Quand** je sélectionne n03 et coche « contourné »
+- **Alors** une erreur apparaît (la raison manque) ; après la saisie de la raison « Les clients sont dédoublonnés en amont, par la plateforme. », il n'y a plus d'erreur, un message INFO « Contrôle de cardinalité contourné » apparaît et le statut reste « Compilable Databricks, Snowflake »
+
+### S-0013-29 — Une union ordonne ses entrées, fait correspondre ses colonnes et passe en mode sans doublons
+Plan 0013, critère 29 · Test : `app/e2e/creation.spec.ts` › `[S-0013-29]`
+- **Étant donné** un nouveau KPI civil avec deux sources : n01 (`commande_id`, `canal`, `montant`) et n02 (`id`, `canal_web`, `montant_web`)
+- **Quand** je sélectionne n01, ajoute une Union n03, ajoute l'entrée n02 dans l'onglet Entrées, choisis le mode « toutes les lignes (all) », trois colonnes produites (`commande_id` ← `commande_id`/`id`, `canal` ← `canal`/`canal_web`, `montant` ← `montant`/`montant_web`), puis une Agrégation n04 (`sum` de `montant` en `ca`, par `canal`)
+- **Alors** « schéma 1 · 4 nœuds · 3 arêtes », aucune erreur, « Compilable Databricks, Snowflake », et le brouillon porte `inputs: [n01, n02]`, `mode: all` et la correspondance des trois colonnes, la sortie étant n04
+- **Quand** je choisis le mode « sans doublons (distinct) » et clique « Descendre l'entrée n01 »
+- **Alors** le brouillon porte `mode: distinct` et `inputs: [n02, n01]`, le statut reste « Compilable Databricks, Snowflake » et le YAML contient `mode: distinct` et `inputs: [n02, n01]`
+
+### S-0013-30 — La référence à un KPI et l'opération entre métriques compilent ; une version introuvable est signalée puis corrigée
+Plan 0013, critère 30 · Test : `app/e2e/creation.spec.ts` › `[S-0013-30]`
+- **Étant donné** un nouveau KPI civil de l'espace de démonstration, où Revenu net existe en v4
+- **Quand** j'ajoute n01 Référence à un KPI (`revenu-net`, version 4) puis n02 Opération entre métriques (métrique `revenu_net_milliers = revenu_net / 1000`, « agréger puis calculer »)
+- **Alors** « schéma 1 · 2 nœuds · 1 arête », aucune erreur, « Compilable Databricks, Snowflake », et le brouillon porte `kpi: revenu-net`, `version: 4`, `order: aggregate_first`, la sortie étant n02
+- **Quand** je saisis la version 99 sur n01
+- **Alors** une erreur « introuvable » nomme `revenu-net` et n01, et « Aller au nœud n01 » sélectionne n01 sur le canevas
+- **Quand** je rétablis la version 4
+- **Alors** il n'y a plus d'erreur et le statut redevient « Compilable Databricks, Snowflake »
+
+### S-0013-31 — Un concept se crée et se fusionne, puis un KPI s'y rattache et la fiche le liste
+Plan 0013, critère 31 · Test : `app/e2e/creation.spec.ts` › `[S-0013-31]`
+- **Étant donné** un espace isolé que julien.h a rejoint (seul habilité sur Marketing)
+- **Quand** je crée le concept « Visiteur » (`visiteur`, domaine Marketing), saisis une description, déclare l'entité, deux attributs (`visiteur_id`, `canal`, texte) et la clé `visiteur_id`
+- **Alors** il n'y a aucune erreur, « Schéma valide » s'affiche, le brouillon porte `entity.key: [visiteur_id]` et ses deux attributs, le contrôle axe ne relève rien de sérieux
+- **Et** un concept valide sans graphe n'est pas annoncé « Non compilable »
+- **Quand** je soumets et fusionne la proposition (« Fusionnée sans revue : aucun autre compte habilité »)
+- **Alors** le catalogue liste « Visiteur » au domaine Marketing, et sa fiche montre l'attribut `visiteur_id`
+- **Quand** je crée le KPI « Sessions par canal » (`sessions-par-canal`, Marketing, civil), une source dont « Concept rattaché » vaut `visiteur-inconnu` et une agrégation `count` par `canal`
+- **Alors** une erreur nomme `visiteur-inconnu` et n01, et « Soumettre la proposition » affiche « Soumission bloquée : N erreur(s) à corriger »
+- **Quand** je remplace le concept rattaché par `visiteur`, puis soumets et fusionne
+- **Alors** le brouillon porte `concept: visiteur` sur n01, « YAML du nœud » de n01 contient `concept: visiteur`, aucune erreur, « Compilable Databricks, Snowflake »
+- **Et** la fiche du KPI liste « Visiteur » dans ses Références, et celle du concept liste « Sessions par canal » dans « Référencé par »
+
+### S-0013-32 — Une erreur de construction se lit, mène au nœud, bloque la soumission et se corrige
+Plan 0013, critère 32 · Test : `app/e2e/creation.spec.ts` › `[S-0013-32]`
+- **Étant donné** un nouveau KPI civil avec une source dont `passee_le` est un timestamp, un nœud `period` (grain jour) lisant `passee_le` directement, et une agrégation `sum` par `jour`
+- **Alors** une erreur « fuseau explicite » nomme n02, le statut affiche « Non compilable »
+- **Quand** je clique « Soumettre la proposition » puis « Aller au nœud n02 » depuis le problème
+- **Alors** l'alerte « Soumission bloquée : N erreur(s) à corriger » s'affiche, Propriétés montre l'Opération temporelle et n02 est sélectionné ; le contrôle axe ne relève rien de sérieux
+- **Quand** j'ajoute depuis n01 un nœud n04 `convert_timezone` (`passee_le` → `passee_locale`, vers Europe/Paris), relie n04 à l'entrée de n02 par l'onglet Entrées et choisis `passee_locale` comme colonne source de n02
+- **Alors** il n'y a plus d'erreur, le statut est « Compilable Databricks, Snowflake », le brouillon porte `inputs: [n04]` sur n02 et la sortie n03, et « Soumettre la proposition » ouvre la fenêtre de soumission
+
+### S-0013-33 — On quitte un brouillon de création et on le retrouve ; le même identifiant ne se recrée pas
+Plan 0013, critère 33 · Test : `app/e2e/creation.spec.ts` › `[S-0013-33]`
+- **Étant donné** un nouveau KPI « Stock moyen » (`stock-moyen`) avec calendrier civil, devise EUR et une source n01 de deux colonnes, « Enregistré … (local) »
+- **Alors** aucune bannière « Brouillon local repris » n'est affichée : le brouillon vient d'être créé, il n'est pas repris (assertion `soft` : en développement, StrictMode relance l'effet d'ouverture et la bannière s'affiche à tort, défaut signalé)
+- **Quand** je clique le lien « Catalogue » de l'éditeur
+- **Alors** le catalogue s'affiche sans ligne « Stock moyen » (le brouillon n'est pas un document de l'espace)
+- **Quand** je rouvre « Nouveau concept ou KPI » avec le même libellé et le domaine Finance
+- **Alors** « Un brouillon local de « stock-moyen » existe déjà : le reprendre ou l'abandonner dans « Mes brouillons » du catalogue » s'affiche sur Identifiant, `aria-invalid`, avec un lien « Reprendre le brouillon »
+- **Quand** je clique « Reprendre le brouillon »
+- **Alors** l'adresse devient `#/w/<espace>/editeur?from=stock-moyen`, la bannière « Brouillon local repris » (« Enregistré … sur ce poste ») s'affiche et l'éditeur affiche « Stock moyen : v1 · brouillon », n01, « schéma 1 · 1 nœud · 0 arête », la table et la seconde colonne de n01, le calendrier `civil` et la devise EUR
+- **Quand** je recharge la page
+- **Alors** le même brouillon revient, et le contrôle axe ne relève rien de sérieux
+- **Et** de retour au catalogue, la région « Mes brouillons » liste « Stock moyen » avec un lien « Reprendre » et un bouton « Abandonner », sans violation axe sérieuse
+- **Quand** je clique « Reprendre »
+- **Alors** l'éditeur rouvre « Stock moyen : v1 · brouillon » avec n01
+- **Quand** je reviens au catalogue, où un brouillon illisible `orphelin` (type inconnu, écrit par l'API) est aussi listé
+- **Alors** `orphelin` figure dans « Mes brouillons » avec un bouton « Abandonner » et sans lien « Reprendre »
+- **Quand** je clique « Abandonner » sur « Stock moyen »
+- **Alors** la boîte « Abandonner le brouillon ? » (rôle `alertdialog`) s'ouvre avec « Le brouillon local « Stock moyen » sera supprimé. » et le focus sur « Annuler »
+- **Quand** j'appuie sur Tab, Tab, puis Maj+Tab
+- **Alors** le focus va à « Abandonner », revient à « Annuler » puis repart à « Abandonner » : il ne sort pas de la boîte
+- **Quand** j'appuie sur Échap
+- **Alors** la boîte se ferme, le focus revient sur le bouton « Abandonner » de « Stock moyen », le brouillon est toujours listé et l'API le connaît encore
+- **Quand** je rouvre la boîte et clique « Annuler »
+- **Alors** la boîte se ferme et le brouillon est toujours listé ; l'API relit ses positions (dessin du graphe) avec n01
+- **Quand** je rouvre la boîte et clique « Abandonner »
+- **Alors** « Stock moyen » quitte « Mes brouillons », le focus passe au bouton « Abandonner » de `orphelin`, et le brouillon répond 404
+- **Quand** j'abandonne aussi `orphelin`
+- **Alors** la région « Mes brouillons » disparaît et le focus revient sur le titre « Catalogue »
+- **Et** l'identifiant `stock-moyen` peut être recréé par le formulaire, et son dessin de graphe est vide : l'abandon a supprimé les positions de l'ancien brouillon
+
+### S-0013-34 — Un nouveau KPI revu par deux validateurs se fusionne, puis le catalogue et la fiche l'affichent
+Plan 0013, critère 34 · Test : `app/e2e/creation.spec.ts` › `[S-0013-34]`
+- **Étant donné** un nouveau KPI « Chiffre d'affaires annuel » (`chiffre-affaires-annuel`, Finance, civil) construit par anna.k : source de deux colonnes et agrégation `sum` de `montant_ttc` en `chiffre_affaires` par `entite`, « Compilable Databricks, Snowflake »
+- **Quand** je soumets avec la justification « Premier chiffre d'affaires annuel de Finance. »
+- **Alors** « Proposition n° N créée » s'affiche et le brouillon répond 404
+- **Quand** j'ouvre la proposition dans la file (domaine « tous »)
+- **Alors** elle est sélectionnée, « Validations : 0 / 2 » et le titre « Nouveau document : Chiffre d'affaires annuel » s'affichent, « Approuver (0 / 2) » est `aria-disabled` et son infobulle dit « Vous êtes l'auteur de cette proposition : un autre compte doit l'approuver. »
+- **Quand** claire.m et marc.d approuvent depuis leur poste (API de leur serveur) et que je recharge
+- **Alors** « Validations : 2 / 2 » et « prête à fusionner » s'affichent
+- **Quand** je clique « Fusionner »
+- **Alors** « Proposition n° N fusionnée » s'affiche, et le dépôt contient `kpis/chiffre-affaires-annuel.yaml` avec `domain: finance`
+- **Et** le dessin du graphe (positions n01 et n02) est encore lu par l'API : la soumission supprime le brouillon, pas le dessin
+- **Et** le catalogue liste le KPI au domaine Finance, sa fiche affiche « v1 · validée le … » et « Validateurs : 2 requis (canonique) », et aucun de ces écrans ne montre de violation axe sérieuse
 
 **Plan 0021**
 
