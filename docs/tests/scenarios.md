@@ -26,16 +26,16 @@
 | 0002 | 11 | 8 | 0 | 3 | 0 |
 | 0003 | 10 | 8 | 0 | 2 | 0 |
 | 0004 | 8 | 2 | 0 | 6 | 0 |
-| 0005 | 13 | 9 | 0 | 4 | 0 |
+| 0005 | 13 | 10 | 0 | 3 | 0 |
 | 0006 | 13 | 9 | 0 | 4 | 0 |
 | 0007 | 9 | 4 | 0 | 5 | 0 |
 | 0008 | 10 | 6 | 0 | 4 | 0 |
 | 0009 | 13 | 7 | 0 | 6 | 0 |
 | 0010 | 12 | 11 | 0 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
-| 0012 | 7 | 7 | 0 | 0 | 0 |
+| 0012 | 8 | 8 | 0 | 0 | 0 |
 | 0013 | 34 | 33 | 1 | 0 | 0 |
-| 0014 | 9 | 9 | 0 | 0 | 0 |
+| 0014 | 10 | 10 | 0 | 0 | 0 |
 | 0015 | 13 | 13 | 0 | 0 | 0 |
 | 0016 | 9 | 9 | 0 | 0 | 0 |
 | 0017 | 10 | 10 | 0 | 0 | 0 |
@@ -57,7 +57,7 @@
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | 0035 | 12 | 10 | 0 | 2 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **322** | **248** | **6** | **68** | **0** |
+| **Total** | **324** | **251** | **6** | **67** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -344,6 +344,14 @@ Plan 0005, critère 8 · Test : `app/e2e/fiche.spec.ts` › `[S-0005-08]`
 - **Alors** Panier moyen y figure avec « KPI · Ventes · v4 », et le lien ouvre la fiche Panier moyen
 - Limite : Commande, Date de référence, Marge brute et `impact: 2` ne sont pas lus à l'écran ; `core/tests/repo/test_index.py::test_dependencies_of_revenu_net`.
 
+### S-0005-09 — Un espace absent du registre renvoie à l'accueil
+Plan 0005, critère 9 · Test : `app/e2e/ouverture.spec.ts` › `[S-0005-09]`
+- **Étant donné** un registre local qui ne contient pas l'espace « espace-inconnu »
+- **Quand** j'ouvre `#/w/espace-inconnu/catalogue`
+- **Alors** l'accueil « Vos espaces de travail » s'affiche, avec le message « L'espace « espace-inconnu » n'est pas dans votre registre local. », sans violation d'accessibilité sérieuse
+- **Et** le message disparaît dès que j'ouvre un espace du registre
+- Limite : le refus 404 du serveur (espace absent, chemin avec `..`) est vérifié par `core/tests/repo/test_catalog_api.py::test_unknown_workspace_or_dot_dot_is_404`.
+
 **Plan 0009**
 
 ### S-0009-02 — La tolérance du KPI est celle qui s'affiche
@@ -400,6 +408,13 @@ Plan 0012, critère 7 · Test : `app/e2e/fiche.spec.ts` › `[S-0012-07]`
 - **Quand** je lis ses onglets, puis ouvre `?tab=scope`
 - **Alors** seuls « Définition », « Versions 1 » et « Dépendances » s'affichent, avec la ligne « Clé », sans « Lancer une comparaison »
 - **Et** `?tab=scope` retombe sur Définition
+
+### S-0012-08 — Une fiche inexistante dit « Fiche introuvable »
+Plan 0012, état d'erreur de la spécification · Test : `app/e2e/ouverture.spec.ts` › `[S-0012-08]` ; `app/src/screens/Fiche.test.tsx` (composant)
+- **Étant donné** l'espace de démonstration, sans document « document-inexistant »
+- **Quand** j'ouvre `#/w/groupe-nordis/fiche/document-inexistant`
+- **Alors** le titre « Fiche introuvable » s'affiche avec une alerte qui ne montre ni trace, ni JSON brut, ni `undefined`, et le lien « Catalogue » est présent
+- **Et** aucune erreur de page n'est levée, et axe-core ne relève aucune violation sérieuse
 
 ## Éditeur
 
@@ -1111,7 +1126,7 @@ Plan 0006, critère 7 · Test : `app/e2e/propositions.spec.ts` › `[S-0006-07]`
 - **Étant donné** trois serveurs locaux sur un même dépôt nu, sans hébergeur distant (`LocalHost`)
 - **Quand** claire.m approuve à l'écran, marc.d approuve par l'API, puis claire.m fusionne
 - **Alors** le compteur passe de 0 / 2 à 1 / 2 puis 2 / 2, la fusion aboutit, et la file `?status=merged` affiche DE « Fusionnée »
-- Limite : la proposition vient du script de démonstration (la création depuis l'éditeur est S-0013-10) ; aucun commentaire n'est posté, et seules les requêtes du navigateur restent locales. Le cycle complet, commentaire compris, est vérifié par `core/tests/repo/test_proposals.py::test_full_cycle`.
+- Limite : la proposition vient du script de démonstration (la création depuis l'éditeur est S-0013-10) ; les commentaires sont S-0014-10, et seules les requêtes du navigateur restent locales. Le cycle complet, commentaire compris, est vérifié par `core/tests/repo/test_proposals.py::test_full_cycle`.
 
 ### S-0006-12 — Seul habilité : fusion sans revue, avec mention et trailer, jusqu'à un deuxième habilité
 Plan 0006, critère 12 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0006-12]` ; `app/e2e/administration.spec.ts` › `[S-0006-12]` (deux tests, la gouvernance)
@@ -1172,13 +1187,15 @@ Plan 0014, critère 7 · Test : `app/e2e/propositions.spec.ts` › `[S-0014-07]`
 - **Alors** elle liste trois écarts en texte, dont celui du fuseau (`timezone`), et axe-core ne relève aucune violation sérieuse
 
 ### S-0014-08 — Un refus de fusion dit ce qui s'est passé et quoi faire
-Plan 0014, critère 8 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0014-08]` ; `app/src/messages.test.ts` › `[S-0014-08]` (un cas par code) ; `app/src/screens/Proposals.test.tsx` › `[S-0014-08]` (trois tests)
+Plan 0014, critère 8 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0014-08]` ; `app/e2e/propositions-revue.spec.ts` › `[S-0014-08]` (deux tests : `merge_refused`, `not_open`) ; `app/src/messages.test.ts` › `[S-0014-08]` (un cas par code) ; `app/src/screens/Proposals.test.tsx` › `[S-0014-08]` (trois tests)
 - **Étant donné** DE approuvée par claire.m et marc.d, ouverte chez claire.m avec « Fusionner »
 - **Quand** la fusion répond `merge_conflict` avec le texte brut de GitHub (« Pull Request is not mergeable ») ; puis un commit arrive sur la branche de la proposition et claire.m clique de nouveau « Fusionner »
 - **Alors** le premier refus s'affiche sous le titre « La fusion provoque un conflit » avec sa consigne (demander à l'auteur de reproposer), sans le texte de GitHub ni « L'opération a échoué » ; le second sous « La proposition ne remplit plus les conditions de fusion » (`not_ready`), avec la raison du serveur (« 0 validation(s) sur 2. ») avant la consigne
 - **Et** l'écran se relit sans perdre le message : « Validations : 0 / 2 », plus de « Fusionner », « Approuver (0 / 2) », et la branche principale du dépôt n'a pas bougé
-- Les huit codes (`merge_conflict`, `merge_refused`, `branch_protected`, `head_changed`, `not_ready`, `not_open`, `cannot_review_own`, `comment_required`) ont chacun un titre et une consigne vérifiés par Vitest. `head_changed` relit aussi l'écran, `not_open` non (Vitest).
-- Limite : `merge_refused` et `branch_protected` ne peuvent pas être produits de bout en bout (le premier vient d'un `git push` refusé, le second d'une règle de GitHub : voir S-0006-13) ; leur traduction est vérifiée par le test de `messages.ts`.
+- **Et** un `pre-receive` posé dans le dépôt nu refuse le push de la fusion : « Le dépôt a refusé la fusion » s'affiche avec sa consigne (relire, puis réessayer), sans le texte émis par le dépôt, la proposition reste dans la file et la branche principale n'a pas bougé (`merge_refused`)
+- **Et** une proposition fusionnée depuis un autre poste pendant que l'écran de claire.m est resté ouvert : « Fusionner » donne « La proposition n'est plus ouverte » et sa consigne (`not_open`)
+- Les huit codes (`merge_conflict`, `merge_refused`, `branch_protected`, `head_changed`, `not_ready`, `not_open`, `cannot_review_own`, `comment_required`) ont chacun un titre et une consigne vérifiés par Vitest. `merge_conflict`, `merge_refused`, `not_ready` et `not_open` sont aussi provoqués à l'écran ; `head_changed` relit aussi l'écran en Vitest.
+- Limite : `branch_protected` ne peut pas être produit de bout en bout (il vient d'une règle de GitHub : voir S-0006-13) ; sa traduction est vérifiée par le test de `messages.ts`.
 
 ### S-0014-09 — Changer de statut ne laisse pas la file du statut précédent
 Plan 0014, critère 9 · Test : `app/e2e/propositions-testables.spec.ts` › `[S-0014-09]` ; `app/src/screens/Proposals.test.tsx` › `[S-0014-09]`
@@ -1186,6 +1203,14 @@ Plan 0014, critère 9 · Test : `app/e2e/propositions-testables.spec.ts` › `[S
 - **Quand** je choisis « Fusionnées » alors que la réponse tarde ; puis « Fermées » alors que le serveur est injoignable
 - **Alors** « Chargement des propositions… » remplace la liste, qui n'est pas affichée sous le filtre choisi, et le filtre reste sur le statut demandé
 - **Et** la réponse tardive d'un ancien filtre n'écrase pas la file du filtre courant (Vitest)
+
+### S-0014-10 — Un commentaire entre dans le fil ; une demande de changements part avec son texte
+Plan 0014, critère 5 (envoi), critère 4 (le décompte ne bouge pas) · Test : `app/e2e/propositions-revue.spec.ts` › `[S-0014-10]`
+- **Étant donné** claire.m sur la proposition DE, dont le fil porte déjà son commentaire de la démonstration, à « Validations : 0 / 2 »
+- **Quand** j'envoie « Répondre » sans rien écrire ; puis un commentaire ; puis « Demander des changements » avec un texte
+- **Alors** le premier envoi affiche « Écrire un commentaire avant d'envoyer. » sans aucune requête POST ; le commentaire entre dans le fil sous « Claire M. », le champ se vide
+- **Et** la demande de changements ferme le formulaire et ajoute « Claire M. demande des changements » avec son texte ; « Validations : 0 / 2 » et « Approuver (0 / 2) » restent inchangés
+- **Et** après rechargement le fil affiche les trois entrées, dans l'ordre
 
 ## Comparaison
 
@@ -1343,11 +1368,12 @@ Plan 0015, critère 13 · Tests : `app/e2e/comparaison-auth.spec.ts` › `[S-001
 **Plan 0022**
 
 ### S-0022-01 — ES à 75 %, DE à 94 %, FR à 100 %
-Plan 0022, critère 1 · Test : `app/e2e/comparaison.spec.ts` › `[S-0022-01]`
+Plan 0022, critère 1 · Test : `app/e2e/comparaison.spec.ts` › `[S-0022-01]` (deux tests : la matrice, le détail nordis-es)
 - **Étant donné** l'écran Comparaison de Revenu net, nordis-es cochée
 - **Quand** je lance la comparaison et attends « Relancer »
 - **Alors** la matrice affiche « Revenu net × nordis-es : 75 % de validation, écart max 2,9 % », nordis-de à 94 % et nordis-fr à 100 %
-- Limite : l'interface arrondit à 2,9 %. Les huit cellules, la valeur exacte de 2,93 % et les mois de juin et juillet sont vérifiés par `core/tests/compare/test_compare.py::test_from_scratch_es_compares_with_fr_and_de`.
+- **Et** le détail de nordis-es compte huit lignes, dont exactement deux hors tolérance : juin 2026 à −2,9 % (valeur exacte −2,857…) et juillet 2026 à +2,9 % (valeur exacte 2,926…), la facture du 30 juin, clôturée après minuit à Madrid, comptant en juillet
+- Limite : l'interface arrondit à 2,9 % et le titre de la cellule porte la valeur exacte ; les valeurs des six autres cellules sont vérifiées par `core/tests/compare/test_compare.py::test_from_scratch_es_compares_with_fr_and_de`.
 
 ### S-0022-02 — Une source sans colonne lue est refusée, la colonne nommée
 Plan 0022, critère 2 · Test : `app/e2e/comparaison-refus.spec.ts` › `[S-0022-02]`
@@ -2217,7 +2243,6 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0004-08 | `examples/extraction/` produit les écarts annoncés | Démonstration en ligne de commande | `core/tests/extract/test_extract.py::test_demo_shows_the_announced_differences` |
 | S-0005-06 | Supprimer `atlas.duckdb` et relancer redonne le même index | Logique serveur sans écran : aucune commande de l'app ne supprime l'index | `core/tests/repo/test_index.py::test_rebuild_from_scratch_is_identical` |
 | S-0005-07 | `versions` et `versions/{n}` restituent le contenu exact de chaque tag | Contenu à l'octet ; la fiche montre la liste et les graphes de deux versions (S-0012-03), pas le fichier | `core/tests/repo/test_workspace_repo.py::test_versions_restore_each_tag` ; `core/tests/repo/test_catalog_api.py::test_document_versions_and_dependencies` |
-| S-0005-09 | Espace inconnu ou chemin avec `..` : 404 | Logique serveur sans écran : l'app renvoie à l'accueil un espace absent de la liste, sans appeler la route | `core/tests/repo/test_catalog_api.py::test_unknown_workspace_or_dot_dot_is_404` |
 | S-0005-10 | Sans token, le serveur refuse de démarrer ; sans en-tête ou avec un mauvais token, 401 | Démarrage et en-tête posés par Tauri ; les serveurs e2e tournent en mode développement sans token | `core/tests/test_api.py::test_server_refuses_to_start_without_token`, `::test_missing_or_wrong_token_is_refused` ; `core/tests/test_sidecar.py::test_frozen_binary_refuses_to_start_without_token` |
 | S-0006-06 | Une proposition invalide n'est jamais poussée | Logique serveur sans écran : l'éditeur bloque la soumission avant (S-0013-04), la route n'est pas atteinte | `core/tests/repo/test_proposals.py::test_an_invalid_proposal_is_never_pushed` |
 | S-0006-08 | Le cycle de revue passe sur un vrai dépôt GitHub | Compte réel : compte et dépôt GitHub de test, hors CI | `core/tests/repo/test_githost.py::test_github_cycle` (faux hôte), `::test_real_github_reads` (marqué `github`) |
