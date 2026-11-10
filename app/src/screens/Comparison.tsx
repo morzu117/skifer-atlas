@@ -19,7 +19,7 @@ import { Select } from "../components/Select";
 import { TableWrap } from "../components/TableWrap";
 import { openExternal } from "../external";
 import { amount, dimension, gap, percent, tolerance } from "../format";
-import { explain, type Explained } from "../messages";
+import { explain, explainComparisonError, type Explained } from "../messages";
 import { href, setParams, type Params } from "../router";
 
 // Comparaison (guide 10.5, plan 0015) : le panneau de lancement à gauche ; à droite le
@@ -41,6 +41,15 @@ export const STATUSES: Record<string, string> = {
   cancelled: "annulée",
   interrupted: "interrompue",
 };
+function ComparisonErrorBanner({ run }: { run: Run }) {
+  const error = explainComparisonError(run.error!);
+  return (
+    <Banner tone="bad" title={`Comparaison n° ${run.id} ${STATUSES[run.status] ?? run.status}`}>
+      {error.title}. {error.text}
+    </Banner>
+  );
+}
+
 const STATES: Record<string, string> = { pending: "En attente", running: "En cours", done: "Terminé", cancelled: "Annulé", failed: "Échec" };
 /** Titre du bandeau par code d'alerte ; une source commune informe, le reste avertit. */
 const ALERT_TITLES: Record<string, string> = {
@@ -467,10 +476,11 @@ function LaunchForm({ ws, setup, onFinished }: { ws: Workspace; setup: Compariso
       )}
       {running && <Progress running={running} onCancel={cancel} />}
       {done && done.status !== "done" && (
-        <p className="muted" role="status">
-          Comparaison n° {done.id} {STATUSES[done.status] ?? done.status}
-          {done.error ? ` : ${done.error}` : "."}
-        </p>
+        done.error ? (
+          <ComparisonErrorBanner run={done} />
+        ) : (
+          <p className="muted" role="status">Comparaison n° {done.id} {STATUSES[done.status] ?? done.status}.</p>
+        )
       )}
       <button
         type="button"
@@ -736,9 +746,7 @@ function Detail({ ws, id, variant, labels }: { ws: Workspace; id: number; varian
         </div>
       )}
       {found.error && (
-        <Banner tone="bad" title={`Comparaison ${STATUSES[found.status] ?? found.status}`}>
-          {found.error}
-        </Banner>
+        <ComparisonErrorBanner run={found} />
       )}
       {!result ? (
         <p className="muted">{found.status === "cancelled" ? "Comparaison annulée : aucun résultat." : "Aucun résultat pour cette comparaison."}</p>

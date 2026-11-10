@@ -214,3 +214,89 @@ export function explain(error: unknown): Explained {
   }
   return { title: "L'opération a échoué", text: String(error) };
 }
+
+// Traductions propres aux erreurs de comparaison enregistrées.
+const COMPARISON: Record<string, Explained> = {
+  result_too_large: {
+    title: "Le résultat dépasse la limite de lignes",
+    text: "Restreignez la période ou les entités, puis réessayez.",
+  },
+  duplicate_dimensions: {
+    title: "Plusieurs lignes correspondent à une même cellule",
+    text: "Vérifiez les dimensions et les données, puis réessayez.",
+  },
+  query_canceled: {
+    title: "La requête a été annulée",
+    text: "Relancez la comparaison si nécessaire.",
+  },
+  missing_data: {
+    title: "Données locales introuvables",
+    text: "Vérifiez les données locales nécessaires, puis réessayez.",
+  },
+  internal_error: {
+    title: "La comparaison a échoué",
+    text: "Réessayez. Si le problème persiste, contactez le référent de l'espace.",
+  },
+  platform_forbidden: {
+    title: "Accès à la plateforme refusé",
+    text: "Vérifiez vos droits sur les données et l'entrepôt, puis réessayez.",
+  },
+  platform_not_found: {
+    title: "Ressource introuvable sur la plateforme",
+    text: "Vérifiez les données et l'entrepôt du point d'accès, puis réessayez.",
+  },
+  platform_not_supported: {
+    title: "Plateforme non prise en charge",
+    text: "Vérifiez le point d'accès choisi pour cette comparaison.",
+  },
+  key_file_unreadable: {
+    title: "Fichier de clé illisible",
+    text: "Vérifiez le fichier de clé dans Mes connexions, puis réessayez.",
+  },
+  passphrase_required: {
+    title: "Phrase secrète requise",
+    text: "Reconnectez-vous dans Mes connexions avec la phrase secrète de la clé.",
+  },
+  passphrase_unexpected: {
+    title: "Phrase secrète inutile",
+    text: "Reconnectez-vous dans Mes connexions sans phrase secrète.",
+  },
+  wrong_passphrase: {
+    title: "Phrase secrète incorrecte",
+    text: "Vérifiez la phrase secrète et la clé dans Mes connexions, puis réessayez.",
+  },
+  invalid_key_file: {
+    title: "Fichier de clé invalide",
+    text: "Vérifiez la clé dans Mes connexions, puis réessayez.",
+  },
+  oauth_unavailable: {
+    title: "Connexion à la plateforme indisponible",
+    text: "Vérifiez le point d'accès et la connexion réseau, puis réessayez.",
+  },
+  oauth_failed: {
+    title: "Renouvellement de la connexion impossible",
+    text: "Reconnectez-vous dans Mes connexions, puis réessayez.",
+  },
+
+  not_found: { title: "Ressource introuvable", text: "Vérifiez la ressource demandée, puis réessayez." },
+  invalid_access_points: { title: "Points d'accès invalides", text: "Vérifiez la configuration des points d'accès, puis réessayez." },
+  platform_not_allowed: { title: "Plateforme non autorisée", text: "Vérifiez la configuration du point d'accès, puis réessayez." },
+};
+
+/** Explique une erreur de comparaison enregistrée par le serveur. */
+export function explainComparisonError(raw: string): Explained {
+  const match = /^([a-z][a-z0-9_]*):\s*([\s\S]*)$/.exec(raw);
+  if (!match) return { title: "La comparaison a échoué", text: raw };
+  const [, code, message] = match;
+  if (code === "result_too_large") {
+    const limit = /^Le résultat dépasse ([0-9]+) lignes\.$/.exec(message);
+    if (limit) {
+      const value = Number(limit[1]);
+      if (Number.isSafeInteger(value) && value > 0) {
+        return { ...COMPARISON.result_too_large, title: `Le résultat dépasse ${new Intl.NumberFormat("fr-FR").format(value)} lignes` };
+      }
+    }
+  }
+
+  return COMPARISON[code] ?? translated(code) ?? { title: "La comparaison a échoué", text: message || "Réessayez dans un instant." };
+}

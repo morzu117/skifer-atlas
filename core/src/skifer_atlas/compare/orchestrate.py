@@ -45,14 +45,15 @@ SIDES = ("canonical", "variant")
 _STORED_ERRORS = {
     "query_failed": "Échec de la requête sur la plateforme.",
     "duplicate_dimensions": "Plusieurs lignes correspondent à une même cellule.",
-    "result_too_large": "Le résultat dépasse la limite de lignes.",
     "query_canceled": "Requête annulée.",
     "missing_data": "Données locales introuvables.",
 }
 
 
-def _stored_error(error: RepoError) -> str:
+def _stored_error(error: RepoError, max_rows: int = MAX_ROWS) -> str:
     """Les messages bruts d'un moteur peuvent contenir des valeurs du résultat."""
+    if error.code == "result_too_large":
+        return f"result_too_large: Le résultat dépasse {max_rows} lignes."
     return f"{error.code}: {_STORED_ERRORS.get(error.code, 'Échec de la comparaison.')}"
 
 
@@ -384,6 +385,8 @@ def _keyed(result: QueryResult, side: Side, what: str) -> dict:
 
 def _execute(job: Job, runner: Runner) -> None:
     prepared = job.prepared
+    # Un futur runner avec une limite propre devra exposer max_rows.
+    max_rows = runner.max_rows if isinstance(runner, LocalRunner) else MAX_ROWS
     groups: dict[str, list[VariantPlan]] = {}
     for plan in prepared.plans:
         groups.setdefault(plan.platform, []).append(plan)
@@ -415,7 +418,7 @@ def _execute(job: Job, runner: Runner) -> None:
                     except RepoError as error:
                         canceled = job.cancel.is_set() or error.code == "query_canceled"
                         run["status"] = "cancelled" if canceled else "failed"
-                        run["error"] = _stored_error(error)
+                        run["error"] = _stored_error(error, max_rows)
                         failed = True
                     else:
                         run["status"], run["row_count"] = "done", len(result.rows)
@@ -446,7 +449,7 @@ def _execute(job: Job, runner: Runner) -> None:
                                   _keyed(variant, plan.variant, f"de « {plan.entity} »"),
                                   prepared.tolerance)
             except RepoError as error:
-                errors.append(_stored_error(error))
+                errors.append(_stored_error(error, max_rows))
                 continue
             cells.extend(_cell_row(plan, cell) for cell in found)
             summary = summarize(found)

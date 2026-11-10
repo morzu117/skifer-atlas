@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { explain } from "./messages";
+import { explain, explainComparisonError } from "./messages";
 
 describe("explain", () => {
   it("base occupée par un autre processus : la cause et quoi faire (ADR 0032)", () => {
@@ -82,7 +82,36 @@ describe("explain", () => {
     expect(actions).toEqual(["not_connected", "access_expired"]);
   });
 
+  it.each(["not_found", "platform_not_allowed", "invalid_access_points", "platform_forbidden", "wrong_passphrase", "key_file_unreadable", "invalid_key_file", "passphrase_required", "passphrase_unexpected", "oauth_failed", "oauth_unavailable"])(
+    "%s conserve le détail du serveur hors comparaison", (code) => {
+      expect(explain(new ApiError(400, code, "Détail précis du serveur."))).toEqual({ title: "L'opération a échoué", text: "Détail précis du serveur." });
+    },
+  );
+
   it("un code inconnu garde le titre générique et le texte du serveur", () => {
     expect(explain(new ApiError(500, "inconnu", "Détail du serveur."))).toEqual({ title: "L'opération a échoué", text: "Détail du serveur." });
+  });
+});
+
+describe("erreurs de comparaison enregistrées", () => {
+  // Contrat avec test_too_many_rows_does_not_persist_engine_message dans core/tests/compare/test_compare.py.
+  it.each([
+    ["result_too_large: Le résultat dépasse 50000 lignes.", "Le résultat dépasse 50 000 lignes"],
+    ["result_too_large: Le résultat dépasse la limite de lignes.", "Le résultat dépasse la limite de lignes"],
+  ])("traduit la limite disponible : %s", (raw, title) => {
+    expect(explainComparisonError(raw)).toEqual({ title, text: "Restreignez la période ou les entités, puis réessayez." });
+  });
+
+  it.each(["query_failed", "duplicate_dimensions", "query_canceled", "missing_data", "internal_error", "query_timeout", "access_expired", "not_connected", "host_unreachable", "platform_forbidden", "platform_not_found", "platform_not_supported", "key_file_unreadable", "passphrase_required", "passphrase_unexpected", "wrong_passphrase", "invalid_key_file", "oauth_failed", "oauth_unavailable", "not_found", "invalid_access_points", "platform_not_allowed", "access_host_mismatch", "vault_unavailable"])(
+    "traduit le code %s", (code) => {
+      const result = explainComparisonError(`${code}: Détail du serveur.`);
+      expect(result.text).not.toBe("Détail du serveur.");
+      expect(`${result.title} ${result.text}`).not.toContain(code);
+    },
+  );
+
+  it("garde le message d'un code inconnu sans son préfixe", () => {
+    expect(explainComparisonError("nouveau_code: Détail du serveur.")).toEqual({ title: "La comparaison a échoué", text: "Détail du serveur." });
+    expect(explainComparisonError("Détail sans code.").text).toBe("Détail sans code.");
   });
 });
