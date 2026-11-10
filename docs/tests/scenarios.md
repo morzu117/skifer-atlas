@@ -31,20 +31,20 @@
 | 0007 | 9 | 4 | 0 | 5 | 0 |
 | 0008 | 10 | 6 | 0 | 4 | 0 |
 | 0009 | 13 | 7 | 0 | 6 | 0 |
-| 0010 | 12 | 11 | 0 | 1 | 0 |
+| 0010 | 13 | 12 | 0 | 1 | 0 |
 | 0011 | 7 | 7 | 0 | 0 | 0 |
 | 0012 | 8 | 8 | 0 | 0 | 0 |
 | 0013 | 34 | 33 | 1 | 0 | 0 |
 | 0014 | 10 | 10 | 0 | 0 | 0 |
 | 0015 | 13 | 13 | 0 | 0 | 0 |
-| 0016 | 9 | 9 | 0 | 0 | 0 |
-| 0017 | 10 | 10 | 0 | 0 | 0 |
+| 0016 | 12 | 12 | 0 | 0 | 0 |
+| 0017 | 13 | 13 | 0 | 0 | 0 |
 | 0018 | 7 | 1 | 0 | 6 | 0 |
 | 0019 | 9 | 1 | 0 | 8 | 0 |
 | 0020 | 4 | 4 | 0 | 0 | 0 |
 | 0021 | 7 | 5 | 0 | 2 | 0 |
 | 0022 | 6 | 6 | 0 | 0 | 0 |
-| 0023 | 4 | 4 | 0 | 0 | 0 |
+| 0023 | 5 | 5 | 0 | 0 | 0 |
 | 0024 | 5 | 2 | 3 | 0 | 0 |
 | 0025 | 7 | 7 | 0 | 0 | 0 |
 | 0026 | 9 | 9 | 0 | 0 | 0 |
@@ -57,7 +57,7 @@
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | 0035 | 12 | 10 | 0 | 2 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **324** | **251** | **6** | **67** | **0** |
+| **Total** | **332** | **259** | **6** | **67** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -160,6 +160,13 @@ Plan 0010, suivi de la revue globale (#151) · Tests : `app/e2e/serveur-tauri.sp
 - **Quand** l'application devient prête et que je clique « Réessayer »
 - **Alors** rien n'avait été retenu : `invoke` est interrogé de nouveau, le bandeau disparaît, l'accueil liste Groupe Nordis, toutes les requêtes portent `Authorization: Bearer` avec le token fourni, et axe-core ne relève aucune violation sérieuse, sur l'écran de démarrage avec son bandeau comme après la reprise
 - Limite : le pont est une simulation ; le vrai `invoke` n'existe que dans la fenêtre Tauri. Vitest couvre en plus le repli sans token hors Tauri, un token vide rendu par l'application et le message « Relancez Skifer Atlas ».
+
+### S-0010-13 — Le compte de propositions à relire se voit sur la carte et dans la navigation
+Plan 0010, critère 1 (compteurs de revue) · Test : `app/e2e/accueil-revue.spec.ts` › `[S-0010-13]` (deux tests : claire.m, anna.k)
+- **Étant donné** la copie isolée de la démonstration sur trois serveurs : claire.m, validatrice Finance, a plusieurs propositions à relire (l'API `for_me` en donne le nombre) ; anna.k, contributrice et autrice de la surcharge DE, n'en a aucune
+- **Quand** claire.m ouvre l'accueil, puis l'espace, puis approuve la surcharge DE dans Propositions
+- **Alors** la carte de l'espace affiche « N propositions en attente » (`count-warn`) et l'entrée « Propositions » de la navigation « N en attente de votre revue » ; après l'approbation, les deux comptes baissent d'une unité, la carte relue au retour à l'accueil
+- **Et** pour anna.k la carte affiche « Aucune proposition » sans `count-warn`, et la navigation n'a aucun compteur
 
 **Plan 0025**
 
@@ -1552,6 +1559,30 @@ Plan 0016, critère 9 · Tests : `app/e2e/connexions-testables.spec.ts` › `[S-
 - **Et** le port libéré, la connexion aboutit ; Vitest garantit que seuls `not_connected` et `access_expired` portent l'action de reconnexion
 - Limite : les trois autres codes restent en Vitest. `vault_unavailable` : le coffre des tests est en mémoire, un trousseau verrouillé ne se fabrique pas. `query_timeout` : la requête de test attend 60 s avant d'abandonner (un test de plus d'une minute pour une consigne déjà vue en Vitest). `host_rejected` : propre aux propositions GitHub, que le faux GitHub ne refuse pas en 422. Le texte propre au rattachement d'un dépôt (`host_unreachable` : « Dépôt injoignable ») reste prioritaire dans le formulaire de rattachement : `app/src/screens/Rattachement.test.tsx` › `[S-0033-02]`. Les autres codes émis par les routes de connexion (`platform_forbidden`, `platform_not_found`, `oauth_unavailable`, `oauth_failed`, les clés Snowflake) gardent le message du serveur, qui dit déjà la cause et la suite.
 
+### S-0016-10 — Une autorisation sans réponse échoue au bout de 5 minutes, et « Se connecter » repart
+Plan 0016, critère 2 (délai de l'OAuth) · Test : `app/e2e/connexions-etats.spec.ts` › `[S-0016-10]`
+- **Étant donné** un espace isolé, l'horloge de la page avançant à la main (`page.clock`), et la page d'autorisation du faux Databricks interrompue au niveau du contexte : la fenêtre s'ouvre, personne ne répond
+- **Quand** je clique « Se connecter à Databricks · dbx-fr », laisse passer 4 minutes, puis 61 secondes de plus
+- **Alors** après 4 minutes la ligne n'a pas d'alerte ; après 5 minutes l'alerte « Délai dépassé : La connexion n'a pas abouti en 5 minutes : réessayer. » s'affiche
+- **Et** une fois la page d'autorisation rétablie, « Se connecter » ouvre une seconde fenêtre, la connexion aboutit (« Connecté · session OAuth ») et l'alerte disparaît
+
+### S-0016-11 — Sans plateforme autorisée, ou en simple lecteur, rien ne permet d'ajouter un point d'accès
+Plan 0016, critère 6 (cas limite) · Tests : `app/e2e/connexions-etats.spec.ts` › `[S-0016-11]` (deux tests : les états, l'accessibilité)
+- **Étant donné** un espace isolé dont `allowed_platforms` est vide (commit poussé, sync fait), julien.h référent de l'espace
+- **Quand** j'ouvre « Mes connexions »
+- **Alors** l'aside « Aucune plateforme connectable autorisée » dit qu'un référent de l'espace doit autoriser Databricks ou Snowflake dans l'administration, avec le lien « Configurer les plateformes » ; ni bouton « Ajouter un point d'accès », ni panneau « Nouveau point d'accès » ; le point existant reste listé avec « Plateforme retirée par le référent »
+- **Et** si l'espace est lu en rôle `lecteur` (réponse de `GET /api/workspaces/{id}` réécrite), ni l'avis, ni le bouton, ni le panneau ne sont affichés, et le tableau reste lisible
+- **Et** l'écran sans plateforme autorisée n'a aucune violation d'accessibilité sérieuse
+- Limite : le second test est rouge tant que le conteneur de défilement `.table-wrap` (scroll horizontal dès que l'aside tient à côté du tableau) n'est pas focalisable au clavier, règle axe `scrollable-region-focusable`.
+
+### S-0016-12 — Un identifiant déjà déclaré est refusé pour se connecter ou tester, avec la consigne
+Plan 0016, critère 9 (code `access_point_exists`) · Test : `app/e2e/connexions-etats.spec.ts` › `[S-0016-12]`
+- **Étant donné** le panneau « Nouveau point d'accès » rempli avec l'identifiant `dbx-fr`, déjà déclaré
+- **Quand** je clique « Tester la connexion », puis « S'authentifier avec OAuth »
+- **Alors** une alerte dit « « dbx-fr » est déjà déclaré : s'y connecter depuis la liste. », sans trace ni code brut, aucun test n'est rendu, aucune fenêtre ne s'ouvre et rien n'est rangé dans le coffre
+- **Et** avec un identifiant libre, l'alerte disparaît
+- Limite : le code n'a pas de titre dans `messages.ts` : l'écran montre le message du serveur, qui dit déjà la cause et la suite.
+
 **Plan 0018**
 
 ### S-0018-02 — Paire de clés avec passphrase
@@ -1723,6 +1754,26 @@ Plan 0017, critère 10 · Test : `app/e2e/administration.spec.ts` › `[S-0017-1
 - **Quand** je clique un onglet de la navigation
 - **Alors** la vue s'ouvre aussitôt, sans question
 
+### S-0017-11 — Une gouvernance modifiée ailleurs refuse l'enregistrement ; « Relire les paramètres » efface le brouillon
+Plan 0017, critère 8 (base périmée) · Test : `app/e2e/administration-etats.spec.ts` › `[S-0017-11]`
+- **Étant donné** julien.h dans l'Administration d'une copie isolée, avec BigQuery cochée, puis un commit poussé qui change `governance.yaml` (le libellé de Marketing) et un sync fait
+- **Quand** je clique « Enregistrer et … »
+- **Alors** une alerte avec « Relire les paramètres » s'affiche, sans trace ni code brut, aucune proposition n'est créée et la branche principale du dépôt n'a pas bougé
+- **Et** « Relire les paramètres » ferme l'alerte, décoche BigQuery, affiche le libellé « Marketing et communication » et désactive de nouveau « Enregistrer »
+
+### S-0017-12 — Inviter un membre : compte mal formé ou déjà membre refusé, puis ajouté à governance.yaml
+Plan 0017, critère 4 (membres) · Test : `app/e2e/administration-etats.spec.ts` › `[S-0017-12]`
+- **Étant donné** julien.h, seul référent, dans l'Administration d'une copie isolée
+- **Quand** je clique « Inviter », saisis « Léa M. », puis le compte « léa m », puis « anna.k », puis « lea.m », en cliquant « Ajouter le membre » à chaque fois, et enfin « Enregistrer et fusionner »
+- **Alors** le champ du compte est décrit par « Le compte de la personne sur l'hébergeur (lettres, chiffres, . _ -). » puis « Ce compte est déjà membre de l'espace. » ; le rappel « l'accès au dépôt se donne sur l'hébergeur » est affiché
+- **Et** le membre « Léa M. » apparaît, l'enregistrement est « fusionné sans revue », `governance.yaml` du dépôt porte `account: lea.m`, et l'API la donne contributrice sans domaine
+
+### S-0017-13 — Une référente de domaine n'a ni lien d'administration, ni accès à l'écran, ni à l'API
+Plan 0017, critère 1 (référent de domaine) · Test : `app/e2e/administration-etats.spec.ts` › `[S-0017-13]` ; `app/src/App.test.tsx` (composant)
+- **Étant donné** claire.m, référente du seul domaine Finance, sur son serveur et la copie isolée de la démonstration
+- **Quand** j'ouvre le catalogue, puis `administration`
+- **Alors** la navigation n'a pas de lien « Administration », `GET /admin` répond 403, et l'adresse `administration` retombe sur le catalogue
+
 **Plan 0020**
 
 ### S-0020-01 — Une fusion faite hors d'Atlas est taguée au sync
@@ -1733,26 +1784,28 @@ Plan 0020, critère 1 · Test : `app/e2e/administration.spec.ts` › `[S-0020-01
 - **Et** la fiche affiche « v5 · validée … », et l'onglet « Versions 5 » montre « v5 · courante »
 
 ### S-0020-02 — Une version déjà taguée ne produit ni tag ni avertissement
-Plan 0020, critère 2 · Test : `app/e2e/administration.spec.ts` › `[S-0020-02]`
+Plan 0020, critère 2 · Tests : `app/e2e/administration.spec.ts` › `[S-0020-02]` ; `app/e2e/depot-testables.spec.ts` › `[S-0020-02]`
 - **Étant donné** le même espace, v5 déjà taguée
 - **Quand** je clique de nouveau « Synchroniser »
 - **Alors** « Déjà à jour avec le dépôt distant. » s'affiche, et la liste des tags du dépôt distant est inchangée
-- Limite : le commit sans changement de version est vérifié par `core/tests/repo/test_workspace_repo.py::test_sync_leaves_versions_tagged_by_atlas_alone`.
+- **Et** un commit poussé qui ne change que le libellé de Revenu net, sans changer sa version, puis « Synchroniser », ne produit ni avertissement ni tag, ni dans le dépôt nu ni dans le clone
+- Limite : le détail de la règle est vérifié par `core/tests/repo/test_workspace_repo.py::test_sync_leaves_versions_tagged_by_atlas_alone`.
 
 ### S-0020-03 — Une poussée de tag refusée garde le tag local et le signale
 Plan 0020, critère 3 · Test : `app/e2e/depot-testables.spec.ts` › `[S-0020-03]`
 - **Étant donné** un espace isolé où Revenu net passe en v5 par une fusion git (`--no-ff`) poussée hors d'Atlas ; le dépôt nu refuse les tags (crochet `pre-receive`)
 - **Quand** je clique « Synchroniser » dans Administration
 - **Alors** la région « Dépôt Git de l'espace » affiche « Les tags n'ont pas pu être poussés »
-- **Et** le clone porte `doc/revenu-net/v5` sur le commit de fusion, et le dépôt nu n'a pas ce tag
-- Limite : plusieurs avertissements à la fois sont rendus en Vitest : `app/src/screens/Administration.test.tsx` › `[S-0020-03]`.
+- **Et** le même statut affiche aussi « taguée au sync » (les deux avertissements arrivent ensemble), le clone porte `doc/revenu-net/v5` sur le commit de fusion, et le dépôt nu n'a pas ce tag
+- **Et** quand le crochet est retiré, le « Synchroniser » suivant publie le tag sur le commit de fusion dans le dépôt nu et l'avertissement disparaît
+- Limite : le rendu de plusieurs avertissements à la fois est aussi couvert en Vitest : `app/src/screens/Administration.test.tsx` › `[S-0020-03]`.
 
 ### S-0020-04 — L'écran affiche l'avertissement du sync
 Plan 0020, critère 4 · Test : `app/e2e/administration.spec.ts` › `[S-0020-04]`
 - **Étant donné** la v5 fusionnée hors d'Atlas
 - **Quand** je clique « Synchroniser »
 - **Alors** le statut de la région « Dépôt Git de l'espace » contient « taguée au sync »
-- Limite : plusieurs avertissements à la fois sont vérifiés par le test Vitest `app/src/screens/Administration.test.tsx` › `[S-0020-03]`.
+- Limite : l'affichage simultané de « taguée au sync » et de l'échec de poussée des tags est vérifié en e2e par S-0020-03.
 
 **Plan 0023**
 
@@ -1780,6 +1833,13 @@ Plan 0023, critère 4 · Test : `app/e2e/administration.spec.ts` › `[S-0023-04
 - **Étant donné** Anna K., contributrice de l'espace isolé
 - **Quand** je clique « + Ajouter un rôle », choisis validateur limité à Marketing, applique, enregistre et recharge
 - **Alors** « Rôle 1 » vaut contributeur et « Rôle 2 » validateur
+
+### S-0023-05 — Les formulaires de retrait disent pourquoi un retrait est impossible ou ce qu'il entraîne
+Plan 0023, spécification des consignes · Test : `app/e2e/administration-etats.spec.ts` › `[S-0023-05]`
+- **Étant donné** julien.h, seul référent, dans l'Administration d'une copie isolée
+- **Quand** j'ouvre successivement Julien H., le domaine Finance, puis Anna K. avec un deuxième rôle « contributeur » ; puis je nomme Claire M. référente de l'espace, rouvre Julien H. et Anna K. et retire Anna K.
+- **Alors** Julien H. porte « Seul référent de l'espace : nommez-en un autre avant de le retirer. » et son retrait est désactivé ; Finance porte « N documents rattachés : les rattacher à un autre domaine avant de le retirer. » et son retrait est désactivé ; le rôle en double est décrit par « Ce rôle figure déjà : regroupez ses domaines. » et le formulaire reste ouvert
+- **Et** avec deux référents, le retrait de Julien H. est actif et dit « Vous retirer vous ôtera l'administration de l'espace une fois la proposition fusionnée. » ; celui d'Anna K. dit « L'accès au dépôt se retire sur l'hébergeur. » et ouvre une proposition à relire dont le texte contient « Anna K. (anna.k) retiré. »
 
 **Plan 0033**
 
@@ -2126,7 +2186,7 @@ Plan 0026, critère 3 · Test : `app/e2e/parcours.webkit.spec.ts` › `[S-0026-0
 - **Quand** je place le focus sur « Définition », appuie deux fois sur Tab, puis Entrée, choisis De 3 et À 4 et clique « Afficher les écarts »
 - **Alors** le graphe compte sept cartes et aucun champ ; le focus passe à Déclinaisons puis Versions
 - **Et** trois écarts s'affichent, et n06 est « ajouté » dans le graphe de la version 4
-- Les onglets sont des boutons avec tabulation explicite : le test utilise Tab seul sous WebKit macOS.
+- Limite : les onglets sont des boutons à `tabIndex={0}` explicite (`app/src/screens/Fiche.tsx`, ADR 0030, révisé) : Tab et Entrée suffisent, sans ⌥Tab, aussi bien sous Chromium (où tout bouton est tabulable) que sous WebKit macOS (où Tab seul sauterait des liens). Le test ne tourne que sous WebKit, le seul moteur où la différence existait ; la note de ⌥Tab dans la « Mise en œuvre » du plan 0026 date d'avant le passage aux boutons. Vue web sous WebKit, pas la fenêtre Tauri.
 
 ### S-0026-04 — Sélectionner, déplacer, supprimer puis annuler au clavier
 Plan 0026, critère 4 · Test : `app/e2e/parcours.webkit.spec.ts` › `[S-0026-04]`
