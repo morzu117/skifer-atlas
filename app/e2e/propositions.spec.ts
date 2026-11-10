@@ -39,7 +39,10 @@ async function asClaire(page: Page) {
   const posted: string[] = [];
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
-    if (request.method() === "POST") posted.push(new URL(request.url()).pathname);
+    // Les écritures de l'utilisateur ; la synchronisation automatique de la coque (ADR 0049)
+    // part d'elle-même à l'ouverture de l'espace et n'en est pas une.
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "POST" && !path.endsWith("/sync/auto")) posted.push(path);
     const response = await route.fetch({ url: request.url().replace(API, CLAIRE) });
     await route.fulfill({ response });
   });

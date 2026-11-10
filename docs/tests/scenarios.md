@@ -55,8 +55,9 @@
 | 0032 | 2 | 2 | 0 | 0 | 0 |
 | 0033 | 12 | 9 | 2 | 1 | 0 |
 | 0034 | 10 | 9 | 0 | 1 | 0 |
+| 0035 | 12 | 10 | 0 | 2 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **310** | **238** | **6** | **66** | **0** |
+| **Total** | **322** | **248** | **6** | **68** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1953,6 +1954,127 @@ Plan 0019, critère 4 · Test : `app/e2e/hors-ligne.spec.ts` › `[S-0019-04]`
 - **Alors** le catalogue et la fiche s'ouvrent, et le SQL Databricks puis le SQL Snowflake contiennent `SELECT`
 - Limite : seul le navigateur est coupé du réseau ; le serveur Python ne l'est pas. Le binaire figé hors ligne est vérifié par `core/tests/test_sidecar.py::test_frozen_binary_works_offline`.
 
+## Parcours de bout en bout
+
+`app/e2e/bout-en-bout.spec.ts` : des histoires qui traversent plusieurs écrans et plusieurs comptes, sur les faux services. Chaque compte a son serveur (anna.k sur le serveur principal, claire.m, marc.d et julien.h sur les leurs) ; une page de plus du même contexte, dont les appels sont relayés vers le serveur du compte, joue ce compte. Chaque test a ses espaces et ses dépôts nus, sans ordre ni état partagé. Chaque étape se contrôle deux fois, à l'écran et dans le dépôt (fichiers, messages de fusion, tags), et axe-core ne relève aucune violation sérieuse ou critique aux étapes clés.
+
+**Plan 0035**
+
+### S-0035-01 — Une équipe s'installe : du dépôt vide au premier KPI relu à deux
+Plan 0035, critère 1 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-01]`
+- **Étant donné** anna.k, qui crée l'espace « Perrault » (entités perrault-fr et perrault-it) et un dépôt nu vide ; claire.m et marc.d ont chacun leur serveur
+- **Quand** elle rattache le dépôt, ajoute le domaine Finance, invite Claire M. (référente du domaine) et Marc D. (validateur du domaine), fixe deux validations pour le canonique, autorise Databricks et enregistre
+- **Alors** « Paramètres enregistrés : proposition n° N fusionnée sans revue. » s'affiche et `governance.yaml` du dépôt porte le domaine, les deux comptes et la plateforme
+- **Quand** elle crée, authentifie par OAuth, teste et propose le point d'accès `dbx-perrault`, puis le fusionne
+- **Alors** la proposition se fusionne « sans revue : aucun autre compte habilité », le message de fusion dit `Atlas-Review: none (no other eligible approver)`, le dépôt contient le point d'accès et la page ne garde aucun jeton
+- **Quand** Claire et Marc rejoignent le dépôt depuis leur poste
+- **Alors** leurs rôles viennent de la gouvernance publiée : claire.m « référent » sans être référente d'espace, marc.d « validateur »
+- **Quand** Anna propose le KPI « Chiffre d'affaires » (domaine Finance), puis que Claire et Marc l'approuvent chacun depuis leur écran
+- **Alors** la barre latérale de Claire annonce une proposition « en attente de votre revue », la file d'Anna dit « Validations : 2 / 2 · prête à fusionner », et sa fusion écrit `kpis/chiffre-affaires.yaml`, le message `Atlas-Proposal: N` et `Atlas-Review: approved by claire.m, marc.d`, et le tag `doc/chiffre-affaires/v1`
+- **Et** le catalogue d'Anna montre le KPI sous Finance, et sa fiche dit « v1 · validée le … »
+- Limite : le même parcours avec un vrai dépôt GitHub (S-0035-11) ne peut pas tourner : le faux GitHub n'a pas d'API de pull request. Le rattachement GitHub seul est S-0033-03 et S-0033-04. Après la fusion, ce que Claire et Marc voient de la v1 dans leur catalogue dépend de la synchronisation d'un compte qui n'a pas fusionné : S-0035-10.
+
+### S-0035-02 — Un KPI relu à deux : changements demandés, réponse, correction, nouvelle approbation, fusion
+Plan 0035, critère 2 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-02]`
+- **Étant donné** Groupe Nordis isolé, Claire et Marc ayant rejoint le dépôt, et Anna qui a proposé le KPI Finance « Taux de recouvrement »
+- **Quand** Claire demande des changements en disant lesquels
+- **Alors** son écran et celui d'Anna montrent « Claire M. demande des changements » et « Changements demandés par claire.m. », avec le commentaire
+- **Quand** Anna répond dans le fil, corrige la définition sur la branche de la proposition (commit poussé avec git) et que Marc approuve la nouvelle version
+- **Alors** la file dit « Validations : 1 / 2 », le blocage de Claire demeure, la fusion demandée à l'API est refusée (409 `not_ready`) et la branche principale n'a pas bougé
+- **Quand** Claire approuve à son tour la nouvelle version
+- **Alors** sa demande est remplacée, la proposition est prête, elle la fusionne : le dépôt a la définition corrigée, le message `Atlas-Review: approved by claire.m, marc.d` et le tag `doc/taux-de-recouvrement/v1`
+- **Et** chez Claire, qui a fusionné, le catalogue dit v1 et la fiche montre la définition corrigée ; chez Anna, la proposition figure parmi les fusionnées
+- Limite : l'écran n'a pas de route pour réviser ou fermer une proposition (« Reste à faire » du plan 0006) : la correction passe par un commit poussé à la main sur la branche. Les approbations données avant ce commit ne comptent plus (S-0006-03).
+
+### S-0035-03 — Revenu net de v4 à v5, avec deux KPI qui s'y appuient
+Plan 0035, critère 3 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-03]`
+- **Étant donné** Groupe Nordis isolé, dont Marge brute et Panier moyen référencent Revenu net v4
+- **Quand** Anna ouvre la fiche (« Une nouvelle version touchera 2 documents. »), choisit « Proposer une modification », change le libellé du filtre n02 et soumet
+- **Alors** la proposition apparaît à côté de celle de julien.h (même titre, auteure « Anna K. »), son diff montre un seul écart « Sans effet »
+- **Quand** Marc puis Claire approuvent et que Claire fusionne
+- **Alors** le dépôt a `version: 5` et le nouveau libellé, le tag `doc/revenu-net/v5`, la trace des deux revues, et aucun changement dans `kpis/marge-brute.yaml`, `kpis/panier-moyen.yaml` ni `variants/`
+- **Et** chez Claire, le catalogue dit v5 pour Revenu net et v2 pour Marge brute, l'onglet Versions compte 5 versions dont la v5 courante, le diff de v4 à v5 est un écart « Sans effet » et le graphe de la v5 porte le nouveau libellé, et « Référencé par » liste toujours Panier moyen et Marge brute
+- Limite : les références restent épinglées sur la v4 : l'écran n'indique pas qu'elles sont en retard sur la v5 (constat, pas un test).
+
+### S-0035-04 — Une règle locale : déclinaison nordis-it en surcharge hors points déclarés
+Plan 0035, critère 4 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-04]`
+- **Étant donné** Groupe Nordis isolé, une entité nordis-it ajoutée au dépôt puis synchronisée
+- **Quand** Anna crée la déclinaison depuis la fiche de Revenu net, remplace le filtre n02 (hors points déclarés) avec sa justification et soumet
+- **Alors** le récapitulatif annonce « Hors points déclarés : la validation canonique s'appliquera » et les validations requises ; la file montre le badge « Hors points déclarés » et « Validations : 0 / 2 (canonique requis) »
+- **Quand** Marc approuve
+- **Alors** « Validations : 1 / 2 (canonique requis) », pas de bouton « Fusionner » pour Anna, la fusion demandée à l'API est refusée (409) et le dépôt n'a pas de fichier nordis-it
+- **Quand** Claire approuve à son tour et fusionne
+- **Alors** le dépôt a `variants/revenu-net/nordis-it.yaml` avec la surcharge de n02 et `Atlas-Review: approved by claire.m, marc.d`
+- **Et** la fiche de Revenu net compte 4 déclinaisons dont nordis-it en surcharge, et le diff au canonique de nordis-it montre le nœud n02
+- Limite : pas de comparaison chiffrée pour nordis-it : les fichiers de données locaux (`core/tests/fixtures/compare/revenu-net`) ne couvrent que nordis-de, nordis-fr et nordis-es.
+
+### S-0035-05 — Se connecter aux trois plateformes, puis comparer les entités
+Plan 0035, critère 5 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-05]`
+- **Étant donné** Groupe Nordis isolé, qu'Anna n'a jamais comparé ni connecté
+- **Quand** elle se connecte à dbx-fr (OAuth), snow-de (SSO) et snow-es (paire de clés) depuis Mes connexions, et teste dbx-fr
+- **Alors** chaque ligne dit « Connecté » avec son mode, « Connexion OK · N ms » s'affiche, la page ne garde aucun jeton ni passphrase, et le catalogue dit « Jamais comparé » pour Revenu net
+- **Quand** elle lance la comparaison de Revenu net sur les trois entités
+- **Alors** le lancement est accepté (202), puis la matrice : nordis-de 94 % (écart max 6,1 %), nordis-fr 100 %, nordis-es 75 % (écart max 2,9 %)
+- **Quand** elle ouvre le détail allemand puis le nœud divergent n02
+- **Alors** Sept. 2026 est « +6,1 % hors tolérance » et la fiche de nordis-de s'ouvre sur le diff au canonique avec n02 sélectionné
+- **Et** le catalogue ne dit plus « Jamais comparé » (« N divergences »), l'aperçu donne la dernière comparaison, et l'historique la liste avec « nordis-de 94 % · nordis-es 75 % · nordis-fr 100 % »
+- Limite : les chiffres viennent des fichiers locaux lus par DuckDB (`ATLAS_COMPARE_DATA`), pas des faux Databricks et Snowflake, qui n'exécutent pas le SQL : les connexions sont réelles pour le coffre et l'écran, pas pour le calcul ; la progression par plateforme n'est pas attendue ici (le calcul local est trop rapide), elle est vérifiée en S-0009-01.
+
+### S-0035-06 — La session OAuth expire : la comparaison attend la reconnexion
+Plan 0035, critère 6 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-06]`
+- **Étant donné** un faux Databricks qui rend des jetons périmés et refuse le rafraîchissement
+- **Quand** julien.h se connecte à dbx-fr depuis Mes connexions
+- **Alors** la ligne dit « Session expirée » et propose « Reconnecter Databricks · dbx-fr »
+- **Quand** il prépare la comparaison de nordis-fr et clique le lancement
+- **Alors** « Connexion requise » s'affiche avec « Se connecter à dbx-fr », le bouton est marqué indisponible et aucune requête de lancement n'est partie
+- **Quand** le faux rend de nouveau des jetons valides et qu'il se reconnecte depuis la comparaison
+- **Alors** la fenêtre OAuth confirme, le lancement mémorisé part tout seul (réponse 202, une seule requête), la bannière disparaît et Mes connexions dit « Connecté · session OAuth », sans aucun jeton dans la page
+- Limite : le faux Databricks ne calcule pas le SQL : seule la reprise du lancement est vérifiée, pas son résultat (S-0015-04, S-0008-04).
+
+### S-0035-07 — Fusions contrariées : base avancée, branche protégée, puis fusion réussie
+Plan 0035, critère 7 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-07]`
+- **Étant donné** Groupe Nordis isolé : la v5 de julien.h déjà approuvée par Marc, et celle d'Anna qu'elle vient de proposer à côté
+- **Quand** Claire approuve et fusionne celle de julien.h, puis que Marc et Claire approuvent celle d'Anna
+- **Alors** la file d'Anna la dit « prête à fusionner », mais « Fusionner » est refusé (409 `stale_base`) : une alerte « La version de départ a changé » donne le message du serveur (le fichier du KPI a changé depuis la proposition), la branche principale est celle de la fusion de julien.h et la proposition reste ouverte
+- **Quand** le dépôt refuse toute écriture sur sa branche principale et qu'Anna fusionne « Taux de service · canonique v3 » (prête)
+- **Alors** une alerte « Le dépôt a refusé la fusion » s'affiche, la branche principale n'a pas bougé, Taux de service est toujours en v2 et la proposition reste dans la file
+- **Quand** le blocage est levé et qu'elle réessaie
+- **Alors** « Proposition n° 2 fusionnée », le dépôt a la v3, le message `Atlas-Proposal: N` et le tag `doc/taux-de-service/v3`
+- Limite : la branche protégée est simulée par un hook `pre-receive` du dépôt nu qui refuse `refs/heads/main` ; la règle d'un hébergeur (GitHub, `branch_protected`) n'est pas reproduite.
+
+### S-0035-08 — Hors ligne puis retour : lire, brouillonner, échouer proprement, renvoyer
+Plan 0035, critère 8 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-08]`
+- **Étant donné** Groupe Nordis isolé, dont le dépôt distant devient injoignable (le dossier du dépôt nu est déplacé)
+- **Quand** Anna recharge la fiche, ouvre le catalogue, puis « Proposer une modification » et saisit une description
+- **Alors** la fiche et le catalogue s'affichent depuis la copie locale, l'éditeur enregistre le brouillon « (local) »
+- **Quand** elle soumet la proposition
+- **Alors** une alerte s'affiche dans le récapitulatif, aucune proposition n'est créée et le dépôt n'a pas de branche de plus
+- **Quand** elle ouvre la file des propositions
+- **Alors** une alerte « Le dépôt est inaccessible » invite à vérifier le réseau ou l'accès au dépôt, puis à réessayer
+- **Quand** le dépôt revient et qu'elle rouvre l'éditeur
+- **Alors** la file se relit (5 propositions), le brouillon est intact, le même envoi réussit et le dépôt a une branche de proposition de plus
+- Limite : la panne est celle du dépôt distant seul, le navigateur et le serveur local restent en ligne (la coupure réseau du navigateur est S-0019-04).
+
+### S-0035-09 — Deux espaces sur le même poste : rien ne passe de l'un à l'autre
+Plan 0035, critère 9 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-09]`
+- **Étant donné** deux espaces issus de la démonstration, « Alpha » où Anna est contributrice et « Bêta » où elle n'est que lectrice, et une approbation de Claire sur une proposition d'Alpha seulement
+- **Quand** Anna filtre le catalogue d'Alpha, lit sa file, se connecte à dbx-fr et laisse un brouillon dans l'éditeur
+- **Alors** Alpha montre « Validations : 1 / 2 » pour la proposition approuvée, « Connecté · session OAuth » et son brouillon
+- **Quand** elle passe à Bêta par le sélecteur d'espaces
+- **Alors** le champ de recherche est vide, les 7 documents sont là, la file dit « Validations : 0 / 2 », dbx-fr est « Jamais connecté », ni « Nouveau concept ou KPI » ni « Proposer une modification » ne s'offrent, et l'éditeur d'un document renvoie vers l'écran de lecture
+- **Quand** elle revient à Alpha
+- **Alors** la connexion et le brouillon sont toujours là ; l'API de Bêta n'a aucun brouillon pour ce document
+- Limite : le sélecteur d'espaces mène d'un espace à l'autre sans recharger la page : ce que le test contrôle est qu'aucun état de l'écran, du coffre ou des brouillons ne fuit entre espaces.
+
+### S-0035-10 — Après la fusion d'une collègue, repartir de la version courante
+Plan 0035, critère 10 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-10]`
+- **Étant donné** Groupe Nordis isolé, et Claire qui approuve puis fusionne depuis son poste la v5 de julien.h (Marc l'a déjà approuvée)
+- **Quand** Anna, contributrice, rouvre le catalogue et la fiche de Revenu net
+- **Alors** le catalogue dit v5, la fiche dit « v5 · validée le … » avec 5 versions
+- **Quand** elle choisit « Proposer une modification »
+- **Alors** le brouillon s'ouvre en « Revenu net : v6 · brouillon »
+- Limite : la synchronisation automatique d'un espace (ADR 0049) relit le dépôt à l'ouverture de l'espace et aux changements d'écran, au plus une fois toutes les 30 s : le test s'appuie sur ce comportement sans bouton « Synchroniser ».
+
 ## Parcours WebKit
 
 `app/e2e/parcours.webkit.spec.ts` tourne sous WebKit, le moteur de la vue Tauri sous macOS, après Chromium et sur les mêmes serveurs, sans supposer leur état. Chaque test vérifie aussi qu'axe-core ne relève aucune violation sérieuse ou critique.
@@ -2141,6 +2263,8 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 | S-0031-03 | Les trois dialectes rendent les mêmes jours locaux ; aucun SQL Snowflake ne contient `AS TIMESTAMP)` | Exécution DuckDB et SQL de référence, sans écran | `core/tests/compile/test_ecarts.py::test_the_paris_day_does_not_depend_on_the_session_zone`, `::test_no_timestamp_cast_depends_on_the_session`, `::test_no_reference_sql_casts_to_a_session_timestamp` |
 | S-0033-09 | Avec un compte GitHub réel, un dépôt vide créé sans README reçoit l'espace ; le créateur y reste référent | Compte GitHub réel : le faux GitHub reproduit la forme documentée de `/user` et de `/repos/…`, pas les droits réels (`permissions`), le SSO d'organisation ni les règles de branche | `core/tests/repo/test_set_remote.py` ; `app/e2e/rattachement.spec.ts` › `[S-0033-04]` |
 | S-0034-09 | Avec un compte GitHub réel, la réinitialisation laisse la publication partielle sur le dépôt, qui se vide ou se supprime sur l'hébergeur avant de le réutiliser | Compte GitHub réel : ce que garde l'hébergeur après une publication partielle (branche, historique) et la façon de le vider ne se voient qu'avec un compte réel | `core/tests/repo/test_reset_remote.py` (références du dépôt distant identiques avant et après) ; `app/e2e/reinitialisation.spec.ts` › `[S-0034-03]` |
+| S-0035-11 | Le parcours d'une équipe sur un dépôt GitHub réel : rattachement, domaine et membres, premier KPI proposé en pull request, relu à deux comptes GitHub et fusionné | Compte GitHub réel : les pull requests, les revues, les droits d'écriture, la fusion et la protection de branche sont ceux de l'hébergeur. Le faux GitHub (`core/tests/connections/fake_github.py`) ne sert que le device flow, `/user` et la lecture d'un dépôt : sans API de pull request, la suite d'un rattachement GitHub (proposition, revue, fusion) n'a rien à qui parler | `app/e2e/bout-en-bout.spec.ts` › `[S-0035-01]` (même parcours sur dépôts nus locaux) ; `app/e2e/rattachement.spec.ts` › `[S-0033-03]`, `[S-0033-04]` (rattachement GitHub) ; `core/tests/repo/test_githost.py` (hébergeur GitHub simulé) |
+| S-0035-12 | Le parcours d'une analyste sur ses vraies plateformes : connexion Databricks et Snowflake réelles, comparaison chiffrée sur des tables de production, dans la fenêtre native Tauri avec le vrai trousseau | Comptes Databricks et Snowflake réels, fenêtre native Tauri, navigateur du système pour l'OAuth et vrai trousseau : l'e2e tourne dans un navigateur de test contre des faux qui n'exécutent pas le SQL, avec un coffre en mémoire | `app/e2e/bout-en-bout.spec.ts` › `[S-0035-05]`, `[S-0035-06]` (mêmes écrans, faux services) ; `core/tests/test_sidecar.py` |
 | S-RAF-01 | Installation sur un poste vierge de chaque OS, puis accueil → catalogue → fiche | Fenêtre native Tauri, installateurs signés, postes vierges ; WebKit ne teste que les vues | `.github/workflows/release.yml` ; `core/tests/test_sidecar.py` ; `core/tests/test_release.py` |
 | S-RAF-09 | Keyring et connecteurs figés sous Windows | Poste Windows réel ; l'e2e utilise un coffre en mémoire | `core/tests/test_sidecar.py` ; `core/tests/connections/test_connections.py` ; `core/tests/connections/test_snowflake.py` |
 | S-RAF-10 | Extraction d'un vrai script de production anonymisé | Revue produit : le script est à fournir et valider par son propriétaire | `core/tests/extract/test_extract.py` (corpus synthétique) |
