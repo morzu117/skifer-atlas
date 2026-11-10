@@ -4,9 +4,15 @@ Le navigateur choisit autorisation, refus ou expiration ; aucun compte réel.
 `/repos/<propriétaire>/<dépôt>` (plan 0033) répond d'après le préfixe du nom : `introuvable-`
 donne 404, `lecture-` un compte sans droit de pousser, `archive-` un dépôt archivé ; tout
 autre dépôt est accessible en écriture.
+
+Les pull requests (plan 0006) : créées, listées et relues sans revue ni commentaire ; la
+fusion répond ce que `/__test__/configure` lui demande (par exemple 405, une règle de
+protection de la branche) et, sans réglage, 200 sans rien fusionner dans le dépôt.
 """
 
 import json
+import os
+import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -14,6 +20,20 @@ from uuid import uuid4
 
 TOKEN = "gho_jeton-du-device-flow"
 FLOWS: dict[str, str] = {}
+PULLS: dict[str, list[dict]] = {}  # « propriétaire/dépôt » → pull requests
+SETTINGS: dict = {"merge_error": None}  # (statut, charge utile) rendus par la fusion
+
+
+def head_sha(repo: str, branch: str) -> str:
+    """Le commit de la branche dans le dépôt nu qui tient lieu de GitHub, s'il se trouve."""
+    folder = os.environ.get("ATLAS_E2E_DATA")
+    if folder:
+        path = os.path.join(folder, "depots-github", f"{repo}.git")
+        found = subprocess.run(["git", "ls-remote", path, f"refs/heads/{branch}"],
+                               capture_output=True, text=True, check=False).stdout.split()
+        if found:
+            return found[0]
+    return "a" * 40
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -28,7 +48,56 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _body(self):
+        raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        return json.loads(raw or b"{}")
+
+    def _pulls(self, method, parts):
+        """`parts` : propriétaire, dépôt, puis `pulls`/`issues` et ce qui suit."""
+        pulls = PULLS.setdefault("/".join(parts[:2]), [])
+        rest = parts[2:]
+        if rest == ["pulls"] and method == "POST":
+            body = self._body()
+            pull = {"number": len(pulls) + 1, "title": body["title"], "body": body["body"],
+                    "state": "open", "merged_at": None,
+                    "head": {"ref": body["head"], "sha": head_sha(parts[1], body["head"])},
+                    "user": {"login": "julien.h"}, "created_at": "2026-11-10T10:00:00Z"}
+            pulls.append(pull)
+            return self.send(201, pull)
+        if rest == ["pulls"]:
+            return self.send(200, pulls)
+        if len(rest) >= 2 and rest[1].isdigit() and int(rest[1]) <= len(pulls):
+            pull = pulls[int(rest[1]) - 1]
+            tail = rest[2:]
+            if not tail:
+                return self.send(200, pull)
+            if tail == ["reviews"] or tail == ["comments"]:
+                return self.send(200, [])
+            if tail == ["merge"] and method == "PUT":
+                self._body()
+                if SETTINGS["merge_error"]:
+                    return self.send(*SETTINGS["merge_error"])
+                pull.update(state="closed", merged_at="2026-11-10T12:00:00Z")
+                return self.send(200, {"sha": "m" * 40, "merged": True})
+        self.send(404, {"message": "Not Found"})
+
+    def do_PUT(self):
+        parts = urlparse(self.path).path.removeprefix("/repos/").split("/")
+        if not self.path.startswith("/repos/") or self.headers.get("Authorization") != f"Bearer {TOKEN}":
+            return self.send(401, {"message": "Bad credentials"})
+        self._pulls("PUT", parts)
+
     def do_POST(self):
+        if self.path == "/__test__/configure":
+            # Pilotage du faux uniquement : la prochaine fusion répond `merge_error`.
+            body = self._body()
+            error = body.get("merge_error")
+            SETTINGS["merge_error"] = (error["status"], {"message": error["message"]}) if error else None
+            return self.send(200, {"configured": True})
+        if self.path.startswith("/repos/"):
+            if self.headers.get("Authorization") != f"Bearer {TOKEN}":
+                return self.send(401, {"message": "Bad credentials"})
+            return self._pulls("POST", urlparse(self.path).path.removeprefix("/repos/").split("/"))
         form = parse_qs(self.rfile.read(int(self.headers.get("Content-Length", 0))).decode())
         if form.get("client_id") != ["Iv1.atlas-test"]:
             return self.send(401, {"error": "incorrect_client_credentials"})
@@ -57,8 +126,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get("Authorization") != f"Bearer {TOKEN}":
                 return self.send(401, {"message": "Bad credentials"})
             parts = url.path.removeprefix("/repos/").split("/")
-            if len(parts) == 3 and parts[2] == "pulls":
-                return self.send(200, [])  # aucune proposition ouverte
+            if len(parts) > 2:
+                return self._pulls("GET", parts)
             if len(parts) != 2:
                 return self.send(404, {"message": "Not Found"})
             name = parts[1]

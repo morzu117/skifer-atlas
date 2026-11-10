@@ -667,6 +667,35 @@ def test_too_many_rows_are_refused_without_fetching(env, fake):
     assert fake.state.statements[statement]["reply"]["manifest"]["total_row_count"] == 11
 
 
+def test_a_held_statement_runs_until_released_or_cancelled(env, fake):
+    """Le pilotage du faux pour les parcours de bout en bout : `hold` retient la requête."""
+    import json
+    from urllib.request import Request, urlopen
+
+    def configure(**body):
+        request = Request(f"{fake.url}/__test__/configure", json.dumps(body).encode(),
+                          {"Content-Type": "application/json"})
+        assert json.load(urlopen(request))["configured"] is True
+
+    space("nordis", [point(fake)])
+    connections.store_personal_token("nordis", "dbx-fr", "dapi-perso-7")
+    fake.state.valid.add("dapi-perso-7")
+    configure(hold=True)
+    stop = threading.Event()
+    timer = threading.Timer(0.3, stop.set)
+    timer.start()
+    with pytest.raises(RepoError) as error:
+        connections.run_aggregate("nordis", "dbx-fr", "SELECT * FROM t", cancel=stop)
+    assert error.value.code == "query_canceled" and len(fake.state.canceled) == 1
+    configure(hold=True)
+    assert len(json.load(urlopen(f"{fake.url}/__test__/state"))["held"]) == 0  # annulée : plus retenue
+    configure(hold=True, rows=2)
+    timer = threading.Timer(0.3, configure, kwargs={"rows": 2})  # libérée en cours d'attente
+    timer.start()
+    assert len(connections.run_aggregate("nordis", "dbx-fr", "SELECT * FROM t").rows) == 2
+    timer.join()
+
+
 def test_timeout_and_cancel_stop_the_statement(env, fake):
     space("nordis", [point(fake)])
     connections.store_personal_token("nordis", "dbx-fr", "dapi-perso-7")
