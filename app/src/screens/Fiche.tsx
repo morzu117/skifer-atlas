@@ -17,6 +17,7 @@ import { DiffList, DiffSummary, marksOf } from "../components/DiffList";
 import { GraphView } from "../components/GraphView";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
+import { TableWrap } from "../components/TableWrap";
 import { ago, KIND_LABELS, longDate, percent, plural, STATUS_LABELS, tolerance } from "../format";
 import { explain, type Explained } from "../messages";
 import { href, navigate, setParams, type Params } from "../router";
@@ -389,7 +390,7 @@ function Variants({ ws, doc }: { ws: Workspace; doc: DocumentSheet }) {
       {doc.variants.length === 0 ? (
         <p className="muted">Ce KPI n'a pas de déclinaison : toutes les entités suivent le canonique.</p>
       ) : (
-        <div className="table-wrap">
+        <TableWrap label="Tableau : Déclinaisons">
           <table className="table">
             <thead>
               <tr>
@@ -418,7 +419,7 @@ function Variants({ ws, doc }: { ws: Workspace; doc: DocumentSheet }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
     </Panel>
   );
@@ -443,7 +444,7 @@ function Versions({ ws, doc, params }: { ws: Workspace; doc: DocumentSheet; para
         <p className="muted">Aucune version taguée : la première fusion d'une proposition posera la v1.</p>
       )}
       {list.length > 0 && (
-        <div className="table-wrap">
+        <TableWrap label="Tableau : Versions">
           <table className="table">
             <thead>
               <tr>
@@ -467,7 +468,7 @@ function Versions({ ws, doc, params }: { ws: Workspace; doc: DocumentSheet; para
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
       {list.length > 1 && (
         <form
@@ -714,7 +715,7 @@ function ScopeAndComparisons({ ws, doc }: { ws: Workspace; doc: DocumentSheet })
       {doc.scopes.length === 0 ? (
         <p className="muted">Aucun scope déclaré : une comparaison porte alors sur toute la période disponible.</p>
       ) : (
-        <div className="table-wrap">
+        <TableWrap label="Scopes déclarés">
           <table className="table">
             <thead>
               <tr>
@@ -738,7 +739,7 @@ function ScopeAndComparisons({ ws, doc }: { ws: Workspace; doc: DocumentSheet })
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
       <h3>Dernières comparaisons</h3>
       {runs.kind === "loading" && <Pending>Chargement des comparaisons…</Pending>}
@@ -751,7 +752,7 @@ function ScopeAndComparisons({ ws, doc }: { ws: Workspace; doc: DocumentSheet })
 
 function Runs({ runs }: { runs: ComparisonRun[] }) {
   return (
-    <div className="table-wrap">
+    <TableWrap label="Comparaisons">
       <table className="table">
         <thead>
           <tr>
@@ -780,6 +781,6 @@ function Runs({ runs }: { runs: ComparisonRun[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableWrap>
   );
 }

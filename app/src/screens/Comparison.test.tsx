@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Comparison as Run, ComparisonPreview, ComparisonSetup, HistoryEntry, MatrixRow } from "../api";
 import { useRoute } from "../router";
+import { expectAccessibleLandmarks } from "../test/accessibility";
 import { fakeServer, workspace, type Call } from "../test/fakeServer";
 import { Comparison, tone } from "./Comparison";
 
@@ -169,6 +170,17 @@ describe("seuils de la matrice", () => {
 });
 
 describe("comparaison", () => {
+  it("évite les repères dupliqués et rend les tableaux accessibles", async () => {
+    comparisonServer();
+    render(<Harness />);
+    await screen.findByRole("group", { name: "Matrice des comparaisons" });
+    await expectAccessibleLandmarks();
+    const strip = await screen.findByRole("region", { name: "Dernières comparaisons" });
+    await userEvent.click(within(strip).getByRole("link", { name: "Tout voir" }));
+    await screen.findByRole("group", { name: "Tableau : Historique des comparaisons" });
+    await expectAccessibleLandmarks();
+  });
+
   it("[S-0015-08] un double clic ne lance qu'une requête", async () => {
     const server = comparisonServer(({ method, path }) => method === "POST" && path === API ? { json: { id: 8 } } : undefined);
     render(<Harness />);

@@ -12,6 +12,7 @@ import { Banner } from "../components/Banner";
 import { Confirmation } from "../components/Confirmation";
 import { Icon } from "../components/Icon";
 import { Select } from "../components/Select";
+import { TableWrap } from "../components/TableWrap";
 import { ago, convergence, KIND_LABELS, percent, STATUS_LABELS } from "../format";
 import { explain, type Explained } from "../messages";
 import { href, setParams, type Params } from "../router";
@@ -250,7 +251,7 @@ export function Catalogue({
       )}
 
       <div className="catalogue">
-        <div className="table-wrap">
+        <TableWrap label="Tableau : Concepts et KPI">
           <table className="table" aria-label="Concepts et KPI" aria-busy={rows === null && !error && !unavailable}>
             <thead>
               <tr>
@@ -342,7 +343,7 @@ export function Catalogue({
               )}
             </div>
           )}
-        </div>
+        </TableWrap>
 
         {preview && <PreviewPanel ws={ws.id} preview={preview} domainLabel={domainLabel} />}
       </div>

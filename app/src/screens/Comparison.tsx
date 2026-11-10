@@ -16,6 +16,7 @@ import {
 } from "../api";
 import { Banner } from "../components/Banner";
 import { Select } from "../components/Select";
+import { TableWrap } from "../components/TableWrap";
 import { openExternal } from "../external";
 import { amount, dimension, gap, percent, tolerance } from "../format";
 import { explain, type Explained } from "../messages";
@@ -616,7 +617,7 @@ function Matrix({ wsId, rows, params }: { wsId: string; rows: MatrixRow[]; param
       {shown.length === 0 ? (
         <p className="muted">Aucun KPI décliné dans ce domaine.</p>
       ) : (
-        <div className="table-wrap">
+        <TableWrap label="Matrice des comparaisons">
           <table className="matrix">
             <thead>
               <tr>
@@ -668,7 +669,7 @@ function Matrix({ wsId, rows, params }: { wsId: string; rows: MatrixRow[]; param
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
     </section>
   );
@@ -752,7 +753,7 @@ function Detail({ ws, id, variant, labels }: { ws: Workspace; id: number; varian
               Sources communes, lues sur {platform} des deux côtés : {common.filter((c) => c.platform === platform).map(commonLabel).join(", ")}.
             </p>
           ))}
-          <div className="table-wrap">
+          <TableWrap label="Détail de la comparaison">
             <table className="table detail-table">
               <thead>
                 <tr>
@@ -786,7 +787,7 @@ function Detail({ ws, id, variant, labels }: { ws: Workspace; id: number; varian
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         </>
       )}
     </section>
@@ -886,7 +887,7 @@ function FullHistory({ ws, params, labels }: { ws: Workspace; params: Params; la
         <p className="muted">{entries.length === 0 ? "Aucune comparaison dans cet espace." : "Aucune comparaison ne correspond à ces filtres."}</p>
       )}
       {shown.length > 0 && (
-        <div className="table-wrap">
+        <TableWrap label="Tableau : Historique des comparaisons">
           <table className="table">
             <thead>
               <tr>
@@ -917,7 +918,7 @@ function FullHistory({ ws, params, labels }: { ws: Workspace; params: Params; la
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
     </section>
   );

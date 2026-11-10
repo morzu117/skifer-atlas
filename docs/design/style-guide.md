@@ -81,7 +81,7 @@ Input et select : 40 px (32 px dans l'éditeur), bordure `--atlas-line`, rayon 8
 
 ### 3.5 Tableaux
 
-Fond blanc, bordure `--atlas-line`, rayon 12 px, en-têtes 12 px capitales espacées `--atlas-muted`, cellules 14 px (13 px en contexte dense), padding 14 × 16 px, séparateurs `--atlas-line-soft`. Ligne sélectionnée : fond `--atlas-pale` (plus bordure gauche 3 px `--atlas-brand` dans les listes maître-détail). Un tableau large est dans un conteneur `overflow-x: auto`, jamais tronqué.
+Fond blanc, bordure `--atlas-line`, rayon 12 px, en-têtes 12 px capitales espacées `--atlas-muted`, cellules 14 px (13 px en contexte dense), padding 14 × 16 px, séparateurs `--atlas-line-soft`. Ligne sélectionnée : fond `--atlas-pale` (plus bordure gauche 3 px `--atlas-brand` dans les listes maître-détail). Un tableau large est dans un conteneur `overflow-x: auto`, jamais tronqué. Le composant commun `TableWrap` fournit un groupe nommé selon son contenu, distinct du nom du tableau et des sections voisines, accessible au clavier avec `tabIndex={0}` sans ajouter de repère de navigation. Son focus visible utilise le contour et le décalage définis par les tokens de bordure et la couleur `--atlas-mid`.
 
 ### 3.6 Cartes et panneaux
 
