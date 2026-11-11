@@ -12,6 +12,9 @@
 //! transmet jamais le token : elle envoie un nonce et n'accepte que le HMAC-SHA256 que
 //! seul le vrai serveur sait calculer (ADR 0041).
 
+#[cfg(target_os = "macos")]
+mod macos_quit;
+
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -269,6 +272,8 @@ pub fn run() {
         .manage(Sidecar(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![get_server_info])
         .setup(move |app| {
+            #[cfg(target_os = "macos")]
+            macos_quit::install(app.handle());
             let handle = app.handle().clone();
             let info = start_server(&handle, &token)?;
             *app.state::<Mutex<ServerInfo>>().lock().unwrap() = info;
@@ -278,6 +283,26 @@ pub fn run() {
         .expect("erreur au démarrage de Skifer Atlas");
 
     app.run(|handle, event| {
+        match &event {
+            RunEvent::WindowEvent { label, event, .. } if label == "main" => match event {
+                tauri::WindowEvent::CloseRequested { .. } => {
+                    eprintln!("[atlas] fermeture demandée")
+                }
+                tauri::WindowEvent::Destroyed => {
+                    eprintln!("[atlas] fenêtre détruite");
+                    #[cfg(target_os = "macos")]
+                    macos_quit::window_destroyed();
+                }
+                _ => {}
+            },
+            #[cfg(target_os = "macos")]
+            RunEvent::ExitRequested {
+                code: None, api, ..
+            } if macos_quit::pending() => {
+                api.prevent_exit();
+            }
+            _ => {}
+        }
         if let RunEvent::Exit = event {
             stop_server(handle);
         }

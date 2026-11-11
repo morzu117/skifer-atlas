@@ -56,10 +56,11 @@
 | 0033 | 12 | 9 | 2 | 1 | 0 |
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | 0035 | 12 | 10 | 0 | 2 | 0 |
+| ADR 0040 | 2 | 1 | 0 | 1 | 0 |
 | ADR 0049 | 1 | 1 | 0 | 0 | 0 |
 | ADR 0055 | 1 | 1 | 0 | 0 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **334** | **265** | **6** | **63** | **0** |
+| **Total** | **335** | **265** | **6** | **64** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -725,7 +726,7 @@ Plan 0013, critère 14 · Tests : `app/e2e/editor.spec.ts` › `[S-0013-14]` (de
 - **Alors** le champ `yaml_text` du brouillon contient `label: [ouvert`, et la vue YAML se rouvre avec ce texte inachevé
 - **Quand** (second test, Chromium) je saisis une description et que la page reçoit un vrai évènement `pagehide`, avant le délai d'enregistrement
 - **Alors** une requête `PUT` du brouillon part aussitôt avec la description, et l'API la relit
-- Limite : le test `pagehide` vérifie la requête, pas son option `keepalive`, qu'un test navigateur ne voit pas ; Vitest l'établit (`[S-0013-14] [S-0013-21]`). Le passage à `hidden` (`visibilitychange`) et la fermeture de la fenêtre Tauri (`onCloseRequested`, attente d'au plus deux secondes puis `destroy`) ne sont couverts que par Vitest (`[S-0013-14] [S-0013-20] [S-0013-21]`, `[S-0013-20]`) ; une vérification dans la vraie fenêtre Tauri reste à faire (ADR 0040). Le champ `yaml_text` côté serveur : `core/tests/repo/test_editor_api.py::test_draft_keeps_the_unfinished_yaml_text_and_stays_valid_without_it`.
+- Limite : le test `pagehide` vérifie la requête, pas son option `keepalive`, qu'un test navigateur ne voit pas ; Vitest l'établit (`[S-0013-14] [S-0013-21]`). Le passage à `hidden` (`visibilitychange`) n'est couvert que par Vitest (`[S-0013-14] [S-0013-20] [S-0013-21]`) ; la fermeture de la fenêtre Tauri (`onCloseRequested`, écriture puis `destroy`) l'est en e2e par S-0040-01, avec un pont simulé, et sa partie native par S-0040-02. Le champ `yaml_text` côté serveur : `core/tests/repo/test_editor_api.py::test_draft_keeps_the_unfinished_yaml_text_and_stays_valid_without_it`.
 
 ### S-0013-15 — « Repartir de la vN » demande confirmation, au clavier
 Plan 0013, critère 15 · Test : `app/e2e/editor.spec.ts` › `[S-0013-15]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-15]`
@@ -789,7 +790,7 @@ Plan 0013, critère 20 · Test : `app/src/screens/Editor.test.tsx` › `[S-0013-
 - **Étant donné** l'éditeur sous Tauri (API de fenêtre simulée) et une écriture en attente ou lancée
 - **Quand** la fenêtre demande à se fermer
 - **Alors** la fermeture est d'abord empêchée, la sauvegarde est attendue (au plus deux secondes), puis la fenêtre est détruite une seule fois ; quitter l'écran retire l'écouteur
-- Limite : Vitest seulement, sans fenêtre native. Un pont Tauri simulé dans la page ne prouverait rien de plus que l'API de fenêtre simulée de Vitest : `onCloseRequested` et `destroy` n'ont d'effet à l'écran que dans la vraie fenêtre. Le départ de page (`pagehide`) du navigateur est vu en e2e par S-0013-14. Le cycle réel de fermeture de la WebView reste une vérification dans l'application Tauri (ADR 0040).
+- Limite : le délai de deux secondes, l'écriture déjà lancée et le retrait de l'écouteur ne sont vérifiés que par Vitest, sans fenêtre native. Le parcours « modifier, fermer, rouvrir » est en e2e, avec un pont Tauri simulé et le vrai serveur, par S-0040-01 ; le cycle natif de fermeture et de sortie par S-0040-02 (`scripts/smoke-app.sh`). Le départ de page (`pagehide`) du navigateur est vu en e2e par S-0013-14.
 
 ### S-0013-21 — `keepalive` seulement sous 60 Kio
 Plan 0013, critère 21 · Tests : `app/e2e/editor.spec.ts` › `[S-0013-21]` ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-21]` (deux tests : `pagehide` d'un petit brouillon, `visibilitychange` d'un corps de plus de 60 Kio en UTF-8) et sa frontière à 61 439 et 61 440 octets (même fichier, `[S-0013-21]`)
@@ -2250,6 +2251,25 @@ Plan 0035, critère 10 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-10]
 - **Alors** le brouillon s'ouvre en « Revenu net : v6 · brouillon »
 - Limite : la synchronisation automatique d'un espace (ADR 0049) relit le dépôt à l'ouverture de l'espace et aux changements d'écran, au plus une fois toutes les 30 s : le test s'appuie sur ce comportement sans bouton « Synchroniser ».
 
+## Fermeture de la fenêtre Tauri
+
+`app/e2e/fermeture-tauri.spec.ts` : la fermeture de la fenêtre principale sous Tauri (ADR 0040, issue #154), sur une copie isolée de l'espace de démonstration du serveur principal. Sous macOS, Cmd+Q et « Quitter » du Dock aboutissent à cette fermeture ; la partie native est S-0040-02. Le pont Tauri est simulé dans la page (`__TAURI_INTERNALS__`, comme `serveur-tauri.spec.ts`) au niveau où `@tauri-apps/api` l'appelle : `get_server_info`, `plugin:event|listen` de `tauri://close-requested` (callback enregistré par `transformCallback`, que le test rappelle comme la fenêtre native) et `plugin:window|destroy`. Le serveur est le vrai. Un journal dans la page relève, dans l'ordre, l'envoi de chaque `PUT` du brouillon, sa réponse et la destruction.
+
+**ADR 0040**
+
+### S-0040-01 — Quitter juste après une modification écrit le brouillon avant de détruire la fenêtre
+ADR 0040 · Tests : `app/e2e/fermeture-tauri.spec.ts` › `[S-0040-01]` (deux tests : avec et sans modification) ; Vitest : `app/src/screens/Editor.test.tsx` › `[S-0013-20]`
+- **Étant donné** l'éditeur de Revenu net ouvert sous Tauri (pont simulé), sans brouillon, « Compilable Databricks, Snowflake », un écouteur de `tauri://close-requested` enregistré et l'horloge de la page figée (`page.clock`), si bien que l'enregistrement différé de 800 ms ne peut pas partir
+- **Quand** je saisis un nouveau libellé dans Propriétés
+- **Alors** le titre le reprend et aucune écriture n'est encore partie
+- **Quand** la fenêtre demande à se fermer (`tauri://close-requested`, comme après Cmd+Q)
+- **Alors** le journal relève exactement l'envoi du `PUT` du brouillon, sa réponse 200, puis `destroy` de la fenêtre `main` ; le brouillon relu par l'API porte le nouveau libellé
+- **Quand** je ferme la page et rouvre l'éditeur du même KPI dans une page neuve
+- **Alors** le titre et le champ « Libellé » montrent la modification, « Brouillon local repris » s'affiche et le contrôle axe ne relève rien de sérieux
+- **Quand** (second test) j'ouvre l'éditeur sans rien modifier et que la fenêtre demande à se fermer
+- **Alors** le journal ne relève que `destroy`, aucun `PUT`, et l'API ne rend toujours pas de brouillon
+- Limite : `tauri://close-requested` est émis par le test, pas par la fenêtre native ; le délai de garde de deux secondes n'est vérifié que par Vitest (`[S-0013-20]`). Le premier test échoue si la fermeture n'attend pas `flushDraft()` : sans cette attente, le journal ne relève que `destroy`.
+
 ## Synchronisation automatique
 
 `app/e2e/synchronisation-auto.spec.ts` : la synchronisation automatique d'un espace (ADR 0049), sur une copie isolée de l'espace de démonstration du serveur principal. La réponse « occupé » du serveur est simulée par une interception de `POST /api/workspaces/<id>/sync/auto` ; axe-core ne relève aucune violation sérieuse ou critique avec le bandeau affiché.
@@ -2391,6 +2411,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 
 | Identifiant | Vérification | Pourquoi sans test front | Couverture |
 |---|---|---|---|
+| S-0040-02 | Sous macOS, Cmd+Q, le menu de l’application et « Quitter » du Dock passent par la fermeture de la fenêtre principale et l’application se termine, sans serveur orphelin. Vérifier aussi les raccourcis d’édition, la fermeture normale et la déconnexion ou l’arrêt de macOS sans interruption de session ; en cas de fermeture empêchée, vérifier que macOS est libéré après le délai. | Fenêtre, menus et Apple Events natifs macOS requis ; l’écriture du brouillon à la fermeture est S-0040-01. | `scripts/smoke-app.sh` : pour Cmd-Q (frappe par System Events) puis pour l’Apple Event « Quitter » (même chemin `terminate:` que le Dock), le journal de l’app contient exactement, dans l’ordre et une seule fois, « quitter intercepté », « fermeture demandée », « fenêtre détruite », « sortie confirmée » ; l’app se termine en moins de 4 s et aucun processus serveur ne reste. Restent à vérifier à la main la déconnexion ou l’arrêt de macOS et la libération après le délai de cinq secondes. |
 | S-0001-11 | Le JSON Schema commité correspond au modèle et rend le même verdict que pydantic | Logique serveur sans écran : fichier publié, qu'aucun écran ne lit | `core/tests/model/test_jsonschema.py` |
 | S-0001-12 | `atlas validate` rend 0 ou 1 ; sortie `--format json` conforme | CLI, absente de l'application | `core/tests/model/test_cli.py::test_each_invalid_document_exits_one`, `::test_json_output_lists_errors_in_the_documented_format` |
 | S-0001-13 | `import skifer_atlas.model` ne charge ni `pyspark` ni `fastapi` | Graphe d'import Python, sans effet à l'écran | `core/tests/model/test_imports.py::test_model_does_not_import_spark_or_the_server` |
