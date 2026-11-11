@@ -43,6 +43,34 @@ describe("tokens", () => {
     expect(offenders(/\d+(\.\d+)?px\b/)).toEqual([]);
   });
 
+  it("les déclarations CSS utilisent des tokens pour les couleurs et dimensions", () => {
+    const css = readFileSync(join(SRC, "styles.css"), "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
+    // Dimensions relatives nécessaires à la structure, au placement des ports et à l'animation.
+    const structural: Record<string, string[]> = {
+      "min-height": ["100%", "100vh"], height: ["100%", "100vh"], width: ["100%"],
+      "max-width": ["100%"], "border-radius": ["50%"], top: ["40%", "75%", "calc(100% + var(--atlas-space-1))"],
+      transform: ["translateY(-50%)"], "background-size": ["200% 100%"],
+      "background-position": ["100% 0", "-100% 0"],
+      "grid-template-columns": ["repeat(auto-fill, minmax(var(--atlas-card-min-w), 1fr))", "repeat(auto-fit, minmax(var(--atlas-card-min-w), 1fr))", "repeat(2, minmax(0, 1fr))", "repeat(auto-fit, minmax(min(100%, var(--atlas-diff-col-min)), 1fr))", "repeat(auto-fit, minmax(min(100%, var(--atlas-queue-basis)), 1fr))", "repeat(auto-fit, minmax(min(100%, var(--atlas-admin-col-min)), 1fr))"],
+    };
+    // transparent et currentColor sont des mots-clés de composition, pas des couleurs de palette.
+    const colors = /\b(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen)\b/i;
+    const violations: string[] = [];
+    for (const [, body] of css.matchAll(/\{([^{}]*)\}/g)) {
+      for (const declaration of body.split(";")) {
+        const match = declaration.trim().match(/^([\w-]+)\s*:\s*([\s\S]+)$/);
+        if (!match) continue;
+        const [, property, value] = match;
+        const bare = value.replace(/var\([^)]*\)/g, "");
+        if (colors.test(bare) || /\b(?:rgb|rgba|hsl|hsla)\s*\(/i.test(bare) ||
+            (/(?:\d*\.)?\d+(?:px|em|rem|vh|vw|fr|%)(?![\w-])/i.test(bare) && !structural[property]?.includes(value))) {
+          violations.push(`${property}: ${value}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it("app/src/tokens.css est la copie exacte de docs/design/tokens.css", () => {
     const design = readFileSync(join(SRC, "../../docs/design/tokens.css"), "utf-8");
     expect(readFileSync(join(SRC, TOKENS), "utf-8")).toBe(design);

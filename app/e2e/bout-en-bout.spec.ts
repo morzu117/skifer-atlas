@@ -1,3 +1,4 @@
+import { cellByColumn } from "./table";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -361,7 +362,7 @@ test("[S-0035-02] un KPI est relu à deux : changements demandés, réponse, cor
 
   // Chez Claire, qui a fusionné, le catalogue et la fiche montrent la v1.
   await claire.goto(`${ws.root}/catalogue`);
-  await expect(catalogRow(claire, kpi.label).getByRole("cell").nth(3)).toHaveText("v1");
+  await expect((await cellByColumn(catalogRow(claire, kpi.label), claire.getByRole("table", { name: "Concepts et KPI" }), "Version"))).toHaveText("v1");
   await claire.goto(`${ws.root}/fiche/${kpi.id}`);
   await expect(claire.getByRole("heading", { level: 1, name: kpi.label })).toBeVisible();
   await expect(claire.getByText(/^v1 · validée le/)).toBeVisible();
@@ -415,9 +416,9 @@ test("[S-0035-03] Revenu net passe de v4 à v5 : proposition, deux revues, fusio
 
   // Chez Claire : catalogue (v5 pour Revenu net, les autres inchangés), versions, écart v4 → v5, dépendants.
   await claire.goto(`${ws.root}/catalogue`);
-  await expect(catalogRow(claire, "Revenu net").getByRole("cell").nth(3)).toHaveText("v5");
-  await expect(catalogRow(claire, "Marge brute").getByRole("cell").nth(3)).toHaveText("v2");
-  await expect(catalogRow(claire, "Revenu net").getByRole("cell").nth(4)).toHaveText("3"); // les déclinaisons suivent le canonique
+  await expect((await cellByColumn(catalogRow(claire, "Revenu net"), claire.getByRole("table", { name: "Concepts et KPI" }), "Version"))).toHaveText("v5");
+  await expect((await cellByColumn(catalogRow(claire, "Marge brute"), claire.getByRole("table", { name: "Concepts et KPI" }), "Version"))).toHaveText("v2");
+  await expect((await cellByColumn(catalogRow(claire, "Revenu net"), claire.getByRole("table", { name: "Concepts et KPI" }), "Déclinaisons"))).toHaveText("3"); // les déclinaisons suivent le canonique
   expect(await seriousViolations(claire)).toEqual([]);
   await claire.goto(`${ws.root}/fiche/revenu-net?tab=versions&base=4&other=5`);
   const tabs = claire.getByRole("navigation", { name: "Onglets de la fiche" });
@@ -553,7 +554,7 @@ test("[S-0035-05] une analyste se connecte aux trois plateformes puis compare Re
 
   // Le catalogue n'a encore jamais comparé Revenu net.
   await page.goto(`${ws.root}/catalogue`);
-  await expect(catalogRow(page, "Revenu net").getByRole("cell").nth(5)).toHaveText("Jamais comparé");
+  await expect((await cellByColumn(catalogRow(page, "Revenu net"), page.getByRole("table", { name: "Concepts et KPI" }), "Convergence"))).toHaveText("Jamais comparé");
 
   // La comparaison des trois entités : progression par plateforme, puis la matrice.
   await page.goto(`${ws.root}/comparaison`);
@@ -579,8 +580,8 @@ test("[S-0035-05] une analyste se connecte aux trois plateformes puis compare Re
 
   // Le catalogue a retenu la comparaison, l'historique aussi.
   await page.goto(`${ws.root}/catalogue`);
-  await expect(catalogRow(page, "Revenu net").getByRole("cell").nth(5)).toHaveText(/^\d+ divergences?$/);
-  await catalogRow(page, "Revenu net").getByRole("cell").nth(2).click();
+  await expect((await cellByColumn(catalogRow(page, "Revenu net"), page.getByRole("table", { name: "Concepts et KPI" }), "Convergence"))).toHaveText(/^\d+ divergences?$/);
+  await (await cellByColumn(catalogRow(page, "Revenu net"), page.getByRole("table", { name: "Concepts et KPI" }), "Domaine")).click();
   await expect(page.getByRole("complementary", { name: "Revenu net" })).toContainText(/Dernière comparaison\s*\d+ % · à l'instant/);
   expect(await seriousViolations(page)).toEqual([]);
   await page.goto(`${ws.root}/comparaison`);
@@ -721,7 +722,7 @@ test("[S-0035-08] hors ligne puis retour : lecture et brouillon intacts, envoi r
     await page.reload();
     await expect(page.getByRole("heading", { level: 1, name: "Revenu net" })).toBeVisible();
     await page.goto(`${ws.root}/catalogue`);
-    await expect(catalogRow(page, "Revenu net").getByRole("cell").nth(3)).toHaveText("v4");
+    await expect((await cellByColumn(catalogRow(page, "Revenu net"), page.getByRole("table", { name: "Concepts et KPI" }), "Version"))).toHaveText("v4");
 
     // On écrit toujours aussi : la modification se garde en brouillon local.
     await page.goto(`${ws.root}/fiche/revenu-net`);
@@ -863,7 +864,7 @@ test("[S-0035-10] après la fusion d'une collègue, le catalogue, la fiche et la
 
   // Anna, contributrice (ni référente d'espace, ni Administration), rouvre son catalogue : Revenu net est en v5.
   await page.goto(`${ws.root}/catalogue`);
-  await expect(catalogRow(page, "Revenu net").getByRole("cell").nth(3)).toHaveText("v5");
+  await expect((await cellByColumn(catalogRow(page, "Revenu net"), page.getByRole("table", { name: "Concepts et KPI" }), "Version"))).toHaveText("v5");
   await page.goto(`${ws.root}/fiche/revenu-net`);
   await expect(page.getByText(/^v5 · validée le/)).toBeVisible();
   const tabs = page.getByRole("navigation", { name: "Onglets de la fiche" });

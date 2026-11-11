@@ -1,3 +1,4 @@
+import { cellByColumn } from "./table";
 import { expect } from "@playwright/test";
 import { API } from "./demo";
 import { isolatedDemo, test } from "./isolation";
@@ -18,20 +19,21 @@ test("[S-0009-03] [S-0009-04] Cellules absentes et canonique nul : valeurs et to
     results: [{ variant_id: "revenu-net--nordis-de", entity: "nordis-de", variant_version: 3, platform: "databricks", access_point: "dbx-fr", cell_count: 4, validation_pct: 25, max_gap_pct: 0, divergent_node: null, divergent: null, bypass_nodes: [], cells }],
   } }));
   await page.goto(`${ws.root}/comparaison?id=424242&variant=nordis-de`);
-  const rows = page.getByRole("region", { name: /Détail · Revenu net/ }).locator("tbody tr");
+  const table = page.getByRole("region", { name: /Détail · Revenu net/ }).getByRole("table");
+  const rows = table.locator("tbody tr");
   await expect(rows).toHaveCount(4);
-  await expect(rows.nth(0).getByRole("cell").nth(2)).toHaveText("absente");
-  await expect(rows.nth(1).getByRole("cell").nth(3)).toHaveText("absente");
+  await expect((await cellByColumn(rows.nth(0), table, "Canonique"))).toHaveText("absente");
+  await expect((await cellByColumn(rows.nth(1), table, "Déclinaison nordis-de"))).toHaveText("absente");
   for (const index of [0, 1, 3]) {
     await expect(rows.nth(index)).toContainText("hors tolérance");
     await expect(rows.nth(index)).toHaveClass(/is-out/);
-    await expect(rows.nth(index).getByRole("cell").nth(4)).toContainText("—");
+    await expect((await cellByColumn(rows.nth(index), table, "Écart"))).toContainText("—");
   }
   await expect(rows.nth(2)).not.toHaveClass(/is-out/);
   await expect(rows.nth(2)).not.toContainText("hors tolérance");
-  await expect(rows.nth(2).getByRole("cell").nth(2)).toHaveText("0");
-  await expect(rows.nth(2).getByRole("cell").nth(3)).toHaveText("0");
-  await expect(rows.nth(2).getByRole("cell").nth(4)).toContainText("0,0 %");
-  await expect(rows.nth(3).getByRole("cell").nth(2)).toHaveText("0");
-  await expect(rows.nth(3).getByRole("cell").nth(3)).toHaveText("12");
+  await expect((await cellByColumn(rows.nth(2), table, "Canonique"))).toHaveText("0");
+  await expect((await cellByColumn(rows.nth(2), table, "Déclinaison nordis-de"))).toHaveText("0");
+  await expect((await cellByColumn(rows.nth(2), table, "Écart"))).toContainText("0,0 %");
+  await expect((await cellByColumn(rows.nth(3), table, "Canonique"))).toHaveText("0");
+  await expect((await cellByColumn(rows.nth(3), table, "Déclinaison nordis-de"))).toHaveText("12");
 });

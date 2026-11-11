@@ -37,6 +37,8 @@ Contrastes vérifiés (calcul WCAG 2.1) : `--atlas-muted` sur blanc 5.0:1, `--at
 
 **Typographie** : Inter (400, 500, 600, 700) pour l'interface ; JetBrains Mono (400, 500) pour tout ce qui est identifiant, expression, chemin, schéma, YAML, SQL. Taille de base 14 px ; 13 px dans les tableaux et l'éditeur ; 12 px pour les métadonnées ; 11 px minimum (libellés de nœuds, badges), jamais en dessous. Les polices sont chargées localement dans l'app (pas de Google Fonts en production, l'app peut tourner hors ligne).
 
+**Approche typographique** : `--atlas-tracking-sm` (0.04em), `--atlas-tracking-md` (0.06em), `--atlas-tracking-lg` (0.08em) et `--atlas-tracking-xl` (0.12em) règlent l’espacement des capitales et des codes.
+
 **Espacement** : base 4 px. Padding des cartes 16 à 22 px, gap entre cartes 16 à 20 px, padding de page 28 px × 32 px.
 
 **Rayons** : 6 px (nœuds, champs compacts), 8 px (boutons, champs), 12 px (cartes, panneaux), pilule pour les badges.

@@ -46,6 +46,12 @@
   --atlas-text-2xl: 24px;
   --atlas-text-3xl: 28px;
 
+  /* Approche des capitales et codes */
+  --atlas-tracking-sm: 0.04em;
+  --atlas-tracking-md: 0.06em;
+  --atlas-tracking-lg: 0.08em;
+  --atlas-tracking-xl: 0.12em;
+
   /* Espacement (base 4) */
   --atlas-space-1: 4px;
   --atlas-space-2: 8px;
