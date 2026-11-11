@@ -83,7 +83,7 @@ test("[S-0006-12] [S-0017-08] deuxième référent : le bandeau disparaît, la s
   await expect(page.getByText(/Proposition n° \d+ ouverte : elle attend la revue d'un autre référent\./)).toBeVisible();
   await page.getByRole("link", { name: "Voir la proposition" }).click();
   await expect(page).toHaveURL(/#\/w\/groupe-nordis\/propositions\?n=\d+&status=open&domain=tous$/);
-  await expect(page.getByRole("heading", { name: /Gouvernance de l'espace/ }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Gouvernance de l'espace/, level: 2 })).toBeVisible();
 });
 
 test("[S-0017-07] Synchroniser met à jour la date et l'index (critère 7)", async ({ page }) => {

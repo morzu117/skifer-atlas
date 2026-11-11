@@ -82,7 +82,7 @@ test("nouveau point d'accès : OAuth et test avant de le proposer", async ({ pag
   await expectNoSecret(page);
   await panel.getByRole("link", { name: "Voir la proposition" }).click();
   await expect(page).toHaveURL(/#\/w\/groupe-nordis\/propositions\?n=\d+&status=open&domain=tous$/);
-  await expect(page.getByRole("heading", { name: /dbx-de/ }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /dbx-de/, level: 2 })).toBeVisible();
   await page.goto(CONNECTIONS);
   const drafts = page.getByRole("complementary", { name: "Nouveau point d'accès" });
   await expect(drafts.getByText("Connexions de brouillon à nettoyer")).toBeVisible();
@@ -131,7 +131,7 @@ test("[S-0016-04] Changer d'espace remplace la liste des points d'accès", async
   // Le tableau nomme l'entité et le mode d'accès ; l'identifiant (dbx-fr) est dans le nom des actions.
   const table = page.getByRole("table", { name: "Points d'accès de l'espace" });
   await expect(table).toContainText("nordis-fr · OAuth");
-  await expect(table.getByRole("button", { name: /· dbx-fr$/ }).first()).toBeVisible();
+  await expect(table.getByRole("button", { name: "Se connecter à Databricks · dbx-fr" })).toBeVisible();
   await page.getByRole("link", { name: /Espace\s*Groupe Nordis/ }).click();
   await page.getByRole("button", { name: "Créer un espace" }).click();
   const dialog = page.getByRole("dialog", { name: "Créer un espace" });
@@ -145,5 +145,5 @@ test("[S-0016-04] Changer d'espace remplace la liste des points d'accès", async
   await page.getByRole("list", { name: "Espaces" }).getByRole("link").filter({ hasText: "Groupe Nordis" }).click();
   await page.getByRole("navigation", { name: "Navigation de l'espace" }).getByRole("link", { name: "Connexions" }).click();
   await expect(table).toContainText("nordis-fr · OAuth");
-  await expect(table.getByRole("button", { name: /· dbx-fr$/ }).first()).toBeVisible();
+  await expect(table.getByRole("button", { name: "Se connecter à Databricks · dbx-fr" })).toBeVisible();
 });

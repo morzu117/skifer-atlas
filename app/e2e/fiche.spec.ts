@@ -72,9 +72,17 @@ test("[S-0012-03] versions : diff de v3 à v4, classé et coloré (critère 3)",
   await expect(items.nth(0)).toContainText("n04");
   // Changer la colonne d'entrée d'un nœud temporel est critique, pas « À examiner » : les
   // périodes obtenues peuvent changer (PR #126, plan 0003 : colonne ajoutée aux champs critiques).
+  const bad = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--atlas-bad");
+    document.body.appendChild(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
   for (const index of [0, 1, 2]) {
     await expect(items.nth(index)).toContainText("Divergence critique");
-    await expect(items.nth(index)).toHaveCSS("border-left-color", "rgb(177, 59, 59)"); // --atlas-bad
+    await expect(items.nth(index)).toHaveCSS("border-left-color", bad);
   }
   await expect(items.nth(0)).toContainText("date_facture → date_comptable");
   await expect(page.getByText("3 écarts : 3 critiques, 0 à surveiller, 0 sans effet.")).toBeVisible();
@@ -100,7 +108,7 @@ test("[S-0004-01] [S-0012-04] implémentations : extraire le SQL et le comparer 
   await expect(section).toContainText("Cardinalité de la jointure inconnue");
   const diff = section.getByRole("region", { name: "Écarts au canonique" });
   await expect(diff).toContainText("Écarts au canonique v4");
-  await expect(diff.locator(".diff-item").first()).toBeVisible();
+  await expect(diff.locator(".diff-item:visible")).not.toHaveCount(0);
   expect(await seriousViolations(page)).toEqual([]);
 });
 

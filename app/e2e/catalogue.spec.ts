@@ -1,3 +1,4 @@
+import { cellByColumn } from "./table";
 import { expect, test, type Page } from "@playwright/test";
 import { API, ensureNordis, seriousViolations } from "./demo";
 
@@ -25,11 +26,10 @@ test("[S-0011-01] le tableau reprend l'index : versions et déclinaisons exactes
   await page.goto(CATALOGUE);
   await expect(table(page).getByRole("row")).toHaveCount(8); // en-tête compris
   for (const doc of index) {
-    const cells = row(page, doc.label).getByRole("cell");
-    await expect(cells.nth(3)).toHaveText(`v${doc.version}`);
-    await expect(cells.nth(4)).toHaveText(doc.kind === "kpi" ? String(doc.variant_count) : "—");
+    await expect(await cellByColumn(row(page, doc.label), table(page), "Version")).toHaveText(`v${doc.version}`);
+    await expect(await cellByColumn(row(page, doc.label), table(page), "Déclinaisons")).toHaveText(doc.kind === "kpi" ? String(doc.variant_count) : "—");
   }
-  await expect(row(page, "Revenu net").getByRole("cell").nth(2)).toHaveText("Finance");
+  await expect((await cellByColumn(row(page, "Revenu net"), table(page), "Domaine"))).toHaveText("Finance");
   await expect(page.getByRole("link", { name: "Nouveau concept ou KPI" })).toBeVisible(); // contributrice
   expect(await seriousViolations(page)).toEqual([]);
 });
@@ -62,7 +62,7 @@ test("[S-0005-04] [S-0011-03] filtres combinés, gardés dans l'adresse, retour 
 
 test("[S-0011-04] une ligne ouvre l'aperçu : références et points de variation (critère 4) ; clavier", async ({ page }) => {
   await page.goto(CATALOGUE);
-  await row(page, "Revenu net").getByRole("cell").nth(2).click();
+  await (await cellByColumn(row(page, "Revenu net"), table(page), "Domaine")).click();
   const preview = page.getByRole("complementary", { name: "Revenu net" });
   await expect(preview).toBeVisible();
   await expect(preview).toContainText("Finance · v4 · propriétaire : Claire M.");
@@ -114,9 +114,9 @@ test("[S-0011-06] sous 900 px, l'aperçu passe sous le tableau (critère 6)", as
 
 test("[S-0011-07] « Jamais comparé », puis mis à jour après une comparaison (critère 7)", async ({ page, request }) => {
   await page.goto(CATALOGUE);
-  const convergence = row(page, "Revenu net").getByRole("cell").nth(5);
+  const convergence = (await cellByColumn(row(page, "Revenu net"), table(page), "Convergence"));
   await expect(convergence).toHaveText("Jamais comparé");
-  await expect(row(page, "Marge brute").getByRole("cell").nth(5)).toHaveText("Convergé"); // sans déclinaison
+  await expect((await cellByColumn(row(page, "Marge brute"), table(page), "Convergence"))).toHaveText("Convergé"); // sans déclinaison
 
   const created = await request.post(`${API}/api/workspaces/groupe-nordis/comparisons`, {
     data: { kpi_id: "revenu-net", variants: ["nordis-de", "nordis-fr"], scope_id: "fy2026-mois-entite" },
@@ -129,7 +129,7 @@ test("[S-0011-07] « Jamais comparé », puis mis à jour après une comparaison
 
   await page.reload();
   await expect(convergence).toHaveText("1 divergence"); // nordis-de, surcharge, à 94 %
-  await row(page, "Revenu net").getByRole("cell").nth(2).click();
+  await (await cellByColumn(row(page, "Revenu net"), table(page), "Domaine")).click();
   await expect(page.getByRole("complementary", { name: "Revenu net" })).toContainText(
     /Dernière comparaison\s*9\d % · à l'instant/,
   );

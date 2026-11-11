@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,13 +26,24 @@ export const SNOWFLAKE_PASSPHRASE = "demo-snowflake";
  * (examples/depot-nordis.sh), avec ses cinq propositions ouvertes
  * (examples/propositions-nordis.py) et ses trois points d'accès, dbx-fr sur le faux
  * Databricks, snow-de et snow-es sur le faux Snowflake (examples/points-acces-nordis.py). */
+let template: string | undefined;
+export function prepareDemo(): void {
+  if (!template) {
+    template = mkdtempSync(join(tmpdir(), "atlas-demo-template-"));
+    execFileSync("bash", [SCRIPT, template]);
+    const remote = join(template, "distant.git");
+    execFileSync("uv", ["run", "--project", CORE, "python", PROPOSALS, remote]);
+    execFileSync("uv", ["run", "--project", CORE, "python", ACCESS_POINTS, remote, FAKE_DATABRICKS, FAKE_SNOWFLAKE]);
+    const cleanup = template;
+    process.once("exit", () => rmSync(cleanup, { recursive: true, force: true }));
+  }
+}
 export function demoRemote(): string {
+  prepareDemo();
+  // Chaque appel reçoit une copie indépendante, y compris les refs Git modifiables.
   const root = mkdtempSync(join(tmpdir(), "atlas-demo-"));
-  execFileSync("bash", [SCRIPT, root]);
-  const remote = join(root, "distant.git");
-  execFileSync("uv", ["run", "--project", CORE, "python", PROPOSALS, remote]);
-  execFileSync("uv", ["run", "--project", CORE, "python", ACCESS_POINTS, remote, FAKE_DATABRICKS, FAKE_SNOWFLAKE]);
-  return remote;
+  cpSync(join(template!, "distant.git"), join(root, "distant.git"), { recursive: true });
+  return join(root, "distant.git");
 }
 
 /** Groupe Nordis au registre du serveur, rejoint ici s'il ne l'est pas déjà. */
