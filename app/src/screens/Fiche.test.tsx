@@ -251,6 +251,32 @@ describe("fiche", () => {
     expect(screen.getByText("Une nouvelle version touchera 2 documents.")).toBeInTheDocument();
   });
 
+  it("[S-0055-01] signale les références en retard dans les deux sens", async () => {
+    sheetServer({ ...SHEET, dependencies: {
+      references: [
+        { id: "revenu-net", kind: "kpi_ref", version: 4, current_version: 5, outdated: true, document_kind: "kpi", label: "Revenu net", status: "validated", domain: "finance", domain_label: "Finance" },
+        { id: "autre", kind: "kpi_ref", version: 2, current_version: 2, outdated: false, document_kind: "kpi", label: "Autre", status: "validated", domain: null, domain_label: null },
+      ],
+      referenced_by: [
+        { ...SHEET.dependencies.referenced_by[0], current_version: 5, outdated: true },
+        { ...SHEET.dependencies.referenced_by[0], id: "panier-moyen", label: "Panier moyen", version: 5, current_version: 5, outdated: false },
+      ], impact: 2,
+    } });
+    fiche();
+    const notice = (await screen.findByText(/version courante v5/)).closest("div")!;
+    expect(notice).toHaveTextContent("Revenu net : épinglé v4, version courante v5");
+    expect(within(notice).getByRole("link", { name: "Revenu net" })).toHaveAttribute("href", "#/w/groupe-nordis/fiche/revenu-net");
+    expect(screen.getByText(/Marge brute \(épinglé v4\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Panier moyen/)).not.toHaveTextContent("épinglé");
+    await userEvent.click(screen.getByRole("button", { name: "Dépendances" }));
+    const references = screen.getByRole("region", { name: "Références" });
+    expect(within(references).getByText("épinglé v4, version courante v5")).toBeInTheDocument();
+    expect(within(references).getByRole("link", { name: "Revenu net" })).toHaveAttribute("href", "#/w/groupe-nordis/fiche/revenu-net");
+    const incoming = screen.getByRole("region", { name: "Référencé par" });
+    expect(within(incoming).getByText("épinglé v4").closest("li")).toHaveTextContent("Marge brute");
+    expect(within(incoming).getByRole("link", { name: "Panier moyen" }).closest("li")).not.toHaveTextContent("épinglé");
+  });
+
   it("positions : colonnes par couche, rangs centrés, identiques d'un calcul à l'autre (critère 6)", () => {
     const layout = { ...LAYOUT, nodes: [...LAYOUT.nodes, node("n04", 0, 1)] };
     const first = positions(layout);

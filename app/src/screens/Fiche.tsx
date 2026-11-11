@@ -304,7 +304,7 @@ function Definition({ ws, doc }: { ws: Workspace; doc: DocumentSheet }) {
         )}
         <div className="card">
           <span className="section-label">Dépendances (tous domaines)</span>
-          <DependencyFacts doc={doc} />
+          <DependencyFacts ws={ws} doc={doc} />
           <Impact count={doc.dependencies.impact} />
         </div>
       </div>
@@ -355,16 +355,24 @@ function names(items: DocumentSheet["dependencies"]["references"]) {
   return items.map((d) => `${d.label ?? d.id}${d.domain_label ? ` (${d.domain_label})` : ""}`).join(" · ");
 }
 
-function DependencyFacts({ doc }: { doc: DocumentSheet }) {
+function DependencyFacts({ ws, doc }: { ws: Workspace; doc: DocumentSheet }) {
   return (
     <dl className="facts facts-stacked">
       <div>
         <dt>Références</dt>
-        <dd>{names(doc.dependencies.references)}</dd>
+        <dd>{names(doc.dependencies.references)}
+          {doc.dependencies.references.filter((d) => d.outdated).map((d) => (
+            <div key={`${d.id}-${d.kind}`} className="fact-warn">
+              <a href={href.document(ws.id, d.id)}>{d.label ?? d.id}</a> : épinglé v{d.version}, version courante v{d.current_version}
+            </div>
+          ))}
+        </dd>
       </div>
       <div>
         <dt>Référencé par</dt>
-        <dd>{names(doc.dependencies.referenced_by)}</dd>
+        <dd>{doc.dependencies.referenced_by.length === 0 ? "—" : doc.dependencies.referenced_by.map((d, i) => (
+          <span key={`${d.id}-${d.kind}`}>{i > 0 && " · "}{d.label ?? d.id}{d.outdated && ` (épinglé v${d.version})`}{d.domain_label && ` (${d.domain_label})`}</span>
+        ))}</dd>
       </div>
     </dl>
   );
@@ -588,6 +596,9 @@ function Dependencies({ ws, doc }: { ws: Workspace; doc: DocumentSheet }) {
                     ) : (
                       <a href={href.document(ws.id, d.id)}>{d.label ?? d.id}</a>
                     )}
+                    {d.outdated && (title === "Références"
+                      ? <span className="fact-warn">épinglé v{d.version}, version courante v{d.current_version}</span>
+                      : <span className="fact-warn">épinglé v{d.version}</span>)}
                     <span className="muted">
                       {[KIND_LABELS[d.document_kind ?? ""] ?? d.document_kind, d.domain_label ?? d.domain, d.version && `v${d.version}`]
                         .filter(Boolean)

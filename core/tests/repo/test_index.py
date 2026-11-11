@@ -441,3 +441,28 @@ def test_present_invalid_concept_is_not_unknown(repo):
     analysis = analyze(repo)
     assert any(i.code == "unknown_concept" for i in analysis.entry("revenu-net").issues)
     path.write_text(original, encoding="utf-8")
+
+
+def test_reference_versions_and_missing_targets(index):
+    """Le retard ne concerne que les références KPI dont les deux versions sont connues."""
+    index.execute('UPDATE "index".documents SET version = 5 WHERE id = ?', ["revenu-net"])
+    index.execute('INSERT INTO "index".dependencies VALUES (?, ?, ?, ?)',
+                  ["marge-brute", "absent", 1, "kpi_ref"])
+    index.execute('UPDATE "index".documents SET version = NULL WHERE id = ?', ["panier-moyen"])
+    index.execute('INSERT INTO "index".dependencies VALUES (?, ?, ?, ?)',
+                  ["marge-brute", "panier-moyen", 1, "kpi_ref"])
+    refs = {r["id"]: r for r in dependencies(index, "marge-brute")["references"]}
+    assert (refs["revenu-net"]["version"], refs["revenu-net"]["current_version"],
+            refs["revenu-net"]["outdated"]) == (4, 5, True)
+    for ident in ("absent", "panier-moyen"):
+        assert refs[ident]["current_version"] is None
+        assert refs[ident]["outdated"] is False
+    incoming = dependencies(index, "revenu-net")["referenced_by"]
+    assert all((r["version"], r["current_version"], r["outdated"]) == (4, 5, True)
+               for r in incoming)
+    assert not next(r for r in dependencies(index, "panier-moyen")["referenced_by"]
+                    if r["id"] == "marge-brute")["outdated"]
+    index.execute('UPDATE "index".documents SET version = 4 WHERE id = ?', ["revenu-net"])
+    assert next(r for r in dependencies(index, "marge-brute")["references"]
+                if r["id"] == "revenu-net")["outdated"] is False
+    assert all(not r["outdated"] for r in dependencies(index, "revenu-net")["referenced_by"])
