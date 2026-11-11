@@ -86,11 +86,11 @@ function placed(nodes: ReturnType<typeof viewNodes>, positions: Positions | null
 
 export function Editor({ ws, params, heading }: { ws: Workspace; params: Params; heading: RefObject<HTMLHeadingElement> }) {
   const from = params.from ?? "";
-  if (!from && params.variant_of) return <NewVariant key={params.variant_of} ws={ws} kpiId={params.variant_of} heading={heading} />;
-  if (!from) return <NewDocument ws={ws} heading={heading} />;
+  if (!from && !params.proposal && params.variant_of) return <NewVariant key={params.variant_of} ws={ws} kpiId={params.variant_of} heading={heading} />;
+  if (!from && !params.proposal) return <NewDocument ws={ws} heading={heading} />;
   return (
     <ReactFlowProvider>
-      <Session key={`${ws.id}/${from}`} ws={ws} id={from} heading={heading} />
+      <Session key={`${ws.id}/${from}/${params.proposal ?? ""}`} ws={ws} id={from} proposalNumber={params.proposal ? Number(params.proposal) : undefined} heading={heading} />
     </ReactFlowProvider>
   );
 }
@@ -341,7 +341,7 @@ function NewDocument({ ws, heading }: { ws: Workspace; heading: RefObject<HTMLHe
 
 // --- session d'édition ------------------------------------------------------------------
 
-function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefObject<HTMLHeadingElement> }) {
+function Session({ ws, id, proposalNumber, heading }: { ws: Workspace; id: string; proposalNumber?: number; heading: RefObject<HTMLHeadingElement> }) {
   const flow = useReactFlow();
   const { zoom } = useViewport();
   const [load, setLoad] = useState<Load>({ kind: "loading" });
@@ -401,8 +401,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   // Ouverture : copie de la version courante, ou brouillon local repris.
   useEffect(() => {
     let alive = true;
-    api
-      .editorOpen(ws.id, id)
+    (proposalNumber ? api.editorRevision(ws.id, proposalNumber) : api.editorOpen(ws.id, id))
       .then((info) => {
         if (!alive) return;
         const draft = info.draft;
@@ -433,7 +432,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
       .then((rows) => alive && setKpis(rows.filter((r) => r.id !== id).map((r) => ({ value: r.id, label: `${r.label} (${r.id})` }))))
       .catch(() => undefined);
     return () => { alive = false; };
-  }, [ws.id, id, updateYaml]);
+  }, [ws.id, id, proposalNumber, updateYaml]);
 
   const info = load.kind === "ready" ? load.info : null;
   const doc = session?.doc ?? null;
@@ -490,7 +489,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
     // Les PUT restent ordonnés ; une suppression attend la dernière écriture lancée.
     const save = async () => {
       if (closedRef.current) return;
-      return api.saveDraft(ws.id, id, draft, keepalive);
+      return proposalNumber ? api.saveRevisionDraft(ws.id, proposalNumber, draft, keepalive) : api.saveDraft(ws.id, id, draft, keepalive);
     };
     const writing = (saveInFlight.current ? saveInFlight.current.then(save) : save())
       .then((saved) => { if (saved && !closedRef.current) setSavedAt(saved.saved_at); })
@@ -505,7 +504,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
       });
     saveInFlight.current = writing;
     return writing;
-  }, [ws.id, id]);
+  }, [ws.id, id, proposalNumber]);
   useEffect(() => {
     if (revision === 0 || !info || submitted || closedRef.current || !pendingSave.current) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -773,9 +772,10 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
     pendingSave.current = false;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     await saveInFlight.current;
-    await api.deleteDraft(ws.id, id).catch(() => {
+    await (proposalNumber ? api.deleteRevisionDraft(ws.id, proposalNumber) : api.deleteDraft(ws.id, id)).catch(() => {
       setNotice("La proposition est créée, mais le brouillon local n'a pas pu être supprimé.");
     });
+    if (proposalNumber) replace(href.view(ws.id, "propositions", { n: String(proposalNumber), domain: "tous" }));
   };
 
   const restart = async () => {
@@ -785,7 +785,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
     if (saveTimer.current) clearTimeout(saveTimer.current);
     try {
       await saveInFlight.current;
-      await api.deleteDraft(ws.id, id);
+      await (proposalNumber ? api.deleteRevisionDraft(ws.id, proposalNumber) : api.deleteDraft(ws.id, id));
     } catch (reason) {
       closedRef.current = false;
       // La session reste modifiable et sauvegardable après un refus de suppression.
@@ -849,7 +849,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   const product = isRaw(doc.data_product) ? doc.data_product : {};
   const label = text(doc.label) || (mode !== "canonical" ? `${text((doc.variant_of as Raw | undefined)?.id)} · ${text(doc.entity)}` : id);
   const version = typeof product.version === "number" ? product.version : null;
-  const back =
+  const back = proposalNumber ? { href: href.view(ws.id, "propositions", { n: String(proposalNumber), domain: "tous" }), label: "Proposition" } :
     info.kind === "variant"
       ? { href: href.document(ws.id, text((doc.variant_of as Raw | undefined)?.id)), label: text((doc.variant_of as Raw | undefined)?.id) }
       : info.base_version !== null
@@ -899,7 +899,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
             /
           </span>
           <h1 ref={heading} tabIndex={-1} className="editor-title">
-            <span className="sr-only">{label} :</span> {version !== null ? `v${version} · brouillon` : "brouillon"}
+            <span className="sr-only">{label} :</span> {proposalNumber ? `Révision de la proposition n° ${proposalNumber}` : version !== null ? `v${version} · brouillon` : "brouillon"}
           </h1>
           <span className="editor-chip mono">
             schéma {String(doc.schema_version ?? "?")} · {plural(nodes.length, "nœud")} · {plural(edges, "arête")}
@@ -922,7 +922,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
               </button>
             )}
             <button type="button" className="btn btn-mint" disabled={restarting} aria-disabled={blocked || !!yaml || undefined} onClick={yaml ? undefined : startSubmit}>
-              Soumettre la proposition
+              {proposalNumber ? "Envoyer la révision" : "Soumettre la proposition"}
             </button>
           </div>
         )}
@@ -1121,6 +1121,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
           document={submitting.document}
           yaml={submitting.yaml}
           baseVersion={info.base_version}
+          proposalNumber={proposalNumber}
           onClose={() => setSubmitting(null)}
           onSubmitted={onSubmitted}
         />

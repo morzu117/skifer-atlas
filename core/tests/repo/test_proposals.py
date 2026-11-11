@@ -446,3 +446,293 @@ def test_atlas_merge_between_auto_and_manual_sync(client, joined, as_):
     assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip()
     result = client.post(f"{WS}/sync").json()
     assert not any(w["code"] == "versions_tagged" for w in result["warnings"])
+
+
+def test_revision_and_close(client, joined, as_):
+    as_("claire.m")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    as_("marc.d")
+    assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "request_changes", "body": "À revoir"}).status_code == 200
+    assert code(client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net()})) == (403, "forbidden")
+    assert code(client.post(f"{PROPOSALS}/1/close", json={})) == (403, "forbidden")
+    as_("julien.h")
+    assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"}).status_code == 200
+    as_("claire.m")
+    before = client.get(f"{PROPOSALS}/1").json()["head"]
+    invalid = client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net().replace("nulls: drop", "nulls: invalid", 1)})
+    assert code(invalid) == (422, "invalid_document")
+    assert invalid.json()["detail"]["issues"]
+    assert client.get(f"{PROPOSALS}/1").json()["head"] == before
+    result = client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net("Définition révisée"), "note": "Correction"})
+    assert result.status_code == 201, result.text
+    detail = client.get(f"{PROPOSALS}/1").json()
+    assert all(review["outdated"] for review in detail["reviews"])
+    assert detail["approvals"]["obtained"] == 0
+    assert detail["changes_requested_by"] == ["marc.d"]
+    assert code(client.post(f"{PROPOSALS}/1/merge")) == (409, "not_ready")
+    assert len(detail["revisions"]) == 2
+    as_("marc.d")
+    assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"}).status_code == 200
+    as_("julien.h")
+    assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"}).status_code == 200
+    assert client.post(f"{PROPOSALS}/1/merge").status_code == 200
+    assert code(client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net()})) == (409, "not_open")
+    assert code(client.post(f"{PROPOSALS}/1/close", json={})) == (409, "not_open")
+
+
+def test_close_by_referent(client, joined, as_):
+    as_("anna.k")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    as_("julien.h")
+    result = client.post(f"{PROPOSALS}/1/close", json={"reason": "À reprendre"})
+    assert result.status_code == 200, result.text
+    assert result.json()["state"] == "closed"
+    assert "À reprendre" in client.get(f"{PROPOSALS}/1").json()["comments"][-1]["body"]
+    assert branches(joined[0])
+
+
+def test_github_close_and_update_body(monkeypatch):
+    from skifer_atlas.githost.github import GitHubHost
+
+    host = GitHubHost("owner", "repo", "token")
+    calls = []
+
+    def request(method, path, payload=None):
+        calls.append((method, path, payload))
+        if path.endswith("/comments"):
+            return {"user": {"login": "anna"}, "body": payload["body"], "created_at": "now"}
+        return {}
+    monkeypatch.setattr(host, "_request", request)
+    host.update_body(7, "bloc mis à jour")
+    host.close(7, "doublon")
+    assert calls == [
+        ("PATCH", "/repos/owner/repo/pulls/7", {"body": "bloc mis à jour"}),
+        ("POST", "/repos/owner/repo/issues/7/comments", {"body": "Proposition retirée : doublon"}),
+        ("PATCH", "/repos/owner/repo/pulls/7", {"state": "closed"}),
+    ]
+
+
+def test_revision_head_changed(client, joined, as_, monkeypatch):
+    import importlib
+
+    from skifer_atlas.repo.git import RepoError
+
+    revision = importlib.import_module("skifer_atlas.proposals.revise")
+    run = revision.run_git
+
+    def concurrent(args, *pos, **kwargs):
+        if args[0] == "push":
+            raise RepoError("push_failed", "rejet")
+        if args[0] == "ls-remote":
+            return "a" * 40 + "\trefs/heads/prop/revenu-net-canonical-1\n"
+        return run(args, *pos, **kwargs)
+
+    as_("claire.m")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    before = client.get(f"{PROPOSALS}/1").json()["head"]
+    monkeypatch.setattr(revision, "run_git", concurrent)
+    result = client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net("Révision")})
+    assert code(result) == (409, "head_changed")
+    assert client.get(f"{PROPOSALS}/1").json()["head"] == before
+
+
+@pytest.mark.parametrize("account", ["anna.k", "claire.m", "julien.h"])
+def test_close_author_or_referent(client, joined, as_, account):
+    as_("anna.k")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    as_(account)
+    result = client.post(f"{PROPOSALS}/1/close", json={"reason": "Doublon"})
+    assert result.status_code == 200, result.text
+    assert "Doublon" in client.get(f"{PROPOSALS}/1").json()["comments"][-1]["body"]
+
+
+def test_revision_draft_is_isolated(client, joined, as_):
+    as_("anna.k")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    endpoint = f"{WS}/editor/proposals/1"
+    opened = client.get(endpoint)
+    assert opened.status_code == 200, opened.text
+    assert "hors taxes" in str(opened.json()["document"])
+    draft = {"document": opened.json()["document"], "positions": {}, "highest": 1,
+             "base_version": 4}
+    assert client.put(f"{endpoint}/draft", json=draft).status_code == 200
+    assert client.get(endpoint).json()["draft"] is not None
+    assert client.get(f"{WS}/editor/documents/revenu-net").json()["draft"] is None
+    as_("claire.m")
+    assert code(client.get(endpoint)) == (403, "forbidden")
+
+
+def test_revision_diff_is_cached(client, joined, as_, monkeypatch):
+    from skifer_atlas.proposals import status
+
+    as_("anna.k")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    assert client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net("Révisé")}).status_code == 201
+    status._revision_difference.cache_clear()
+    first = client.get(f"{PROPOSALS}/1")
+    assert first.status_code == 200, first.text
+    before = status._revision_difference.cache_info()
+    second = client.get(f"{PROPOSALS}/1")
+    after = status._revision_difference.cache_info()
+    assert second.status_code == 200
+    assert after.misses == before.misses and after.hits > before.hits
+
+
+@pytest.mark.parametrize("closer", ["anna.k", "claire.m", "julien.h"])
+def test_revision_on_github_host_double(client, joined, as_, monkeypatch, closer):
+    from skifer_atlas.githost.github import GitHubHost
+    from skifer_atlas.githost.local import LocalHost
+    from skifer_atlas.proposals import common
+
+    as_("anna.k")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    local = LocalHost(joined[0])
+    calls = []
+
+    def request(host, method, path, payload=None):
+        calls.append((method, path, payload))
+        if path == "/user":
+            return {"login": local.current_account()}
+        if "/reviews?" in path:
+            return []
+        if "/comments?" in path:
+            return [{"user": {"login": c.account}, "body": c.body, "created_at": c.created_at}
+                    for c in local.list_comments(1)]
+        if "/comments" in path and method == "POST":
+            c = local.add_comment(1, payload["body"])
+            return {"user": {"login": c.account}, "body": c.body, "created_at": c.created_at}
+        if method == "PATCH" and path.endswith("/pulls/1"):
+            if payload.get("state") == "closed":
+                local.close(1, "")
+            return {}
+        if path.endswith("/pulls/1"):
+            p = local.get_pull_request(1)
+            return {"number": 1, "head": {"ref": p.branch, "sha": p.head},
+                    "title": p.title, "body": p.body, "state": p.state,
+                    "user": {"login": p.author}, "created_at": p.created_at}
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr(GitHubHost, "_request", request)
+    monkeypatch.setattr(common, "host_for", lambda *args: GitHubHost("o", "r", "token"))
+    for account in ("claire.m", "julien.h", "sofia.r"):
+        as_(account)
+        assert code(client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net()})) == (403, "forbidden")
+    as_("sofia.r")
+    assert code(client.post(f"{PROPOSALS}/1/close", json={})) == (403, "forbidden")
+    as_("anna.k")
+    head = local.get_pull_request(1).head
+    assert code(client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": "kind: absent"})) == (422, "invalid_document")
+    assert local.get_pull_request(1).head == head
+    import importlib
+
+    from skifer_atlas.repo.git import RepoError
+
+    revision_module = importlib.import_module("skifer_atlas.proposals.revise")
+    original_run = revision_module.run_git
+
+    def concurrent(args, *pos, **kwargs):
+        if args[0] == "push":
+            raise RepoError("push_failed", "rejet")
+        if args[0] == "ls-remote":
+            return "a" * 40 + "\trefs/heads/branch\n"
+        return original_run(args, *pos, **kwargs)
+
+    with monkeypatch.context() as isolated:
+        isolated.setattr(revision_module, "run_git", concurrent)
+        assert code(client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net()})) == (409, "head_changed")
+    response = client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net("GitHub révisé"), "note": "Correction"})
+    assert response.status_code == 201, response.text
+    detail = client.get(f"{PROPOSALS}/1").json()
+    assert len(detail["revisions"]) == 2 and "GitHub révisé" in detail["content"]
+    as_(closer)
+    closed = client.post(f"{PROPOSALS}/1/close", json={"reason": "Doublon"})
+    assert closed.status_code == 200, closed.text
+    assert code(client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net()})) == (409, "not_open")
+    assert "Doublon" in client.get(f"{PROPOSALS}/1").json()["comments"][0]["body"]
+    assert any(method == "PATCH" and payload == {"state": "closed"} for method, _, payload in calls)
+    assert any(method == "POST" and "Doublon" in payload["body"] for method, _, payload in calls)
+
+
+def test_revision_recomputes_block_without_updating_pr_body(client, joined, as_, monkeypatch):
+    from skifer_atlas.githost.local import LocalHost
+
+    def fail_update(*args):
+        raise AssertionError("La révision ne doit pas modifier le corps de la PR")
+
+    as_("anna.k")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    original = client.get(f"{PROPOSALS}/1").json()["block"]["diff"]
+    monkeypatch.setattr(LocalHost, "update_body", fail_update)
+    revised = edited(REVENU_NET, "Factures validées", "Factures contrôlées")
+    result = client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revised})
+    assert result.status_code == 201, result.text
+    detail = client.get(f"{PROPOSALS}/1").json()
+    assert detail["block"]["diff"] != original
+    assert "Factures contrôlées" in detail["content"]
+
+
+@pytest.mark.parametrize("account", ["claire.m", "julien.h", "sofia.r"])
+def test_only_author_may_revise(client, joined, as_, account):
+    as_("anna.k")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    as_(account)
+    assert code(client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net()})) == (403, "forbidden")
+
+
+def test_revision_attribution_and_manual_commit_author(client, joined, as_, monkeypatch):
+    bare, work = joined
+    as_("julien.h")
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "Nom Git du poste")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "Nom Git du poste")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-11-11T14:05:00+01:00")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-11-11T14:05:00+01:00")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    result = client.post(f"{PROPOSALS}/1/revisions", json={
+        "document_yaml": revenu_net("Révision Atlas"), "note": "Note visible"})
+    assert result.status_code == 201, result.text
+    from skifer_atlas.workspaces import repo_dir
+
+    # Une mailmap du poste ne doit pas substituer un autre nom au compte enregistré.
+    email = git(bare, "show", "-s", "--format=%ae", result.json()["head"]).strip()
+    mailmap = bare.parent / "mailmap"
+    mailmap.write_text(f"Nom remappé <{email}>\n", encoding="utf-8")
+    git(repo_dir("groupe-nordis"), "config", "mailmap.file", str(mailmap))
+    details = client.get(f"{PROPOSALS}/1").json()
+    assert details["revisions"][0]["author"] == "julien.h"
+    assert details["revisions"][1]["author"] == "julien.h"
+    assert git(bare, "show", "-s", "--format=%an/%cn", details["revisions"][1]["commit"]).strip() == "julien.h/julien.h"
+    assert details["revisions"][1]["date"] == "2026-11-11T13:05:00Z"
+    assert details["revisions"][1]["note"] == "Note visible"
+    branch = result.json()["branch"]
+    git(work, "fetch", "origin", branch)
+    git(work, "checkout", "-b", "revision-manuelle", "FETCH_HEAD")
+    path = work / REVENU_NET
+    path.write_text(path.read_text(encoding="utf-8").replace("Révision Atlas", "Révision manuelle"), encoding="utf-8")
+    commit_all(work, "Révision de la proposition\n\nAtlas-Account: usurpe")
+    git(work, "push", "origin", f"HEAD:{branch}")
+    assert client.get(f"{PROPOSALS}/1").json()["revisions"][-1]["author"] == "Nom Git du poste"
+
+
+def test_detail_dates_utc_and_latest_blocking_review(client, joined, as_):
+    import json
+
+    as_("anna.k")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    as_("claire.m")
+    assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "request_changes", "body": "À revoir"}).status_code == 200
+    as_("anna.k")
+    assert client.post(f"{PROPOSALS}/1/revisions", json={"document_yaml": revenu_net("Révisé")}).status_code == 201
+    as_("claire.m")
+    before = client.get(f"{PROPOSALS}/1").json()
+    assert before["reviews"][0]["blocking"] is True
+    assert client.post(f"{PROPOSALS}/1/reviews", json={"event": "approve"}).status_code == 200
+    assert client.post(f"{PROPOSALS}/1/comments", json={"body": "Merci"}).status_code == 201
+    path = joined[0] / "atlas" / "proposals" / "1.json"
+    state = json.loads(path.read_text(encoding="utf-8"))
+    state["reviews"][0]["submitted_at"] = "2026-11-11T14:00:00+01:00"
+    state["comments"][0]["created_at"] = "2026-11-11T14:10:00+01:00"
+    path.write_text(json.dumps(state), encoding="utf-8")
+    after = client.get(f"{PROPOSALS}/1").json()
+    assert after["reviews"][0]["blocking"] is False
+    assert after["reviews"][0]["submitted_at"] == "2026-11-11T13:00:00Z"
+    assert after["comments"][0]["created_at"] == "2026-11-11T13:10:00Z"

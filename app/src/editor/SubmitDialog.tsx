@@ -17,6 +17,7 @@ export function SubmitDialog({
   document,
   yaml,
   baseVersion,
+  proposalNumber,
   onClose,
   onSubmitted,
 }: {
@@ -24,6 +25,7 @@ export function SubmitDialog({
   document: Record<string, unknown>;
   yaml: string;
   baseVersion: number | null;
+  proposalNumber?: number;
   onClose: () => void;
   onSubmitted: (proposal: Proposal) => void;
 }) {
@@ -47,14 +49,14 @@ export function SubmitDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!justification.trim()) {
+    if (!proposalNumber && !justification.trim()) {
       setMissing(true);
       return;
     }
     setBusy(true);
     setFailure(null);
     try {
-      onSubmitted(await api.createProposal(ws, { document_yaml: yaml, justification: justification.trim(), base_version: baseVersion }));
+      onSubmitted(proposalNumber ? await api.reviseProposal(ws, proposalNumber, yaml, justification.trim()) : await api.createProposal(ws, { document_yaml: yaml, justification: justification.trim(), base_version: baseVersion }));
     } catch (reason) {
       setFailure(explain(reason));
       setBusy(false);
@@ -64,7 +66,7 @@ export function SubmitDialog({
   const preview = load.kind === "ready" ? load.preview : null;
   const nature = preview ? NATURES[preview.nature] ?? { label: preview.nature, tone: "badge-neutral" } : null;
   return (
-    <Drawer title="Soumettre la proposition" onClose={onClose}>
+    <Drawer title={proposalNumber ? "Envoyer la révision" : "Soumettre la proposition"} onClose={onClose}>
       {load.kind === "loading" && (
         <p className="muted" role="status">
           Préparation du récapitulatif…
@@ -111,7 +113,7 @@ export function SubmitDialog({
       <form className="form" onSubmit={submit} noValidate>
         <div className="field">
           <label htmlFor={id}>
-            Justification<span className="required"> requis</span>
+            {proposalNumber ? "Note facultative" : <>Justification<span className="required"> requis</span></>}
           </label>
           <textarea
             id={id}
@@ -133,7 +135,7 @@ export function SubmitDialog({
         )}
         <div className="actions">
           <button type="submit" className="btn btn-primary" disabled={busy || load.kind !== "ready"}>
-            {busy ? "Envoi…" : "Soumettre"}
+            {busy ? "Envoi…" : proposalNumber ? "Envoyer la révision" : "Soumettre"}
           </button>
           <button type="button" className="btn btn-neutral" onClick={onClose}>
             Annuler

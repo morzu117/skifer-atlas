@@ -25,10 +25,14 @@ test("[S-0014-10] un commentaire entre dans le fil, une demande de changements p
   await relay(page, CLAIRE);
   await page.goto(`${ws.root}/propositions?n=5`);
   await expect(entry(page, "Revenu net · nordis-de")).toContainText("Validations : 0 / 2 (canonique requis)");
-  const thread = selection(page).getByRole("region", { name: "Commentaires" });
+  // Le fil de la proposition (ADR 0056) porte aussi ses révisions : la n° 1 est le commit de création.
+  const thread = selection(page).getByRole("region", { name: "Fil de la proposition" });
+  const revision = thread.getByRole("listitem").filter({ hasText: "a envoyé la révision 1" });
+  const exchanges = thread.getByRole("listitem").filter({ hasNotText: "a envoyé la révision" });
   const seeded = "Le statut « expédiée » devrait-il devenir un point de variation du canonique ?"; // posé par le script de démonstration
-  await expect(thread.getByRole("listitem")).toHaveCount(1);
-  await expect(thread.getByRole("listitem")).toContainText(seeded);
+  await expect(revision).toHaveCount(1);
+  await expect(exchanges).toHaveCount(1);
+  await expect(exchanges).toContainText(seeded);
 
   // Un commentaire vide est refusé sur le champ, sans rien envoyer.
   const posted: string[] = [];
@@ -39,8 +43,8 @@ test("[S-0014-10] un commentaire entre dans le fil, une demande de changements p
 
   await thread.getByLabel("Répondre").fill("Le fuseau horaire doit rester Europe/Paris.");
   await thread.getByRole("button", { name: "Envoyer", exact: true }).click();
-  await expect(thread.getByRole("listitem")).toHaveCount(2);
-  await expect(thread.getByRole("listitem").filter({ hasText: "Le fuseau horaire doit rester Europe/Paris." })).toContainText("Claire M.");
+  await expect(exchanges).toHaveCount(2);
+  await expect(exchanges.filter({ hasText: "Le fuseau horaire doit rester Europe/Paris." })).toContainText("Claire M.");
   await expect(thread.getByLabel("Répondre")).toHaveValue("");
   await expect(entry(page, "Revenu net · nordis-de")).toContainText("Validations : 0 / 2");
 
@@ -50,18 +54,16 @@ test("[S-0014-10] un commentaire entre dans le fil, une demande de changements p
   await form.getByLabel(/Ce qui doit changer/).fill("Reprendre n03 : le filtre doit exclure les avoirs.");
   await form.getByRole("button", { name: "Envoyer la demande" }).click();
   await expect(form).toHaveCount(0);
-  const asked = thread.getByRole("listitem").filter({ hasText: "Reprendre n03 : le filtre doit exclure les avoirs." });
+  const asked = exchanges.filter({ hasText: "Reprendre n03 : le filtre doit exclure les avoirs." });
   await expect(asked).toContainText("Claire M. demande des changements");
   await expect(entry(page, "Revenu net · nordis-de")).toContainText("Validations : 0 / 2");
   await expect(page.getByRole("button", { name: "Approuver (0 / 2)" })).toBeVisible();
 
-  // Après rechargement, le fil se relit tel quel, dans l'ordre.
+  // Après rechargement, le fil se relit tel quel : les trois échanges dans l'ordre, et la révision 1. Sa place
+  // n'est pas comparée au commentaire de démonstration, qui peut tomber dans la même seconde que le commit de création (dates à la seconde).
   await page.reload();
-  const items = selection(page).getByRole("region", { name: "Commentaires" }).getByRole("listitem");
-  await expect(items).toHaveCount(3);
-  await expect(items.nth(0)).toContainText("Le statut « expédiée »");
-  await expect(items.nth(1)).toContainText("Le fuseau horaire doit rester Europe/Paris.");
-  await expect(items.nth(2)).toContainText("Claire M. demande des changements");
+  await expect(revision).toHaveCount(1);
+  await expect(exchanges).toHaveText([/Le statut « expédiée »/, /Le fuseau horaire doit rester Europe\/Paris\./, /Claire M\. demande des changements/]);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 

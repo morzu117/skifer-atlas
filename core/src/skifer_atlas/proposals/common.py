@@ -117,9 +117,11 @@ def review_domain(context: Context, target: dict, base_version: int | None,
 
 # --- plomberie Git -------------------------------------------------------------------------
 
-def commit_files(repo: Path, parent: str, files: dict[str, str], message: str) -> str:
+def commit_files(repo: Path, parent: str, files: dict[str, str], message: str,
+                 account: str | None = None) -> str:
     """Commit enfant de `parent` qui écrit ces fichiers, sans toucher à la copie de
-    travail ni à l'index du clone. Auteur : l'identité Git de l'utilisateur."""
+    travail ni à l'index du clone. Par défaut, identité Git ; pour une révision,
+    les noms de l'auteur et du committer sont ceux du compte Atlas."""
     with tempfile.TemporaryDirectory(prefix="atlas-commit-") as tmp:
         env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
         run_git(["read-tree", parent], repo, env=env)
@@ -130,7 +132,8 @@ def commit_files(repo: Path, parent: str, files: dict[str, str], message: str) -
             run_git(["update-index", "--add", "--cacheinfo", f"100644,{blob},{path}"], repo,
                     env=env)
         tree = run_git(["write-tree"], repo, env=env).strip()
-    return run_git(["commit-tree", tree, "-p", parent, "-m", message], repo).strip()
+    identity = {"GIT_AUTHOR_NAME": account, "GIT_COMMITTER_NAME": account} if account else None
+    return run_git(["commit-tree", tree, "-p", parent, "-m", message], repo, env=identity).strip()
 
 
 @contextmanager

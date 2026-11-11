@@ -144,5 +144,5 @@ Un `base_version` qui n'est plus la version courante renvoie `stale_base` et ne 
 - **À la main** : sur la démonstration, avec `curl` et le serveur relancé sous trois comptes (`ATLAS_ACCOUNT`), on a enchaîné adhésion, proposition, deux approbations et fusion. Le commit de fusion porte `Atlas-Review: approved by claire.m, marc.d`, le tag `doc/revenu-net/v5` est posé et la fiche montre la v5.
 - **Reste à faire** :
   - poser le tag au `sync` quand une PR a été fusionnée directement sur GitHub ;
-  - ajouter une route de révision d'une proposition, si l'écran 0014 en a besoin ;
+  - révision d'une proposition : route ajoutée (ADR 0056) ;
   - remplacer `ATLAS_GITHUB_TOKEN` par le coffre (plan 0008) (fait : plan 0025).

@@ -163,6 +163,14 @@ class GitHubHost(GitHost):
         data = self._request("POST", f"{self._repo()}/issues/{number}/comments", {"body": body})
         return Comment(data["user"]["login"], data.get("body") or "", data["created_at"])
 
+    def update_body(self, number: int, body: str) -> None:
+        self._request("PATCH", f"{self._repo()}/pulls/{number}", {"body": body})
+
+    def close(self, number: int, reason: str) -> None:
+        if reason:
+            self.add_comment(number, f"Proposition retirée : {reason}")
+        self._request("PATCH", f"{self._repo()}/pulls/{number}", {"state": "closed"})
+
     def merge(self, number: int, head: str, title: str, message: str) -> str:
         data = self._request("PUT", f"{self._repo()}/pulls/{number}/merge", {
             "merge_method": "merge", "sha": head, "commit_title": title,

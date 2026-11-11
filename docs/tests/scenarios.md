@@ -57,8 +57,9 @@
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | 0035 | 12 | 10 | 0 | 2 | 0 |
 | ADR 0049 | 1 | 1 | 0 | 0 | 0 |
+| ADR 0056 | 6 | 6 | 0 | 0 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **333** | **264** | **6** | **63** | **0** |
+| **Total** | **339** | **270** | **6** | **63** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1253,6 +1254,7 @@ Plan 0014, critère 5 (envoi), critère 4 (le décompte ne bouge pas) · Test : 
 - **Alors** le premier envoi affiche « Écrire un commentaire avant d'envoyer. » sans aucune requête POST ; le commentaire entre dans le fil sous « Claire M. », le champ se vide
 - **Et** la demande de changements ferme le formulaire et ajoute « Claire M. demande des changements » avec son texte ; « Validations : 0 / 2 » et « Approuver (0 / 2) » restent inchangés
 - **Et** après rechargement le fil affiche les trois entrées, dans l'ordre
+- Le fil de la proposition (ADR 0056) montre aussi l'entrée « a envoyé la révision 1 » (commit de création), vérifiée présente ; sa place n'est pas comparée au commentaire de démonstration, qui peut tomber dans la même seconde que le commit de création (dates à la seconde).
 
 ## Comparaison
 
@@ -2150,7 +2152,7 @@ Plan 0035, critère 2 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-02]`
 - **Quand** Claire approuve à son tour la nouvelle version
 - **Alors** sa demande est remplacée, la proposition est prête, elle la fusionne : le dépôt a la définition corrigée, le message `Atlas-Review: approved by claire.m, marc.d` et le tag `doc/taux-de-recouvrement/v1`
 - **Et** chez Claire, qui a fusionné, le catalogue dit v1 et la fiche montre la définition corrigée ; chez Anna, la proposition figure parmi les fusionnées
-- Limite : l'écran n'a pas de route pour réviser ou fermer une proposition (« Reste à faire » du plan 0006) : la correction passe par un commit poussé à la main sur la branche. Les approbations données avant ce commit ne comptent plus (S-0006-03).
+- La révision depuis Atlas est décrite en S-0056-01 ; ce parcours conserve son commit poussé à la main.
 
 ### S-0035-03 — Revenu net de v4 à v5, avec deux KPI qui s'y appuient
 Plan 0035, critère 3 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-03]`
@@ -2255,6 +2257,54 @@ ADR 0049 · Test : `app/e2e/synchronisation-auto.spec.ts` › `[S-0049-01]`
 - **Quand** une synchronisation ultérieure réussit
 - **Alors** le bandeau disparaît
 - Limite : le test Playwright épuise les 20 essais ; l'échéance de 8 s atteinte pendant la pause entre deux essais est vérifiée par `app/src/screens/WorkspaceShell.test.tsx` › « signale le délai de synchronisation atteint pendant une pause ».
+
+## Révisions et retrait des propositions
+
+`app/e2e/propositions-revisions.spec.ts` : réviser une proposition ouverte depuis l'éditeur et la retirer (ADR 0056), sur une copie isolée de l'espace de démonstration, à quatre comptes (anna.k, claire.m, marc.d, julien.h, un serveur chacun). Les gestes passent par l'écran ; l'API ne sert qu'à préparer l'état (demande de changements de départ) et à constater un refus. Le dépôt distant isolé est relu après chaque geste ; axe-core ne relève aucune violation sérieuse ou critique sur le détail, l'éditeur en mode révision, le volet « Envoyer la révision » et la boîte « Retirer la proposition ? ».
+
+**ADR 0056**
+
+### S-0056-01 — Révision et fusion
+ADR 0056 · Test : `app/e2e/propositions-revisions.spec.ts` › `[S-0056-01]`
+- **Étant donné** la proposition n° 3 de julien.h (Revenu net v5), approuvée par marc.d, où claire.m demande des changements
+- **Quand** Julien choisit « Modifier ma proposition », change le libellé de n02 dans l'éditeur (« Revenu net : Révision de la proposition n° 3 ») et envoie la révision avec une note facultative
+- **Alors** la branche a un commit de plus, enfant de l'ancienne tête, avec la note ; main n'a pas bougé ; le fil montre « a envoyé la révision 2 · 1 écart(s) · <commit> » et la note, l'approbation de Marc « (revue dépassée) », la demande de Claire « (sur un ancien commit, demande toujours bloquante) », et la file « Validations : 0 / 2 »
+- **Quand** Marc approuve la nouvelle tête
+- **Alors** « Validations : 1 / 2 », « Changements demandés par claire.m. » demeure, pas de bouton « Fusionner », la fusion demandée à l'API est refusée (409 `not_ready`) et main n'a pas bougé
+- **Quand** Claire approuve à son tour
+- **Alors** « Validations : 2 / 2 · prête à fusionner » ; elle fusionne : main a le libellé révisé, `Atlas-Review: approved by claire.m, marc.d` et le tag `doc/revenu-net/v5`
+- **Et** l'entrée de révision est attribuée à « Julien H. » (le compte Atlas), le fil suit l'ordre chronologique (demande, révision 2, nouvelle approbation de Marc), et la demande levée par l'approbation de Claire n'est plus dite « toujours bloquante » mais « (revue dépassée) »
+
+### S-0056-02 — Révision refusée
+ADR 0056 · Test : `app/e2e/propositions-revisions.spec.ts` › `[S-0056-02]`
+- **Étant donné** la proposition n° 5 d'anna.k, ouverte
+- **Quand** claire.m, référente, l'affiche, puis ouvre à la main l'adresse de l'éditeur de révision, puis tente la révision par l'API
+- **Alors** elle a « Retirer la proposition » mais pas « Modifier ma proposition », l'éditeur affiche « Seul l'auteur peut réviser la proposition. » sans bouton « Envoyer la révision », l'API répond 403 `forbidden`, et la branche distante n'a pas bougé
+
+### S-0056-03 — Retrait par l'auteur
+ADR 0056 · Test : `app/e2e/propositions-revisions.spec.ts` › `[S-0056-03]`
+- **Étant donné** la proposition n° 5 d'anna.k, ouverte
+- **Quand** Anna choisit « Retirer la proposition », annule (le focus revient au bouton), puis recommence avec un motif et confirme
+- **Alors** « Proposition n° 5 retirée » et « La branche est conservée. » ; la proposition quitte les ouvertes ; dans « Fermées », elle porte « Fermée », le fil montre « Proposition retirée : <motif> » sous le nom d'Anna, sans bouton « Modifier » ni « Retirer » ; la branche distante garde sa tête et main n'a pas bougé
+
+### S-0056-04 — Retrait par un référent
+ADR 0056 · Test : `app/e2e/propositions-revisions.spec.ts` › `[S-0056-04]`
+- **Étant donné** les propositions n° 5 d'anna.k et n° 1 de sofia.r (Finance), ouvertes
+- **Quand** claire.m, référente Finance, retire la n° 5, et julien.h, référent de l'espace sans domaine, retire la n° 1, chacun avec un motif
+- **Alors** chacune est fermée, avec « Proposition retirée : <motif> » sous le nom du référent ; Claire n'a pas « Modifier ma proposition » ; Anna voit sa proposition fermée et le motif de Claire ; les deux branches distantes gardent leur tête
+
+### S-0056-05 — Retrait refusé
+ADR 0056 · Test : `app/e2e/propositions-revisions.spec.ts` › `[S-0056-05]`
+- **Étant donné** la proposition n° 5 d'anna.k, ouverte
+- **Quand** marc.d, validateur Finance ni auteur ni référent, l'affiche puis tente le retrait par l'API
+- **Alors** il peut l'approuver mais n'a ni « Retirer la proposition » ni « Modifier ma proposition », l'API répond 403 `forbidden`, et chez Anna la proposition reste ouverte (« Validations : 0 / 2 »), sans trace de retrait dans le fil, sa branche intacte
+
+### S-0056-06 — Révision invalide
+ADR 0056 · Test : `app/e2e/propositions-revisions.spec.ts` › `[S-0056-06]`
+- **Étant donné** la proposition n° 3 de julien.h, ouverte
+- **Quand** Julien ouvre l'éditeur de révision et retire, en YAML, le traitement des valeurs nulles du filtre n02
+- **Alors** au retour au canevas, l'onglet de validation montre une erreur sur n02 ; « Envoyer la révision » est `aria-disabled` et son clic dit « Soumission bloquée : 1 erreur à corriger », sans volet ni requête de révision
+- **Et** le serveur refuse le même document (422 `invalid_document`, diagnostic d'erreur sur n02), la branche distante garde sa tête, et le fil n'a toujours qu'une révision, l'approbation de Marc non dépassée
 
 ## Parcours WebKit
 

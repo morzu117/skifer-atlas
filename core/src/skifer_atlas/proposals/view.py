@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..diff import DiffContext, diff
-from ..governance.model import ROLE_RANK, domain_approvers
+from ..governance.model import ROLE_RANK, domain_approvers, domain_referents, space_referents
 from ..governance.rules import requirement
 from ..index.build import Analysis, analyze
 from ..model.io import validate_text
@@ -19,6 +19,7 @@ from ..repo import versions as repo_versions
 from ..repo.git import RepoError
 from ..sheet import labelled_layout, resolved_graph
 from .common import Context, open_context, parse_body, review_domain
+from .current import current_block
 from .status import list_proposals
 
 
@@ -61,7 +62,10 @@ def viewer(context: Context, found: dict) -> dict:
     contributor = ROLE_RANK[context.role()] >= ROLE_RANK["contributeur"]
     can_merge = open_ and bool(found.get("ready_to_merge")) and contributor
     return {
-        "account": account, "can_review": reason is None, "review_reason": reason,
+        "account": account,
+        "can_revise": open_ and account == found["author"] and found["document_kind"] in ("kpi", "concept", "variant"),
+        "can_close": open_ and (account == found["author"] or account in space_referents(context.governance) or account in domain_referents(context.governance, domain)),
+        "can_review": reason is None, "review_reason": reason,
         "can_merge": can_merge,
         "merge_reason": None if can_merge else (
             "Rôle contributeur requis pour fusionner." if not contributor
@@ -117,8 +121,10 @@ def _recurring(context: Context, analysis: Analysis, block: dict, number: int,
         if pull.number == number:
             continue
         _, other = parse_body(pull.body)
-        if not other or other["target"].get("kpi_id") != target["kpi_id"] \
-                or other.get("nature") != "undeclared":
+        if not other or other["target"].get("kpi_id") != target["kpi_id"]:
+            continue
+        other = current_block(context, pull.head, other)
+        if other.get("nature") != "undeclared":
             continue
         for difference in (other.get("diff") or {}).get("differences", []):
             if difference.get("classification") == "override_undeclared" \
@@ -138,6 +144,7 @@ def graphs(workspace_id: str, number: int) -> dict:
     if block is None:
         raise RepoError("not_found", f"La pull request #{number} n'est pas une proposition "
                         "Atlas.")
+    block = current_block(context, pull.head, block)
     empty = {"base": None, "proposed": None, "report": None, "undeclared": [],
              "recurring": []}
     target = block["target"]

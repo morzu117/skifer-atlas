@@ -15,6 +15,7 @@ from ..repo.sync import sync_workspace
 from ..repo.versions import tag_name
 from .common import open_context, parse_body, review_domain
 from .create import SHARED_FILES, current_version
+from .current import current_block
 
 
 def merge_proposal(workspace_id: str, number: int) -> dict:
@@ -27,6 +28,7 @@ def merge_proposal(workspace_id: str, number: int) -> dict:
     if block is None:
         raise RepoError("not_found", f"La pull request #{number} n'est pas une proposition "
                         "Atlas.")
+    block = current_block(context, pull.head, block)
     target = block["target"]
     domain = review_domain(context, target, block.get("base_version"), block.get("domain"))
     decision = decide(context.governance, block["nature"], domain, pull.author,

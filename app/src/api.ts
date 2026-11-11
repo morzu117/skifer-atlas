@@ -536,14 +536,18 @@ export type ProposalQueue = {
 
 export type ProposalComment = { account: string; body: string; created_at: string };
 
-export type ProposalReview = { account: string; state: string; submitted_at: string; body: string; outdated: boolean };
+export type ProposalReview = { account: string; state: string; submitted_at: string; body: string; outdated: boolean; blocking?: boolean };
 
 export type ProposalDetail = ProposalItem & {
   justification: string;
+  content?: string | null;
+  revisions?: { rank: number; commit: string; date: string; author: string; note: string; differences: number }[];
   reviews: ProposalReview[];
   comments: ProposalComment[];
   viewer: {
     account: string;
+    can_revise?: boolean;
+    can_close?: boolean;
     can_review: boolean;
     review_reason: string | null;
     can_merge: boolean;
@@ -715,6 +719,13 @@ export const api = {
   draft: (id: string, documentId: string) => request<Draft>(`${doc(id, documentId)}/draft`),
   editorOpen: (id: string, documentId: string) =>
     request<EditorDocument>(`${ws(id)}/editor/documents/${encodeURIComponent(documentId)}`),
+  editorRevision: (id: string, number: number) => request<EditorDocument>(`${ws(id)}/editor/proposals/${number}`),
+  saveRevisionDraft: (id: string, number: number, draft: Omit<EditorDraft, "saved_at">, keepalive = false) => {
+    const body = JSON.stringify(draft);
+    return request<{ saved_at: string }>(`${ws(id)}/editor/proposals/${number}/draft`, { method: "PUT", body,
+      keepalive: keepalive && new TextEncoder().encode(body).byteLength < 60 * 1024 });
+  },
+  deleteRevisionDraft: (id: string, number: number) => request<null>(`${ws(id)}/editor/proposals/${number}/draft`, { method: "DELETE" }),
   editorNew: (id: string, body: NewDocument) => request<EditorDocument>(`${ws(id)}/editor/documents`, post(body)),
   editorNewVariant: (id: string, body: NewVariant) => request<EditorDocument>(`${ws(id)}/editor/variants`, post(body)),
   editorCheck: (id: string, document: unknown, nodeId: string | null) =>
@@ -736,6 +747,8 @@ export const api = {
   proposalQueue: (id: string, status: ProposalStatus) =>
     request<ProposalQueue>(`${ws(id)}/proposals/queue?status=${status}`),
   proposal: (id: string, number: number) => request<ProposalDetail>(`${ws(id)}/proposals/${number}`),
+  closeProposal: (id: string, number: number, reason: string) => request<ProposalItem>(`${ws(id)}/proposals/${number}/close`, post({ reason })),
+  reviseProposal: (id: string, number: number, document_yaml: string, note: string) => request<Proposal>(`${ws(id)}/proposals/${number}/revisions`, post({ document_yaml, note })),
   proposalGraphs: (id: string, number: number) => request<ProposalGraphs>(`${ws(id)}/proposals/${number}/graphs`),
   review: (id: string, number: number, event: "approve" | "request_changes", body = "") =>
     request<ProposalItem>(`${ws(id)}/proposals/${number}/reviews`, post({ event, body })),

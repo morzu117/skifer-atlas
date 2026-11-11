@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 
 from ... import editor
 from ...index.build import Analysis, analyze
+from ...model.io import read_yaml
 from ...paths import workspace_dir
+from ...proposals.common import checkout, open_context, parse_body
 from ...repo.git import RepoError, head
 from ...workspaces import repo_dir
 from .common import document_id_or_404, workspace_or_404
@@ -151,3 +153,42 @@ def delete_draft(ws: str, document_id: str, discard_layout: bool = False) -> Non
 def post_preview(ws: str, body: PreviewRequest) -> dict:
     repo, analysis, _ = _context(ws)
     return editor.preview(repo, analysis, body.document)
+
+
+def _revision_context(ws: str, number: int):
+    context = open_context(workspace_or_404(ws).id)
+    pull = context.host.get_pull_request(number)
+    if pull.state != "open":
+        raise RepoError("not_open", "La proposition n'est plus ouverte.")
+    if pull.author != context.account:
+        raise RepoError("forbidden", "Seul l'auteur peut réviser la proposition.")
+    _, block = parse_body(pull.body)
+    if not block or block["target"]["kind"] not in ("concept", "kpi", "variant"):
+        raise RepoError("not_found", "Document de la proposition introuvable.")
+    folder = workspace_dir(context.workspace.id) / ".atlas" / "proposal-drafts" / str(number)
+    return context, pull, block, folder
+
+
+@router.get("/proposals/{number}")
+def get_revision_editor(ws: str, number: int) -> dict:
+    context, pull, block, folder = _revision_context(ws, number)
+    target = block["target"]
+    with checkout(context.repo, pull.head) as root:
+        analysis = analyze(root, context.repo)
+        info = editor.open_document(context.repo, analysis, folder, target["id"])
+    raw, _ = read_yaml(context.show(target["path"], pull.head) or "")
+    info["document"] = raw
+    info["base_version"] = block.get("base_version")
+    return info
+
+
+@router.put("/proposals/{number}/draft")
+def put_revision_draft(ws: str, number: int, body: DraftRequest) -> dict:
+    _, _, block, folder = _revision_context(ws, number)
+    return editor.save_draft(folder, block["target"]["id"], body.model_dump())
+
+
+@router.delete("/proposals/{number}/draft", status_code=204)
+def delete_revision_draft(ws: str, number: int, discard_layout: bool = False) -> None:
+    _, _, block, folder = _revision_context(ws, number)
+    editor.delete_draft(folder, block["target"]["id"], discard_layout)

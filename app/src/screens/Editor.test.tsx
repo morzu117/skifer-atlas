@@ -121,6 +121,51 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("éditeur", () => {
+  it("révise dans le canevas, sauvegarde séparément et soumet avec une note", async () => {
+    window.location.hash = "#/w/groupe-nordis/editeur?proposal=7&from=revenu-net";
+    const info = opened();
+    (info.document.graph as { nodes: Nodes }).nodes[1].nulls = "drop";
+    info.document.label = "Version proposée";
+    const { calls } = server(info, (call) => {
+      if (call.path === `${EDITOR}/proposals/7` && call.method === "GET") return { json: info };
+      if (call.path === `${EDITOR}/proposals/7/draft`) return { json: { saved_at: "2026-10-30T10:00:00Z" } };
+      if (call.path === `${EDITOR}/preview`) return { json: { nature: "new_version", domain: "finance", required: 2, mention: null, diff: null } };
+      if (call.path.endsWith("/proposals/7/revisions")) return { json: { id: 7, state: "open", title: "Revenu net", branch: "prop/test" } };
+      return undefined;
+    });
+    editor();
+    expect(await screen.findByRole("heading", { name: /Révision de la proposition n° 7/ })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Graphe" })).toBeInTheDocument();
+    expect(await screen.findByText("Compilable Databricks, Snowflake")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.path === `${EDITOR}/proposals/7/draft`)).toBe(true));
+    expect(calls.some((c) => c.method === "PUT" && c.path === `${EDITOR}/documents/revenu-net/draft`)).toBe(false);
+    // Le nœud ajouté rend le graphe incomplet : on l'annule avant soumission.
+    await userEvent.keyboard("{Meta>}z{/Meta}");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Envoyer la révision" })).not.toHaveAttribute("aria-disabled"));
+    await userEvent.click(screen.getByRole("button", { name: "Envoyer la révision" }));
+    const dialog = await screen.findByRole("dialog", { name: "Envoyer la révision" });
+    await userEvent.type(within(dialog).getByLabelText("Note facultative"), "Correction");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Envoyer la révision" }));
+    await waitFor(() => expect(calls.find((c) => c.path.endsWith("/proposals/7/revisions"))?.body).toEqual({ document_yaml: "label: Revenu net\n# 2 nœuds\n", note: "Correction" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === `${EDITOR}/proposals/7/draft`)).toBe(true));
+  });
+
+  it("reprend le brouillon de révision et bloque un document invalide", async () => {
+    window.location.hash = "#/w/groupe-nordis/editeur?proposal=7&from=revenu-net";
+    const proposed = opened();
+    proposed.document.label = "Version proposée";
+    const draft = { document: { ...structuredClone(DOCUMENT), label: "Brouillon de révision" }, positions: {}, highest: 7, base_version: 4, saved_at: "2026-10-30T09:00:00Z" };
+    const { calls } = server(proposed, (call) => call.path === `${EDITOR}/proposals/7` ? { json: { ...proposed, draft } } : undefined);
+    editor();
+    expect(await screen.findByText("Brouillon local repris")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Brouillon de révision");
+    expect(await screen.findByText("Schéma invalide")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Envoyer la révision" }));
+    expect(screen.queryByRole("dialog", { name: "Envoyer la révision" })).not.toBeInTheDocument();
+    expect(calls.some((call) => call.path.endsWith("/revisions") && call.method === "POST")).toBe(false);
+  });
+
   it.each([
     ["Surcharge du canonique", "override"],
     ["Graphe indépendant", "from_scratch"],

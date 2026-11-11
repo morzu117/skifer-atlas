@@ -135,6 +135,23 @@ class LocalHost(GitHost):
             self._save(data)
         return comment
 
+    def update_body(self, number: int, body: str) -> None:
+        with _lock:
+            data = self._load(number)
+            data["body"] = body
+            self._save(data)
+
+    def close(self, number: int, reason: str) -> None:
+        with _lock:
+            data = self._load(number)
+            if data["state"] != "open":
+                raise RepoError("not_open", f"La proposition #{number} n'est plus ouverte.")
+            data["head"] = self._head(data["branch"]) or data["head"]
+            data["state"] = "closed"
+            data["comments"].append(Comment(self.current_account(),
+                "Proposition retirée" + (f" : {reason}" if reason else ""), _now()).to_dict())
+            self._save(data)
+
     def merge(self, number: int, head: str, title: str, message: str) -> str:
         with _lock:
             data = self._load(number)

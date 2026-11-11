@@ -297,6 +297,60 @@ describe("propositions", () => {
     expect(screen.getByText("FR a la même demande.")).toBeInTheDocument();
   });
 
+  it("affiche les actions autorisées, le fil et confirme le retrait au clavier", async () => {
+    proposalServer({ detail: (n) => detail(QUEUE.items.find((i) => i.id === n)!, {
+      viewer: { ...VIEWER, can_revise: true, can_close: true },
+      revisions: [{ rank: 1, commit: "abcdef123", date: "2026-10-30T08:00:00Z", author: "anna.k", note: "Première version", differences: 0 }],
+      reviews: [{ account: "claire.m", state: "approved", submitted_at: "2026-10-30T09:00:00Z", body: "", outdated: true }],
+    }) });
+    render(<Harness />);
+    expect(await screen.findByRole("link", { name: "Modifier ma proposition" })).toBeInTheDocument();
+    expect(screen.getByText(/revue dépassée/)).toBeInTheDocument();
+    expect(screen.getByText(/a envoyé la révision 1/)).toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "Retirer la proposition" });
+    await userEvent.click(trigger);
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("ordonne les instants et n'annonce bloquante que la dernière demande active", async () => {
+    proposalServer({ detail: (n) => detail(QUEUE.items.find((i) => i.id === n)!, {
+      revisions: [{ rank: 2, commit: "abcdef123", date: "2026-11-11T14:05:00+01:00", author: "julien.h", note: "Correction", differences: 1 }],
+      comments: [{ account: "anna.k", body: "Merci", created_at: "2026-11-11T13:20:00Z" }],
+      reviews: [
+        { account: "claire.m", state: "changes_requested", submitted_at: "2026-11-11T13:00:00Z", body: "À corriger", outdated: true, blocking: false },
+        { account: "claire.m", state: "approved", submitted_at: "2026-11-11T13:10:00Z", body: "", outdated: false, blocking: false },
+        { account: "marc.d", state: "changes_requested", submitted_at: "2026-11-11T13:15:00Z", body: "Encore à corriger", outdated: true, blocking: true },
+      ],
+    }) });
+    render(<Harness />);
+    const thread = await screen.findByRole("region", { name: "Fil de la proposition" });
+    const rows = await within(thread).findAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("À corriger"), expect.stringContaining("Julien H. a envoyé la révision 2"),
+      expect.stringContaining("a approuvé"), expect.stringContaining("Encore à corriger"), expect.stringContaining("Merci"),
+    ]);
+    expect(rows[0]).not.toHaveTextContent("toujours bloquante");
+    expect(rows[3]).toHaveTextContent("demande toujours bloquante");
+  });
+
+  it("distingue une demande remplacée d'une demande encore bloquante", async () => {
+    proposalServer({ detail: (n) => detail(QUEUE.items.find((i) => i.id === n)!, {
+      reviews: [
+        { account: "claire.m", state: "changes_requested", submitted_at: "2026-11-11T13:00:00Z", body: "Demande remplacée", outdated: true, blocking: false },
+        { account: "claire.m", state: "approved", submitted_at: "2026-11-11T13:10:00Z", body: "", outdated: false, blocking: false },
+        { account: "julien.h", state: "changes_requested", submitted_at: "2026-11-11T13:15:00Z", body: "Demande active", outdated: true, blocking: true },
+      ],
+    }) });
+    render(<Harness />);
+    const thread = await screen.findByRole("region", { name: "Fil de la proposition" });
+    const replaced = await within(thread).findByText("Demande remplacée");
+    expect(replaced.closest("li")).not.toHaveTextContent("toujours bloquante");
+    expect(within(thread).getByText("Demande active").closest("li")).toHaveTextContent("demande toujours bloquante");
+  });
+
   it("l'auteur ne peut pas approuver : bouton grisé et raison (critère 4)", async () => {
     const reason = "Vous êtes l'auteur de cette proposition : un autre compte doit l'approuver.";
     const server = proposalServer({

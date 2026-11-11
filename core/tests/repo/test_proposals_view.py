@@ -82,7 +82,8 @@ def test_document_label_does_not_depend_on_pull_request_title(client):
 def test_viewer_explains_why_approval_is_disabled(client, monkeypatch):
     """Critère 4 : l'auteur ne peut pas approuver ; un compte habilité, si."""
     detail = client.get(f"{API}/proposals/5").json()
-    assert detail["viewer"] == {"account": "claire.m", "can_review": True,
+    assert detail["viewer"] == {"account": "claire.m", "can_revise": False, "can_close": True,
+                                "can_review": True,
                                 "review_reason": None, "can_merge": False,
                                 "merge_reason": "0 validation(s) sur 2."}
     assert [c["body"][:10] for c in detail["comments"]] == ["Le statut "]

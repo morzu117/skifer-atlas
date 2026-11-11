@@ -77,3 +77,22 @@ def post_review(ws: str, number: int, body: ReviewRequest) -> dict:
 @router.post("/{number}/merge")
 def post_merge(ws: str, number: int) -> dict:
     return proposals.merge_proposal(workspace_or_404(ws).id, number)
+
+
+class RevisionRequest(_Body):
+    document_yaml: str = Field(min_length=1)
+    note: str = ""
+
+
+class CloseRequest(_Body):
+    reason: str = ""
+
+
+@router.post("/{number}/revisions", status_code=201)
+def post_revision(ws: str, number: int, body: RevisionRequest) -> dict:
+    return proposals.revise(workspace_or_404(ws).id, number, body.document_yaml, body.note)
+
+
+@router.post("/{number}/close")
+def post_close(ws: str, number: int, body: CloseRequest) -> dict:
+    return proposals.close(workspace_or_404(ws).id, number, body.reason)

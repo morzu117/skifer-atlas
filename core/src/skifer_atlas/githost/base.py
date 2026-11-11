@@ -72,5 +72,11 @@ class GitHost(ABC):
     def add_comment(self, number: int, body: str) -> Comment: ...
 
     @abstractmethod
+    def update_body(self, number: int, body: str) -> None: ...
+
+    @abstractmethod
+    def close(self, number: int, reason: str) -> None: ...
+
+    @abstractmethod
     def merge(self, number: int, head: str, title: str, message: str) -> str:
         """Fusionne si la tête de branche est toujours `head` ; renvoie le commit de fusion."""

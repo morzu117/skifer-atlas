@@ -2,7 +2,18 @@
 
 from .create import create_access_point_proposal, create_governance_proposal, create_proposal
 from .merge import merge_proposal
+from .revise import close, revise
 from .status import comment, get_proposal, list_proposals, review
 
-__all__ = ["comment", "create_access_point_proposal", "create_governance_proposal", "create_proposal", "get_proposal",
-           "list_proposals", "merge_proposal", "review"]
+__all__ = [
+           "close",
+           "comment",
+           "create_access_point_proposal",
+           "create_governance_proposal",
+           "create_proposal",
+           "get_proposal",
+           "list_proposals",
+           "merge_proposal",
+           "review",
+           "revise",
+]
