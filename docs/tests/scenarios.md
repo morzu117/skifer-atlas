@@ -56,8 +56,9 @@
 | 0033 | 12 | 9 | 2 | 1 | 0 |
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | 0035 | 12 | 10 | 0 | 2 | 0 |
+| ADR 0049 | 1 | 1 | 0 | 0 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **332** | **263** | **6** | **63** | **0** |
+| **Total** | **333** | **264** | **6** | **63** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -2239,6 +2240,21 @@ Plan 0035, critère 10 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-10]
 - **Quand** elle choisit « Proposer une modification »
 - **Alors** le brouillon s'ouvre en « Revenu net : v6 · brouillon »
 - Limite : la synchronisation automatique d'un espace (ADR 0049) relit le dépôt à l'ouverture de l'espace et aux changements d'écran, au plus une fois toutes les 30 s : le test s'appuie sur ce comportement sans bouton « Synchroniser ».
+
+## Synchronisation automatique
+
+`app/e2e/synchronisation-auto.spec.ts` : la synchronisation automatique d'un espace (ADR 0049), sur une copie isolée de l'espace de démonstration du serveur principal. La réponse « occupé » du serveur est simulée par une interception de `POST /api/workspaces/<id>/sync/auto` ; axe-core ne relève aucune violation sérieuse ou critique avec le bandeau affiché.
+
+**ADR 0049**
+
+### S-0049-01 — Synchronisation automatique encore occupée
+ADR 0049 · Test : `app/e2e/synchronisation-auto.spec.ts` › `[S-0049-01]`
+- **Étant donné** un espace dont la synchronisation automatique reste occupée
+- **Quand** les tentatives automatiques atteignent leur limite
+- **Alors** un bandeau indique que la synchronisation n'a pas encore eu lieu et sera retentée au prochain changement d'écran
+- **Quand** une synchronisation ultérieure réussit
+- **Alors** le bandeau disparaît
+- Limite : le test Playwright épuise les 20 essais ; l'échéance de 8 s atteinte pendant la pause entre deux essais est vérifiée par `app/src/screens/WorkspaceShell.test.tsx` › « signale le délai de synchronisation atteint pendant une pause ».
 
 ## Parcours WebKit
 
