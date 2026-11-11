@@ -57,8 +57,9 @@
 | 0034 | 10 | 9 | 0 | 1 | 0 |
 | 0035 | 12 | 10 | 0 | 2 | 0 |
 | ADR 0049 | 1 | 1 | 0 | 0 | 0 |
+| ADR 0055 | 1 | 1 | 0 | 0 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **333** | **264** | **6** | **63** | **0** |
+| **Total** | **334** | **265** | **6** | **63** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -1536,7 +1537,7 @@ Plan 0008, critère 5 · Test : `app/e2e/connexions-testables.spec.ts` › `[S-0
 Plan 0008, critère 6 · Test : `app/e2e/comparaison-reelle.spec.ts` › `[S-0008-06]`
 - **Étant donné** un espace isolé sur le serveur 8793, nordis-fr seule cochée, l'accès dbx-fr obtenu par l'OAuth du faux Databricks, et le faux qui annonce 60 000 lignes en un seul bloc (limite : 50 000)
 - **Quand** je lance la comparaison
-- **Alors** la bannière « Comparaison n° N en échec » s'affiche dans le panneau de lancement puis dans le détail, et son message traduit cite la limite (« Le résultat dépasse 50 000 lignes »), sans le code technique `result_too_large`
+- **Alors** la bannière « Comparaison n° N en échec » s'affiche dans le panneau de lancement puis dans le détail (les deux emplacements sont voulus, décision du 11 novembre 2026), et son message traduit cite la limite (« Le résultat dépasse 50 000 lignes »), sans le code technique `result_too_large`
 - **Et** la requête a été annulée chez la plateforme, axe-core ne relève aucune violation sérieuse, et l'historique garde l'exécution en échec
 - Limite : le faux annonce le dépassement dès le premier bloc ; le refus sans rapatriement du premier bloc est aussi vérifié par `core/tests/connections/test_connections.py::test_too_many_rows_are_refused_without_fetching` et `core/tests/compare/test_compare.py::test_too_many_rows_fail_the_variant_only`.
 
@@ -2152,6 +2153,14 @@ Plan 0035, critère 2 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-02]`
 - **Et** chez Claire, qui a fusionné, le catalogue dit v1 et la fiche montre la définition corrigée ; chez Anna, la proposition figure parmi les fusionnées
 - Limite : l'écran n'a pas de route pour réviser ou fermer une proposition (« Reste à faire » du plan 0006) : la correction passe par un commit poussé à la main sur la branche. Les approbations données avant ce commit ne comptent plus (S-0006-03).
 
+### S-0055-01 — Références épinglées sur une version antérieure
+ADR 0055 · Test : `app/e2e/references-en-retard.spec.ts` › `[S-0055-01]` ; Vitest : `app/src/screens/Fiche.test.tsx` › `[S-0055-01]`
+- **Étant donné** Marge brute et Panier moyen épinglés sur Revenu net v4, devenu v5, et un KPI référencé à jour
+- **Quand** je consulte les fiches de Marge brute et de Revenu net
+- **Alors** la fiche de Marge brute affiche « Revenu net : épinglé v4, version courante v5 » avec un lien vers Revenu net
+- **Et** « Référencé par » sur Revenu net indique « épinglé v4 » à côté de Marge brute et Panier moyen, sans indication pour les références à jour
+- Limite : la démo n'a aucune référence restée à jour après la v5 ; le parcours vérifie l'absence de mention avant le passage en v5, et une fiche mêlant entrées en retard et à jour est couverte par `app/src/screens/Fiche.test.tsx` › `[S-0055-01]`.
+
 ### S-0035-03 — Revenu net de v4 à v5, avec deux KPI qui s'y appuient
 Plan 0035, critère 3 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-03]`
 - **Étant donné** Groupe Nordis isolé, dont Marge brute et Panier moyen référencent Revenu net v4
@@ -2160,7 +2169,7 @@ Plan 0035, critère 3 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-03]`
 - **Quand** Marc puis Claire approuvent et que Claire fusionne
 - **Alors** le dépôt a `version: 5` et le nouveau libellé, le tag `doc/revenu-net/v5`, la trace des deux revues, et aucun changement dans `kpis/marge-brute.yaml`, `kpis/panier-moyen.yaml` ni `variants/`
 - **Et** chez Claire, le catalogue dit v5 pour Revenu net et v2 pour Marge brute, l'onglet Versions compte 5 versions dont la v5 courante, le diff de v4 à v5 est un écart « Sans effet » et le graphe de la v5 porte le nouveau libellé, et « Référencé par » liste toujours Panier moyen et Marge brute
-- Limite : les références restent épinglées sur la v4 : l'écran n'indique pas qu'elles sont en retard sur la v5 (constat, pas un test).
+- Le signalement des références en retard est couvert par S-0055-01.
 
 ### S-0035-04 — Une règle locale : déclinaison nordis-it en surcharge hors points déclarés
 Plan 0035, critère 4 · Test : `app/e2e/bout-en-bout.spec.ts` › `[S-0035-04]`

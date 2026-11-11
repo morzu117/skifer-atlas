@@ -128,15 +128,21 @@ def dependencies(connection: duckdb.DuckDBPyConnection, document_id: str) -> dic
     dépendent, directement ou non."""
     references = _records(connection.execute("""
         SELECT dep.to_id AS id, dep.kind, dep.to_version AS version, d.kind AS document_kind,
-               d.label, d.status, d.domain, d.id IS NOT NULL AS found
+               d.label, d.status, d.domain, d.id IS NOT NULL AS found,
+               d.version AS current_version,
+               coalesce(dep.kind = 'kpi_ref' AND d.kind = 'kpi'
+                        AND dep.to_version < d.version, false) AS outdated
         FROM "index".dependencies dep LEFT JOIN "index".documents d ON d.id = dep.to_id
         WHERE dep.from_id = ? ORDER BY dep.to_id, dep.kind
     """, [document_id]))
     referenced_by = _records(connection.execute("""
         SELECT dep.from_id AS id, dep.kind, dep.to_version AS version,
                d.kind AS document_kind, d.label, d.status, d.domain,
-               d.version AS document_version
+               d.version AS document_version, target.version AS current_version,
+               coalesce(dep.kind = 'kpi_ref' AND target.kind = 'kpi'
+                        AND dep.to_version < target.version, false) AS outdated
         FROM "index".dependencies dep JOIN "index".documents d ON d.id = dep.from_id
+        LEFT JOIN "index".documents target ON target.id = dep.to_id
         WHERE dep.to_id = ? ORDER BY dep.from_id, dep.kind
     """, [document_id]))
     [(impact,)] = connection.execute("""

@@ -90,6 +90,8 @@ export type Dependency = {
   kind: string; // kpi_ref | concept
   version: number | null;
   document_kind: string | null;
+  current_version?: number | null;
+  outdated?: boolean;
   label: string | null;
   status: string | null;
   domain: string | null;
