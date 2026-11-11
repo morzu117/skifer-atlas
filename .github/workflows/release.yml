@@ -99,6 +99,18 @@ jobs:
         working-directory: app
         run: npm ci
 
+      # Le job release tourne aussi sur les PR ; un seul runner suffit pour le
+      # parcours natif debug, en plus des smoke tests des bundles release ci-dessous.
+      - name: Bundle debug et test de fermeture natif
+        if: github.event_name == 'pull_request' && matrix.target == 'aarch64-apple-darwin'
+        timeout-minutes: 15
+        run: |
+          uv sync --locked --project core
+          cd app
+          npx tauri build --debug --bundles app
+          cd ..
+          bash scripts/smoke-app.sh "app/src-tauri/target/debug/bundle/macos/Skifer Atlas.app"
+
       - name: Certificat Windows
         if: runner.os == 'Windows' && env.SIGNED == 'true'
         shell: pwsh
