@@ -99,7 +99,8 @@ export function WorkspaceShell({
         while (alive && attempts < 20 && performance.now() < deadline &&
                (result.status === "pending" || result.status === "busy")) {
           await new Promise((resolve) => window.setTimeout(resolve, 150));
-          if (!alive || performance.now() >= deadline) return;
+          if (!alive || mountedWorkspace.current !== wsId) return;
+          if (performance.now() >= deadline) break;
           attempts += 1;
           result = await api.autoSync(wsId, existingEditor);
         }
@@ -113,7 +114,10 @@ export function WorkspaceShell({
           }).catch(() => {});
         }
         if (!alive) return;
-        if (["offline", "conflict", "local", "error", "wrong_branch"].includes(result.status)) {
+        if (result.status === "pending" || result.status === "busy") {
+          failure.current = { ws: wsId, status: "gave_up" };
+          setNotice({ key: syncKey, status: "gave_up" });
+        } else if (["offline", "conflict", "local", "error", "wrong_branch"].includes(result.status)) {
           if (result.status === "local") {
             failure.current = null;
             setNotice(null);
@@ -174,6 +178,7 @@ export function WorkspaceShell({
   const ws = load.kind === "ready" ? load.ws : null;
   const conflict = explain(new ApiError(409, "sync_conflict", ""));
   const syncMessage = notice?.status === "conflict" ? conflict
+    : notice?.status === "gave_up" ? { title: "Synchronisation en attente", text: "La synchronisation n’a pas encore eu lieu. Un nouvel essai aura lieu au prochain changement d’écran." }
     : notice?.status === "wrong_branch" ? explain(new ApiError(409, "sync_wrong_branch", ""))
     : notice?.status === "error" ? explain(new ApiError(500, "sync_error", ""))
     : { title: "Dépôt momentanément inaccessible", text: "La copie locale reste disponible. Vérifiez le réseau ou l’accès au dépôt." };

@@ -10,6 +10,7 @@ L’ouverture d’un document existant dans l’éditeur attend au plus 2,5 seco
 
 ## Limites acceptées
 
+- Après épuisement des tentatives `busy` ou `pending`, un bandeau indique que la synchronisation n'a pas encore eu lieu et sera retentée au prochain changement d'écran ; le démontage reste silencieux.
 - Le contrôle est déclenché à l'ouverture ou au changement d'écran, sans interrogation périodique sur un écran laissé ouvert. Une fusion peut rester invisible jusqu'au prochain changement d'écran et pendant la fenêtre de 30 secondes.
 - Un éditeur ouvert avant la fin d'une synchronisation peut partir de l'ancienne version ; sa saisie n'est pas remplacée. La validation de base à la soumission ou à la fusion protège contre une écriture périmée.
 - La limitation des tentatives est en mémoire et par processus ; plusieurs processus peuvent chacun tenter une synchronisation, mais le verrou de clone empêche des opérations concurrentes ; une tentative occupée attend brièvement puis peut être renouvelée. Un redémarrage réinitialise le délai.

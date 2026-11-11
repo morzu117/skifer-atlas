@@ -3,7 +3,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { fakeServer, workspace } from "../test/fakeServer";
-import type { Workspace } from "../api";
+import { api, type Workspace } from "../api";
 import { WorkspaceShell } from "./WorkspaceShell";
 
 vi.mock("./Administration", () => ({ Administration: ({ onMerged, onWorkspaceChange, ws, heading }: { onMerged: () => void; onWorkspaceChange: (next: Workspace) => void; ws: Workspace; heading: Ref<HTMLHeadingElement> }) => <><h1 ref={heading} tabIndex={-1}>Administration</h1><button onClick={onMerged}>Fusion administration</button><button onClick={() => onWorkspaceChange({ ...ws, git_remote: "depot" })}>Rattacher</button><input aria-label="Domaine suivant" /><span>{ws.domains.join(", ")}</span></> }));
@@ -131,6 +131,75 @@ it("un dépôt inaccessible laisse la vue locale et un signal discret", async ()
   render(<WorkspaceShell wsId="groupe-nordis" view="propositions" onUnknown={vi.fn()} />);
   expect(await screen.findByRole("heading", { name: "Propositions" })).toBeInTheDocument();
   expect(await screen.findByText("Dépôt momentanément inaccessible")).toBeInTheDocument();
+});
+
+it("signale les tentatives occupées épuisées puis efface le bandeau après un succès", async () => {
+  let finish!: (value: { status: string }) => void;
+  const sync = vi.spyOn(api, "autoSync").mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+    .mockResolvedValue({ status: "busy" });
+  fakeServer(({ path }) => path === "/api/workspaces/groupe-nordis" ? { json: workspace() } : path.includes("proposals") ? { json: [] } : undefined);
+  const props = { wsId: "groupe-nordis", onUnknown: vi.fn() };
+  const rendered = render(<WorkspaceShell {...props} view="propositions" />);
+  await screen.findByRole("heading", { name: "Propositions" });
+  await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+  vi.useFakeTimers();
+  try {
+    await act(async () => { finish({ status: "busy" }); await vi.advanceTimersByTimeAsync(8000); });
+    expect(sync).toHaveBeenCalledTimes(20);
+    expect(screen.getByText("Synchronisation en attente")).toBeInTheDocument();
+    expect(screen.getByText("La synchronisation n’a pas encore eu lieu. Un nouvel essai aura lieu au prochain changement d’écran.")).toBeInTheDocument();
+    sync.mockResolvedValue({ status: "up_to_date" });
+    rendered.rerender(<WorkspaceShell {...props} view="administration" />);
+    await act(async () => {});
+    expect(screen.queryByText("Synchronisation en attente")).not.toBeInTheDocument();
+    rendered.rerender(<WorkspaceShell {...props} view="propositions" />);
+    await act(async () => {});
+    expect(screen.queryByText("Synchronisation en attente")).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+    sync.mockRestore();
+  }
+});
+
+it("signale le délai de synchronisation atteint pendant une pause", async () => {
+  const sync = vi.spyOn(api, "autoSync")
+    .mockImplementation(() => new Promise((resolve) => window.setTimeout(() => resolve({ status: "busy" }), 1000)));
+  fakeServer(({ path }) => path === "/api/workspaces/groupe-nordis" ? { json: workspace() } : path.includes("proposals") ? { json: [] } : undefined);
+  vi.useFakeTimers();
+  try {
+    render(<WorkspaceShell wsId="groupe-nordis" view="propositions" onUnknown={vi.fn()} />);
+    await act(async () => {});
+    expect(sync).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(8050); });
+    expect(sync).toHaveBeenCalledTimes(7);
+    expect(screen.getByText("Synchronisation en attente")).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+    sync.mockRestore();
+  }
+});
+
+it("abandonne silencieusement les tentatives au démontage", async () => {
+  let finish!: (value: { status: string }) => void;
+  const sync = vi.spyOn(api, "autoSync").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const warning = vi.spyOn(console, "error").mockImplementation(() => {});
+  fakeServer(({ path }) => path === "/api/workspaces/groupe-nordis" ? { json: workspace() } : path.includes("proposals") ? { json: [] } : undefined);
+  const rendered = render(<WorkspaceShell wsId="groupe-nordis" view="propositions" onUnknown={vi.fn()} />);
+  await screen.findByRole("heading", { name: "Propositions" });
+  await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+  vi.useFakeTimers();
+  try {
+    await act(async () => { finish({ status: "busy" }); });
+    rendered.unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Synchronisation en attente")).not.toBeInTheDocument();
+    expect(warning).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+    sync.mockRestore();
+    warning.mockRestore();
+  }
 });
 
 it("une avance conserve la saisie et le focus, et son rejeu ne relit pas deux fois", async () => {
