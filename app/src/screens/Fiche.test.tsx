@@ -266,8 +266,11 @@ describe("fiche", () => {
     const notice = (await screen.findByText(/version courante v5/)).closest("div")!;
     expect(notice).toHaveTextContent("Revenu net : épinglé v4, version courante v5");
     expect(within(notice).getByRole("link", { name: "Revenu net" })).toHaveAttribute("href", "#/w/groupe-nordis/fiche/revenu-net");
-    expect(screen.getByText(/Marge brute \(épinglé v4\)/)).toBeInTheDocument();
-    expect(screen.getByText(/Panier moyen/)).not.toHaveTextContent("épinglé");
+    const marge = screen.getByRole("link", { name: /^Marge brute$/ });
+    expect(marge.parentElement).toHaveTextContent("Marge brute (épinglé v4) (Finance)");
+    const panier = screen.getByRole("link", { name: /^Panier moyen$/ });
+    expect(panier.parentElement).toHaveTextContent("Panier moyen (Finance)");
+    expect(panier.parentElement).not.toHaveTextContent("épinglé");
     await userEvent.click(screen.getByRole("button", { name: "Dépendances" }));
     const references = screen.getByRole("region", { name: "Références" });
     expect(within(references).getByText("épinglé v4, version courante v5")).toBeInTheDocument();

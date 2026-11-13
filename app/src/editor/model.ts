@@ -228,10 +228,14 @@ function connect(doc: Raw, source: string, target: string, side?: Side) {
   const nodes = nodesOf(doc);
   const node = nodeById(doc, target);
   if (!node || !nodes.some((n) => n.id === source)) throw new OpError("Nœud introuvable.");
+  if (source === target) throw new OpError(`Une arête de ${source} vers lui-même créerait un cycle.`);
   if (NO_INPUT.includes(node.type)) {
     throw new OpError(`${target} est une entrée du graphe : il ne reçoit pas d'arête.`);
   }
-  if (source === target) throw new OpError(`Une arête de ${source} vers lui-même créerait un cycle.`);
+  const duplicate = node.type === "join"
+    ? (isRaw(node.inputs) && node.inputs[side ?? (node.inputs.left === undefined ? "left" : "right")] === source)
+    : inputsOf(node).includes(source);
+  if (duplicate) throw new OpError(`Cette arête existe déjà entre ${source} et ${target}.`);
   const loop = pathBetween(nodes, target, source);
   if (loop) {
     throw new OpError(`Arête refusée : elle créerait un cycle ${[...loop, target].join(" → ")}.`);

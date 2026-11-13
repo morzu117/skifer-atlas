@@ -43,6 +43,8 @@ Limite assumée : la preuve vaut au moment de la sonde. Elle ferme la fenêtre d
 
 `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)` : `/docs`, `/redoc`, `/openapi.json` et `/docs/oauth2-redirect` répondent 404, avec ou sans token. Ils ne sont servis qu'en mode dev explicite (`ATLAS_DEV_NO_TOKEN=1`) **et** sans token configuré, la seule configuration où l'API entière est déjà ouverte. Aucun usage dans l'app, les scripts, la CI ni les tests (vérifié par recherche dans le dépôt).
 
+La fenêtre Tauri désactive la capture native du glisser-déposer (`dragDropEnabled: false`), car aucun dépôt de fichier natif n’est utilisé et les gestes HTML du canevas doivent rester disponibles.
+
 ### CSP de la fenêtre
 
 ```

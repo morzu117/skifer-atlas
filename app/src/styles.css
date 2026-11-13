@@ -532,6 +532,7 @@ h3 { margin: 0; font-size: var(--atlas-text-base); font-weight: 600; }
   --xy-minimap-node-background-color-default: var(--atlas-line);
   --xy-connectionline-stroke-default: var(--atlas-mid);
 }
+.canvas .canvas-edge-action { margin: var(--atlas-space-3); }
 .canvas.tool-pan .react-flow__pane { cursor: grab; }
 .canvas.tool-edge .react-flow__node { cursor: crosshair; }
 .canvas .react-flow__minimap { width: var(--atlas-minimap-w); height: var(--atlas-minimap-h); border: var(--atlas-border) solid var(--atlas-line); border-radius: var(--atlas-radius-sm); }

@@ -637,7 +637,7 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
     if (tool === "edge") {
       if (!target) return setPending(null);
       if (!pending) return setPending(target);
-      if (pending !== target) dispatch({ kind: "connect", source: pending, target });
+      dispatch({ kind: "connect", source: pending, target });
       setPending(null);
       return;
     }
@@ -660,7 +660,13 @@ function Session({ ws, id, heading }: { ws: Workspace; id: string; heading: RefO
   // Annuler / rétablir au clavier, hors champ de saisie (qui garde son propre historique).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (closedRef.current || yaml || typing(event.target) || !(event.metaKey || event.ctrlKey)) return;
+      if (closedRef.current || yaml || typing(event.target)) return;
+      if (event.key === "Escape" && pending) {
+        event.preventDefault();
+        setPending(null);
+        return;
+      }
+      if (!(event.metaKey || event.ctrlKey)) return;
       const key = event.key.toLowerCase();
       if (key === "z") {
         event.preventDefault();
