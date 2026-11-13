@@ -606,3 +606,181 @@ describe("comparaison", () => {
     expect(window.location.hash).toContain("depuis=2026-10-01");
   });
 });
+
+describe("comparaison : états et réglages secondaires", () => {
+  const refused = (message: string, status = 500) => ({ status, json: { detail: { code: "refus_test", message } } });
+  const lastPreview = (calls: Call[]) => calls.filter((c) => c.path === `${API}/preview`).at(-1)?.body;
+
+  it("une synthèse illisible est expliquée et « Réessayer » la relit", async () => {
+    let reads = 0;
+    comparisonServer(({ path }) => (path === `${API}/matrix` && ++reads === 1 ? refused("Historique local verrouillé.") : undefined));
+    render(<Harness />);
+    const banner = await screen.findByText("Historique local verrouillé.");
+    await userEvent.click(within(banner.closest(".banner") as HTMLElement).getByRole("button", { name: "Réessayer" }));
+    expect(await screen.findByRole("link", { name: /Revenu net × nordis-de/ })).toBeInTheDocument();
+    expect(reads).toBe(2);
+  });
+
+  it("choisir un autre KPI met l'adresse à jour et recharge son lancement", async () => {
+    const server = comparisonServer(({ path }) =>
+      path === `${API}/setup?kpi=taux-de-service` ? { json: { ...SETUP, kpi_id: "taux-de-service", label: "Taux de service", variants: [SETUP.variants[2]] } } : undefined);
+    render(<Harness />);
+    const kpi = await screen.findByRole("combobox", { name: "KPI" });
+    expect(within(kpi).getAllByRole("option").map((o) => o.textContent)).toEqual(["Revenu net (v4)", "Taux de service (v2)"]);
+    await userEvent.selectOptions(kpi, "taux-de-service");
+    expect(window.location.hash).toContain("kpi=taux-de-service");
+    await waitFor(() => expect(screen.queryByRole("checkbox", { name: /nordis-de/ })).toBeNull());
+    expect(screen.getByRole("checkbox", { name: /nordis-fr/ })).toBeChecked();
+    expect(server.calls.some((c) => c.path === `${API}/setup?kpi=taux-de-service`)).toBe(true);
+  });
+
+  it("un KPI introuvable au lancement est expliqué", async () => {
+    comparisonServer(({ path }) => (path.startsWith(`${API}/setup`) ? refused("KPI absent du dépôt.", 404) : undefined));
+    render(<Harness />);
+    expect(await screen.findByText("KPI absent du dépôt.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Lancer la comparaison" })).toBeNull();
+  });
+
+  it("décocher toutes les déclinaisons bloque le lancement et le dit", async () => {
+    const server = comparisonServer();
+    render(<Harness />);
+    await screen.findByText("Contrôle de cardinalité contourné");
+    await userEvent.click(screen.getByRole("checkbox", { name: /nordis-fr/ }));
+    await waitFor(() => expect(lastPreview(server.calls)).toMatchObject({ variants: ["nordis-de"] }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /nordis-de/ }));
+    await waitFor(() => expect(screen.queryByText("Contrôle de cardinalité contourné")).toBeNull());
+    const button = await launchButton();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(button);
+    expect(screen.getByText("Cocher au moins une déclinaison.")).toBeInTheDocument();
+    expect(starts(server.calls)).toHaveLength(0);
+  });
+
+  it("changer de scope reprend sa période et sa granularité ; une période calendaire ne s'édite pas", async () => {
+    const setup: ComparisonSetup = {
+      ...SETUP,
+      scopes: [
+        SETUP.scopes[0],
+        { id: "exercice-2025", period: { calendar_period: "FY2025" }, granularity: ["entite"], granularities: [["entite"]] },
+        { id: "t3", period: { from: "2026-07-01", to: "2026-09-30" }, granularity: ["mois_fiscal"], granularities: [["mois_fiscal"]] },
+      ],
+    };
+    const server = comparisonServer(({ path }) => (path.startsWith(`${API}/setup`) ? { json: setup } : undefined));
+    render(<Harness />);
+    const from = await screen.findByLabelText("Du");
+    expect(from).toHaveValue("2026-02-01");
+    fireEvent.change(from, { target: { value: "2026-03-01" } });
+    fireEvent.change(screen.getByLabelText("Au"), { target: { value: "2026-06-30" } });
+    await waitFor(() => expect(lastPreview(server.calls)).toEqual({
+      kpi_id: "revenu-net", variants: ["nordis-de", "nordis-fr"],
+      scope: { period: { from: "2026-03-01", to: "2026-06-30" }, granularity: ["mois_fiscal", "entite"] },
+    }));
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Scope" }), "exercice-2025");
+    expect(screen.getByText("FY2025")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Du")).toBeNull();
+    await waitFor(() => expect(lastPreview(server.calls)).toMatchObject({ scope_id: "exercice-2025" }));
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Scope" }), "t3");
+    expect(screen.getByLabelText("Du")).toHaveValue("2026-07-01");
+    expect(screen.getByLabelText("Au")).toHaveValue("2026-09-30");
+    expect(screen.getByRole("combobox", { name: "Granularité" })).toHaveValue("0");
+    await waitFor(() => expect(lastPreview(server.calls)).toMatchObject({ scope_id: "t3" }));
+  });
+
+  it("sans scope déclaré : la consigne, et aucun aperçu ni lancement", async () => {
+    const server = comparisonServer(({ path }) => (path.startsWith(`${API}/setup`) ? { json: { ...SETUP, scopes: [] } } : undefined));
+    render(<Harness />);
+    expect(await screen.findByText(/Ce KPI ne déclare aucun scope de comparaison/)).toBeInTheDocument();
+    expect(await launchButton()).toHaveAttribute("aria-disabled", "true");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(server.calls.some((c) => c.path === `${API}/preview`)).toBe(false);
+  });
+
+  it("un aperçu refusé est expliqué et bloque le lancement", async () => {
+    comparisonServer(({ path }) => (path === `${API}/preview` ? refused("Scope inconnu du KPI.", 422) : undefined));
+    render(<Harness />);
+    expect(await screen.findByText("Scope inconnu du KPI.")).toBeInTheDocument();
+    expect(await launchButton()).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("accès manquant : une autorisation refusée ou une connexion échouée sont expliquées", async () => {
+    let authorizations = 0;
+    comparisonServer(({ path }) => {
+      if (path === `${API}/preview`) return { json: { ...PREVIEW, alerts: [], missing_access: [{ access_point: "dbx-de", code: "not_connected", message: "Pas d'accès." }] } };
+      if (path.endsWith("/connections/dbx-de/authorize")) {
+        authorizations += 1;
+        return authorizations === 1 ? refused("Client OAuth inconnu.", 400) : { json: { authorize_url: "https://login.example/authorize" } };
+      }
+      if (path.endsWith("/connections/dbx-de/status")) {
+        return { json: { access_point: "dbx-de", platform: "databricks", entity: "nordis-de", my_access: "never", flow: { status: "failed", error: null } } };
+      }
+      return undefined;
+    });
+    render(<Harness />);
+    expect(await screen.findByText("Connexion requise")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Se connecter à dbx-de" }));
+    expect(await screen.findByText(/Client OAuth inconnu\./)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Se connecter à dbx-de" }));
+    expect(await screen.findByText(/Connexion échouée : La plateforme a refusé la connexion\./, undefined, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Se connecter à dbx-de" })).toBeEnabled();
+  });
+
+  it("un domaine sans KPI décliné le dit", async () => {
+    window.location.hash = "#/w/groupe-nordis/comparaison?domain=marketing";
+    comparisonServer(({ path }) => (path === `${API}/matrix`
+      ? { json: [...MATRIX, { kpi_id: "notoriete", label: "Notoriété", domain: "marketing", domain_label: "Marketing", version: 1, variants: [] }] }
+      : undefined));
+    render(<Harness />);
+    expect(await screen.findByText("Aucun KPI décliné dans ce domaine.")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Domaine" })).toHaveValue("marketing");
+  });
+
+  it("détail : comparaison introuvable expliquée", async () => {
+    window.location.hash = "#/w/groupe-nordis/comparaison?id=99";
+    comparisonServer(({ path }) => (path === `${API}/99` ? refused("Comparaison n° 99 introuvable.", 404) : undefined));
+    render(<Harness />);
+    expect(await screen.findByText("Comparaison n° 99 introuvable.")).toBeInTheDocument();
+  });
+
+  it("détail : plusieurs déclinaisons se choisissent, avec leurs contrôles contournés", async () => {
+    window.location.hash = "#/w/groupe-nordis/comparaison?id=7&variant=nordis-de";
+    const fr = { ...RUN.results[0], variant_id: "revenu-net--nordis-fr", entity: "nordis-fr", divergent: null, divergent_node: null, bypass_nodes: ["n04", "n05"] };
+    comparisonServer(({ path }) => (path === `${API}/7` ? { json: { ...RUN, results: [RUN.results[0], fr] } } : undefined));
+    render(<Harness />);
+    const switcher = await screen.findByRole("combobox", { name: "Déclinaison" });
+    expect(switcher).toHaveValue("nordis-de");
+    expect(screen.queryByText(/Contrôle de cardinalité contourné : /)).toBeNull();
+    await userEvent.selectOptions(switcher, "nordis-fr");
+    expect(window.location.hash).toContain("variant=nordis-fr");
+    expect(await screen.findByText("Contrôle de cardinalité contourné : n04, n05.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Nœud divergent/ })).toBeNull();
+  });
+
+  it("détail : une comparaison annulée sans résultat le dit", async () => {
+    window.location.hash = "#/w/groupe-nordis/comparaison?id=7";
+    comparisonServer(({ path }) => (path === `${API}/7` ? { json: { ...RUN, status: "cancelled", results: [] } } : undefined));
+    render(<Harness />);
+    expect(await screen.findByText("Comparaison annulée : aucun résultat.")).toBeInTheDocument();
+  });
+
+  it("historique complet : illisible, vide, ou sans correspondance aux filtres", async () => {
+    window.location.hash = "#/w/groupe-nordis/comparaison?vue=historique";
+    let reply: ReturnType<Handler> = refused("Base locale corrompue.");
+    comparisonServer(({ path }) => (path === `${API}?limit=500` ? reply : undefined));
+    const { unmount } = render(<Harness />);
+    expect(await screen.findByText("Base locale corrompue.")).toBeInTheDocument();
+    unmount();
+
+    reply = { json: [] };
+    const second = render(<Harness />);
+    expect(await screen.findByText("Aucune comparaison dans cet espace.")).toBeInTheDocument();
+    second.unmount();
+
+    reply = { json: HISTORY };
+    window.location.hash = "#/w/groupe-nordis/comparaison?vue=historique&depuis=2027-01-01";
+    render(<Harness />);
+    expect(await screen.findByText("Aucune comparaison ne correspond à ces filtres.")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+});

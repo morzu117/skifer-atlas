@@ -7,8 +7,9 @@ import { expectAccessibleLandmarks } from "../test/accessibility";
 import { ALTAVIA, fakeServer, workspace, type Call } from "../test/fakeServer";
 import { accessLabel, Connections, suggestedId, toAccessPoint } from "./Connections";
 
-vi.mock("../external", () => ({ openExternal: vi.fn(async () => undefined), canPickFile: () => false, pickFile: vi.fn() }));
-import { openExternal } from "../external";
+const picker = vi.hoisted(() => ({ enabled: false }));
+vi.mock("../external", () => ({ openExternal: vi.fn(async () => undefined), canPickFile: () => picker.enabled, pickFile: vi.fn() }));
+import { openExternal, pickFile } from "../external";
 
 const API = "/api/workspaces/groupe-nordis";
 
@@ -88,6 +89,8 @@ const row = async (name: RegExp) => (await screen.findByRole("cell", { name })).
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.mocked(openExternal).mockClear();
+  vi.mocked(pickFile).mockReset();
+  picker.enabled = false;
 });
 
 describe("libellés", () => {
@@ -705,5 +708,200 @@ describe("mes connexions", () => {
     await screen.findByRole("table");
     expect(screen.queryByRole("button", { name: "Ajouter un point d'accès" })).not.toBeInTheDocument();
     expect(screen.queryByRole("complementary", { name: "Nouveau point d'accès" })).not.toBeInTheDocument();
+  });
+});
+
+describe("mes connexions : échecs et actions secondaires", () => {
+  const refused = (message: string, status = 409) => ({ status, json: { detail: { code: "refus_test", message } } });
+
+  it("une liste illisible est expliquée et « Réessayer » la relit", async () => {
+    let attempts = 0;
+    server(LIST, ({ method, path }) => {
+      if (path === `${API}/connections` && method === "GET" && ++attempts === 1) return refused("Le dépôt de l'espace est illisible.", 500);
+      return undefined;
+    });
+    render(screenFor());
+    const banner = await screen.findByRole("alert");
+    expect(banner).toHaveTextContent("Le dépôt de l'espace est illisible.");
+    await userEvent.click(within(banner).getByRole("button", { name: "Réessayer" }));
+    expect(await screen.findByRole("table", { name: "Points d'accès de l'espace" })).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
+
+  it("« Ajouter un point d'accès » amène le focus dans le panneau", async () => {
+    server();
+    render(screenFor());
+    const platform = await screen.findByRole("combobox", { name: "Plateforme (autorisées par le référent)" });
+    await userEvent.click(await screen.findByRole("button", { name: "Ajouter un point d'accès" }));
+    expect(platform).toHaveFocus();
+  });
+
+  it("un test ou une révocation refusés s'affichent sur la ligne sans la changer", async () => {
+    const api = server([LIST[0]], ({ method, path }) => {
+      if (path === `${API}/connections/dbx-fr/test`) return refused("Entrepôt arrêté.");
+      if (path === `${API}/connections/dbx-fr/token` && method === "DELETE") return refused("Coffre verrouillé.");
+      return undefined;
+    });
+    render(screenFor());
+    const line = await row(/Claire M\./);
+    await userEvent.click(within(line).getByRole("button", { name: "Tester Databricks · dbx-fr" }));
+    expect(await within(line).findByText("Entrepôt arrêté.")).toHaveClass("tone-bad");
+    await userEvent.click(within(line).getByRole("button", { name: "Révoquer Databricks · dbx-fr" }));
+    expect(await within(line).findByText("Coffre verrouillé.")).toHaveClass("tone-bad");
+    expect(within(line).getByRole("button", { name: "Tester Databricks · dbx-fr" })).toBeEnabled();
+    expect(api.calls.filter((c) => c.path === `${API}/connections` && c.method === "GET")).toHaveLength(1);
+  });
+
+  it("une révocation sans retrait chez la plateforme le dit", async () => {
+    server([LIST[0]], ({ method, path }) =>
+      path === `${API}/connections/dbx-fr/token` && method === "DELETE" ? { json: { revoked: true, remote_revoked: false } } : undefined);
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Révoquer Databricks · dbx-fr" }));
+    expect(await screen.findByText("Accès retiré du coffre.")).toHaveClass("tone-ok");
+  });
+
+  it("une plateforme retirée par le référent n'offre aucune action", async () => {
+    server([connection({ access_point: "dbx-fr", allowed: false })]);
+    render(screenFor());
+    const line = await row(/Claire M\./);
+    expect(line).toHaveTextContent("Plateforme retirée par le référent");
+    expect(within(line).queryByRole("button")).toBeNull();
+  });
+
+  it("token personnel : Annuler referme le champ ; un refus du coffre est expliqué et le champ vidé", async () => {
+    const api = server([LIST[2], connection({ access_point: "dbx-fr" })], ({ method, path }) => {
+      if (path === `${API}/connections/dbx-fr/authorize`) return refused("Client OAuth inconnu.", 400);
+      if (path === `${API}/connections/dbx-fr/token` && method === "PUT") return refused("Coffre verrouillé.", 500);
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Client OAuth inconnu.");
+    await userEvent.click(screen.getByRole("button", { name: "Utiliser un token personnel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Annuler" }));
+    expect(screen.queryByLabelText("Token personnel Databricks")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Utiliser un token personnel" }));
+    const field = screen.getByLabelText("Token personnel Databricks");
+    expect(screen.getByRole("button", { name: "Ranger dans le coffre" })).toBeDisabled();
+    await userEvent.type(field, "dapi-secret");
+    await userEvent.click(screen.getByRole("button", { name: "Ranger dans le coffre" }));
+    expect(await screen.findByText("Coffre verrouillé.")).toHaveClass("field-error");
+    expect(field).toHaveValue("");
+    expect(api.calls.find((c) => c.method === "PUT")?.body).toEqual({ token: "dapi-secret" });
+  });
+
+  it("nouveau point d'accès : un identifiant saisi à la main n'est plus recalculé avec l'entité", async () => {
+    server();
+    render(screenFor());
+    const id = await screen.findByRole("textbox", { name: "Identifiant" });
+    await waitFor(() => expect(id).toHaveValue("dbx-de"));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Entité" }), "nordis-es");
+    expect(id).toHaveValue("dbx-es");
+    await userEvent.clear(id);
+    await userEvent.type(id, "dbx-perso");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Entité" }), "");
+    expect(id).toHaveValue("dbx-perso");
+  });
+
+  it("nouveau point d'accès : test et déclaration refusés sont expliqués", async () => {
+    const api = server(LIST, ({ method, path }) => {
+      if (path === `${API}/access-point-draft/test`) return refused("Hôte injoignable.", 502);
+      if (path === `${API}/connections` && method === "POST") return refused("Un point d'accès porte déjà cet identifiant.");
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Tester la connexion" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Hôte injoignable.");
+    await userEvent.type(screen.getByRole("textbox", { name: "Justification" }), "Point de nordis-de.");
+    await userEvent.click(screen.getByRole("button", { name: "Proposer le point d'accès" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Un point d'accès porte déjà cet identifiant.");
+    expect(screen.queryByRole("link", { name: "Voir la proposition" })).toBeNull();
+    // La justification reste, pour réessayer sans la retaper.
+    expect(screen.getByRole("textbox", { name: "Justification" })).toHaveValue("Point de nordis-de.");
+    expect(api.calls.filter((c) => c.method === "POST" && c.path === `${API}/connections`)).toHaveLength(1);
+  });
+
+  it("les identifiants de brouillon restés au coffre s'oublient un par un", async () => {
+    let stored = [{ id: "dbx-essai", host: "https://adb-9.azuredatabricks.net" }, { id: "snow-essai", host: "https://x.snowflakecomputing.com" }];
+    const api = server(LIST, ({ method, path }) => {
+      if (path === `${API}/access-point-draft/credentials` && method === "GET") return { json: stored };
+      if (path === `${API}/access-point-draft/credentials/dbx-essai` && method === "DELETE") {
+        stored = stored.filter((s) => s.id !== "dbx-essai");
+        return { json: { removed: true } };
+      }
+      if (path === `${API}/access-point-draft/credentials/snow-essai` && method === "DELETE") return refused("Trousseau verrouillé.", 500);
+      return undefined;
+    });
+    render(screenFor());
+    const section = await screen.findByRole("region", { name: "Identifiants de brouillon non déclarés" });
+    expect(within(section).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "dbx-essai · https://adb-9.azuredatabricks.net Oublier",
+      "snow-essai · https://x.snowflakecomputing.com Oublier",
+    ]);
+    await userEvent.click(within(within(section).getAllByRole("listitem")[0]).getByRole("button", { name: "Oublier" }));
+    await waitFor(() => expect(within(section).getAllByRole("listitem")).toHaveLength(1));
+    expect(api.calls.some((c) => c.method === "DELETE" && c.path === `${API}/access-point-draft/credentials/dbx-essai`)).toBe(true);
+    await userEvent.click(within(section).getByRole("button", { name: "Oublier" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Trousseau verrouillé.");
+    expect(within(section).getByText("snow-essai")).toBeInTheDocument();
+  });
+
+  it("au-delà de 5 minutes sans réponse de la plateforme, l'attente s'arrête et le dit", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      server([connection({ access_point: "dbx-fr" })], ({ path }) => {
+        if (path === `${API}/connections/dbx-fr/authorize`) return { json: { authorize_url: "https://adb-1/authorize" } };
+        if (path === `${API}/connections/dbx-fr/status`) return { json: { ...connection({ access_point: "dbx-fr" }), flow: { status: "pending", error: null }, error: null } };
+        return undefined;
+      });
+      render(screenFor());
+      await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" }));
+      expect(await screen.findByText("Terminez la connexion dans le navigateur…")).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 2000));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Délai dépassé : La connexion n'a pas abouti en 5 minutes : réessayer.");
+      expect(screen.getByRole("button", { name: "Se connecter à Databricks · dbx-fr" })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("un échec signalé sans détail par la plateforme reçoit un texte par défaut", async () => {
+    server([connection({ access_point: "dbx-fr" })], ({ path }) => {
+      if (path === `${API}/connections/dbx-fr/authorize`) return { json: { authorize_url: "https://adb-1/authorize" } };
+      if (path === `${API}/connections/dbx-fr/status`) return { json: { ...connection({ access_point: "dbx-fr" }), flow: { status: "expired", error: null }, error: null } };
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-fr" }));
+    expect(await screen.findByRole("alert", undefined, { timeout: 4000 })).toHaveTextContent("Connexion échouée : La plateforme a refusé la connexion.");
+  });
+});
+
+describe("sélecteur de fichier natif (plan 0018)", () => {
+  const point = { access_point: "snow-es", platform: "snowflake", auth_mode: "keypair" as const, entity: "nordis-es" };
+
+  it("sous Tauri, « Choisir… » remplit le chemin de la clé ; une annulation le laisse intact", async () => {
+    picker.enabled = true;
+    vi.mocked(pickFile).mockResolvedValueOnce("/Users/anna/.ssh/svc_es.p8").mockResolvedValueOnce(null);
+    server([connection(point)]);
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Snowflake · snow-es" }));
+    const key = screen.getByLabelText("Fichier de clé privée");
+    await userEvent.click(screen.getByRole("button", { name: "Choisir…" }));
+    expect(pickFile).toHaveBeenCalledWith("Fichier de clé privée Snowflake");
+    await waitFor(() => expect(key).toHaveValue("/Users/anna/.ssh/svc_es.p8"));
+    await userEvent.click(screen.getByRole("button", { name: "Choisir…" }));
+    await waitFor(() => expect(pickFile).toHaveBeenCalledTimes(2));
+    expect(key).toHaveValue("/Users/anna/.ssh/svc_es.p8");
+  });
+
+  it("un sélecteur en échec est expliqué", async () => {
+    picker.enabled = true;
+    vi.mocked(pickFile).mockRejectedValueOnce(new Error("dialogue indisponible"));
+    server([connection(point)]);
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Se connecter à Snowflake · snow-es" }));
+    await userEvent.click(screen.getByRole("button", { name: "Choisir…" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("dialogue indisponible");
   });
 });
