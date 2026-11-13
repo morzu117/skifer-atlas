@@ -30,6 +30,7 @@ dev = [
     "jsonschema>=4.23",
     "hypothesis>=6.100",
     "httpx2>=2.16.0",
+    "pytest-cov>=7.1.0",
 ]
 build = [
     "pyinstaller>=6.10",

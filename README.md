@@ -41,6 +41,8 @@ cd app && npm install && npm run tauri dev
 
 Le serveur refuse de démarrer sans le token que Tauri lui passe. Pour travailler sur l'interface dans un simple navigateur, sans Tauri : `cd core && ATLAS_DEV_NO_TOKEN=1 uv run skifer-atlas-server`, puis `cd app && npm run dev`. Hors Tauri, l'interface appelle `http://127.0.0.1:8765`, ou l'adresse donnée par `VITE_ATLAS_API`.
 
+La CI [tests.yml](.github/workflows/tests.yml) lance pytest, Vitest et Playwright sur chaque PR vers `main`, avec mesure de couverture Python et front sans seuil. Le job Windows est informatif.
+
 Tests de l'interface, depuis `app/` :
 
 ```bash

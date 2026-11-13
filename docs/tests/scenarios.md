@@ -7,6 +7,8 @@
 
 ## Lancer les tests
 
+La CI [tests.yml](../../.github/workflows/tests.yml) lance les trois niveaux (core, front et e2e) sur chaque PR vers `main`.
+
 - Parcours : `cd app && npm run e2e`. Playwright démarre lui-même les serveurs Python, les faux Databricks, Snowflake et GitHub, et Vite, sur des ports fixes (1420, 8790 à 8799, 8020 pour le retour OAuth). Chromium passe tous les scénarios, puis WebKit les `*.webkit.spec.ts`. Un seul worker, et une seule exécution à la fois sur le poste : deux exécutions se disputeraient les ports. Si un port est pris, la configuration s'arrête avant tout lancement et nomme le port et son processus (`app/e2e/ports.ts`).
 - Tests de composants et unitaires : `cd app && npm test` (Vitest, jsdom). Ils rendent l'écran contre un faux serveur ; ils n'exercent pas de navigateur.
 

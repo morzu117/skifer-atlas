@@ -1,0 +1,166 @@
+name: tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    env:
+      COVERAGE_CORE: sysmon # Python 3.12 : réduit le coût de mesure des tests de performance
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    defaults:
+      run:
+        working-directory: core
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff check --preview --select E301,E302,E303,E304,E305,E306 .
+      - name: Pytest et couverture
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=skifer_atlas --cov-report=term-missing:skip-covered | tee pytest-report.txt
+      - name: Résumé de couverture
+        if: always()
+        run: |
+          if [ -f pytest-report.txt ]; then
+            echo '### Couverture Python' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            sed -n '/coverage: platform/,/^TOTAL/p' pytest-report.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  core-windows:
+    name: core Windows (informatif)
+    runs-on: windows-latest
+    continue-on-error: true
+    env:
+      COVERAGE_CORE: sysmon
+    defaults:
+      run:
+        working-directory: core
+        shell: bash
+    steps:
+      - name: Statut du job
+        working-directory: .
+        run: |
+          echo '### Windows : suite informative, ses échecs ne bloquent pas la PR.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff check --preview --select E301,E302,E303,E304,E305,E306 .
+      - name: Pytest et couverture
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=skifer_atlas --cov-report=term-missing:skip-covered | tee pytest-report.txt
+      - name: Résumé de couverture
+        if: always()
+        run: |
+          if [ -f pytest-report.txt ]; then
+            echo '### Couverture Python' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            sed -n '/coverage: platform/,/^TOTAL/p' pytest-report.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  front:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run --coverage
+      - name: Résumé de couverture
+        if: always()
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            echo '### Couverture front' >> "$GITHUB_STEP_SUMMARY"
+            node -e 'const c = require("./coverage/coverage-summary.json").total; for (const [name, value] of Object.entries(c)) console.log(`- ${name}: ${value.pct}% (${value.covered}/${value.total})`)' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  e2e:
+    name: e2e (${{ matrix.project }} ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: chromium
+            shard: 1/3
+            artifact: chromium-1
+          - project: chromium
+            shard: 2/3
+            artifact: chromium-2
+          - project: chromium
+            shard: 3/3
+            artifact: chromium-3
+          - project: webkit
+            shard: 1/1
+            artifact: webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: uv sync --locked --project core
+      - run: npm ci
+        working-directory: app
+      - run: npx playwright install --with-deps ${{ matrix.project }}
+        working-directory: app
+      - name: Identité Git
+        run: |
+          git config --global user.name "Atlas CI"
+          git config --global user.email ci@example.invalid
+      - name: Parcours Playwright
+        working-directory: app
+        run: npx playwright test --project=${{ matrix.project }} --workers=1 --shard=${{ matrix.shard }} --reporter=list,html
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-${{ matrix.artifact }}
+          path: |
+            app/playwright-report/
+            app/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
