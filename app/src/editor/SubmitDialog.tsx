@@ -64,7 +64,7 @@ export function SubmitDialog({
   const preview = load.kind === "ready" ? load.preview : null;
   const nature = preview ? NATURES[preview.nature] ?? { label: preview.nature, tone: "badge-neutral" } : null;
   return (
-    <Drawer title="Soumettre la proposition" onClose={onClose}>
+    <Drawer title="Soumettre la proposition" onClose={onClose} busy={busy}>
       {load.kind === "loading" && (
         <p className="muted" role="status">
           Préparation du récapitulatif…
@@ -117,6 +117,7 @@ export function SubmitDialog({
             id={id}
             className="prop-input"
             rows={4}
+            disabled={busy}
             value={justification}
             aria-invalid={missing && !justification.trim() ? true : undefined}
             aria-describedby={`${id}-help`}
@@ -135,7 +136,7 @@ export function SubmitDialog({
           <button type="submit" className="btn btn-primary" disabled={busy || load.kind !== "ready"}>
             {busy ? "Envoi…" : "Soumettre"}
           </button>
-          <button type="button" className="btn btn-neutral" onClick={onClose}>
+          <button type="button" className="btn btn-neutral" onClick={onClose} disabled={busy}>
             Annuler
           </button>
         </div>

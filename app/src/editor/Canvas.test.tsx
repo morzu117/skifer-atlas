@@ -1,4 +1,5 @@
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockReactFlow } from "../test/reactFlow";
@@ -106,5 +107,41 @@ describe("Canvas sur un grand graphe (plan 0024)", () => {
     const drawn = container.querySelectorAll("[data-node-id]").length;
     expect(drawn).toBeGreaterThan(0);
     expect(drawn).toBeLessThan(large.length);
+  });
+});
+
+
+describe("sélection et suppression au clavier", () => {
+  it.each(["Backspace", "bouton"])("supprime une arête sélectionnée : %s", async (action) => {
+    const onDisconnect = vi.fn();
+    render(view(props(chain(2), { onDisconnect })));
+    const edge = await screen.findByLabelText("Edge from n001 to n002");
+    fireEvent.keyDown(edge, { key: "Enter", code: "Enter" });
+    fireEvent.keyUp(edge, { key: "Enter", code: "Enter" });
+    const button = await screen.findByRole("button", { name: "Supprimer l'arête" });
+    if (action === "bouton") fireEvent.click(button);
+    else {
+      fireEvent.keyDown(edge, { key: "Backspace", code: "Backspace" });
+      await waitFor(() => expect(onDisconnect).toHaveBeenCalledWith("n001", "n002", undefined));
+      fireEvent.keyUp(edge, { key: "Backspace", code: "Backspace" });
+    }
+    await waitFor(() => expect(onDisconnect).toHaveBeenCalledWith("n001", "n002", undefined));
+  });
+
+  it("répercute la sélection clavier d’un nœud et sa suppression", async () => {
+    const onRemove = vi.fn();
+    const nodes = chain(2);
+    function Controlled() {
+      const [selected, setSelected] = useState<string | null>(null);
+      return view(props(nodes, { selected, onSelect: setSelected, onRemove }));
+    }
+    render(<Controlled />);
+    const node = screen.getByRole("group", { name: "Calcul de colonne n002" });
+    fireEvent.keyDown(node, { key: "Enter", code: "Enter" });
+    fireEvent.keyUp(node, { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(node).toHaveClass("selected"));
+    fireEvent.keyDown(document, { key: "Delete", code: "Delete" });
+    await waitFor(() => expect(onRemove).toHaveBeenCalledWith("n002"));
+    fireEvent.keyUp(document, { key: "Delete", code: "Delete" });
   });
 });

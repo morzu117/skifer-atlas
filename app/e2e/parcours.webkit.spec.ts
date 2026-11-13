@@ -130,7 +130,9 @@ for (const count of [7, 200]) {
 test("[S-0026-06] [S-RAF-06] propositions : file, proposition et diff en lecture seule", async ({ page }) => {
   const writes: string[] = [];
   page.on("request", (request) => {
-    if (request.url().startsWith(API) && !["GET", "OPTIONS"].includes(request.method())) writes.push(request.url());
+    // La synchronisation automatique au changement d'écran (ADR 0049) n'est pas une écriture de l'utilisateur.
+    const auto = request.url().endsWith("/sync/auto");
+    if (request.url().startsWith(API) && !["GET", "OPTIONS"].includes(request.method()) && !auto) writes.push(request.url());
   });
   await page.goto(`${ROOT}/propositions`);
   const queue = page.getByRole("list", { name: "File des propositions" });

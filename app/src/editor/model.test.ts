@@ -60,6 +60,32 @@ describe("opérations", () => {
     );
   });
 
+  it("refuse les doublons sur la même entrée sans modifier le document", () => {
+    const doc = chain();
+    const before = structuredClone(doc);
+    expect(() => apply(doc, { kind: "connect", source: "n01", target: "n02" })).toThrow(/existe déjà/);
+    expect(() => apply(doc, { kind: "connect", source: "n01", target: "n01" })).toThrow(/lui-même/);
+    expect(doc).toEqual(before);
+    let join = apply(doc, { kind: "add_node", type: "join", id: "n05" });
+    join = apply(join, { kind: "connect", source: "n01", target: "n05", side: "left" });
+    expect(() => apply(join, { kind: "connect", source: "n01", target: "n05", side: "left" })).toThrow(/existe déjà/);
+    join = apply(join, { kind: "connect", source: "n01", target: "n05", side: "right" });
+    expect(nodesOf(join).find((n) => n.id === "n05")?.inputs).toEqual({ left: "n01", right: "n01" });
+    const union = run(doc, [{ kind: "add_node", type: "union", id: "n06" }, { kind: "connect", source: "n01", target: "n06" }]);
+    expect(() => apply(union, { kind: "connect", source: "n01", target: "n06" })).toThrow(/existe déjà/);
+  });
+
+  it("la suppression d'une arête et d'un nœud se rétablit par l'historique", () => {
+    const before = chain();
+    for (const op of [{ kind: "disconnect", source: "n01", target: "n02" }, { kind: "remove", id: "n02" }] as Op[]) {
+      const after = apply(before, op);
+      const history = record(emptyHistory(), { op, before, after });
+      const undone = undo(history)!;
+      expect(undone.document).toEqual(before);
+      expect(redo(undone.history)!.document).toEqual(after);
+    }
+  });
+
   it("une jointure se remplit à gauche puis à droite ; une union accumule", () => {
     let doc = run(chain(), [
       { kind: "add_node", type: "join", id: "n05" },
@@ -72,7 +98,6 @@ describe("opérations", () => {
     doc = run(doc, [
       { kind: "add_node", type: "union", id: "n06" },
       { kind: "connect", source: "n03", target: "n06" },
-      { kind: "connect", source: "n04", target: "n06" },
       { kind: "connect", source: "n04", target: "n06" },
     ]);
     expect(nodesOf(doc).find((n) => n.id === "n06")?.inputs).toEqual(["n03", "n04"]);
