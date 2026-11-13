@@ -2,7 +2,7 @@
 
 Chaque action qu'un utilisateur peut faire sur les écrans du lot, avec le résultat attendu d'après les documents (brief, guide de style, maquettes, plans, ADR), le test qui fait le vrai geste et son statut. Les règles du lot : l'oracle, ce sont les documents ; un écart reste rouge ; vrais gestes (clics, clavier, saisie), `page.route` réservé aux pannes simulées du serveur ou du réseau ; WebKit pour les gestes sensibles au moteur.
 
-Statuts : **vert** (nouveau test, passe), **rouge** (nouveau test, échoue à cause de l'application), **existant** (un test déjà présent fait le vrai geste : il est cité, pas dupliqué), **non testé** (avec la raison), **note** (contradiction des documents, choix retenu).
+Statuts : **reporté** (décision du 13 novembre 2026), **vert** (nouveau test, passe), **rouge** (nouveau test, échoue à cause de l'application), **existant** (un test déjà présent fait le vrai geste : il est cité, pas dupliqué), **non testé** (avec la raison), **note** (contradiction des documents, choix retenu).
 
 Tags de titre : `[S-UI-<écran>-<nn>]`. Fichiers : `app/e2e/ui-accueil.spec.ts`, `ui-cadre.spec.ts`, `ui-cadre.webkit.spec.ts`, `ui-propositions(.webkit).spec.ts`, `ui-comparaison(.webkit).spec.ts`, `ui-connexions(.webkit).spec.ts`, `ui-administration(.webkit).spec.ts` (gestes communs dans `ui-administration.gestes.ts` et `ui-cadre.gestes.ts`), `demo-lancement.spec.ts`.
 
@@ -10,7 +10,7 @@ Exécution : `cd app && /tmp/e2e-run.sh e2e/<fichier>.spec.ts`, et `/tmp/e2e-run
 
 ## Décomptes
 
-213 actions inventoriées : 95 nouveaux tests (82 verts, 13 rouges), 87 actions déjà couvertes par un test existant, 24 sans test (raison donnée sur la ligne), 7 notes de contradiction. S-UI-107-11 passe sous Chromium mais échoue sous WebKit : il est compté rouge.
+Inventaire initial : 213 actions. Les corrections et le nouveau test S-UI-104-21 restent à vérifier par Playwright ; S-UI-100-10 et S-UI-107-11 sous WebKit sont reportés le 13 novembre 2026.
 
 ## Remarques transverses
 
@@ -32,7 +32,7 @@ Exécution : `cd app && /tmp/e2e-run.sh e2e/<fichier>.spec.ts`, et `/tmp/e2e-run
 | S-UI-100-06 | 100 | « Fermer » sur le message « espace absent du registre » | Le message disparaît, la liste reste (ADR 0013, Routage) | ui-accueil.spec.ts | vert | |
 | S-UI-100-07 | 100 | Liste des espaces en erreur serveur, puis « Réessayer » ; lire la note du coffre | Bandeau traduit sans trace technique ; « Réessayer » relit la liste ; note fixe sur le coffre local (ADR 0013, États ; guide 10.0) | ui-accueil.spec.ts | vert | |
 | S-UI-100-08 | 100 | Lire l'en-tête de l'accueil | Initiales et **nom** de l'utilisateur : « AK », « Anna K. » (maquette 10.0, en-tête « JH Julien H. » ; guide 10.0 « En-tête : logo, utilisateur » ; guide 3.1) | ui-accueil.spec.ts | **rouge** | En-tête « AK anna.k » : le compte au lieu du nom (`app/src/screens/Home.tsx:45` affiche `account` ; le type `Workspace` ne porte pas le nom du membre) |
-| S-UI-100-10 | 100 | WebKit : panneau « Créer » (saisie, Tab, Échap), panneau « Rejoindre » (envoi vide, « Fermer ») | Focus gardé, identifiant dérivé, erreur sur le champ, focus rendu au bouton (règle 5 ; ADR 0013) | ui-cadre.webkit.spec.ts | **rouge** | Sous WebKit, Tab depuis le dernier champ du panneau « Créer » sort du dialogue : le piège ne boucle que si le focus est sur le dernier élément focalisable, un bouton que Tab saute sous WebKit (`app/src/components/Drawer.tsx:47-58`). Échap et « Rejoindre » ne sont pas atteints |
+| S-UI-100-10 | 100 | WebKit : panneau « Créer » (saisie, Tab, Échap), panneau « Rejoindre » (envoi vide, « Fermer ») | Focus gardé, identifiant dérivé, erreur sur le champ, focus rendu au bouton (règle 5 ; ADR 0013) | ui-cadre.webkit.spec.ts | **reporté** | Reporté le 13 novembre 2026 : navigation au clavier non prioritaire. Sous WebKit, Tab depuis le dernier champ du panneau « Créer » sort du dialogue : le piège ne boucle que si le focus est sur le dernier élément focalisable, un bouton que Tab saute sous WebKit (`app/src/components/Drawer.tsx:47-58`). Échap et « Rejoindre » ne sont pas atteints |
 | — | 100 | Lire la grille : initiales, rôle, nom, secteur · entités · domaines, compteurs | Plan 0010, critère 1 ; maquette 10.0 | accueil.spec.ts S-0010-01 | existant | |
 | — | 100 | Compteur orange des propositions en attente sur la carte | ADR 0013, Compteurs | accueil-revue.spec.ts S-0010-13 | existant | |
 | — | 100 | Registre vide | Carte pointillée « Aucun espace pour l'instant » (guide 10.0 ; critère 2) | accueil.spec.ts S-0010-02 | existant | |
@@ -104,6 +104,8 @@ Exécution : `cd app && /tmp/e2e-run.sh e2e/<fichier>.spec.ts`, et `/tmp/e2e-run
 | — | 104 | Réponse tardive de l'ancien filtre (critère 9, seconde moitié) | Ne doit pas écraser la file courante | — | non testé | La course ne se reproduit qu'en retardant les réponses par `page.route`, exclu par la règle 2 ; Vitest conseillé |
 | — | 104 | Refus head_changed, branch_protected, cannot_review_own, comment_required | Messages de l'ADR 0043 | rattachement.spec.ts S-0006-13 (branch_protected) | non testé | head_changed : pas de geste déterministe ; les deux derniers sont empêchés par l'écran (S-UI-104-07, S-0014-05) |
 | — | 104 | État « Préparation du diff… » | Statut de chargement | — | non testé | Transitoire ; Vitest conseillé |
+
+| S-UI-104-21 | 104 | Filtrer par KPI puis auteur, recharger et revenir en arrière | Filtres combinés conservés dans l’adresse (ADR 0057, 0018) | ui-propositions.spec.ts | à vérifier | Playwright non exécuté dans ce lot |
 
 ## 105 — Comparaison
 
@@ -208,7 +210,7 @@ Exécution : `cd app && /tmp/e2e-run.sh e2e/<fichier>.spec.ts`, et `/tmp/e2e-run
 | S-UI-107-08 | 107 | Plateformes cochées et décochées à la barre d'espace, enregistrées | Focus gardé sur la case ; BigQuery coché et Snowflake décoché après rechargement (plan 0017) | ui-administration.spec.ts ; ui-administration.webkit.spec.ts | vert (Chromium et WebKit) | |
 | S-UI-107-09 | 107 | Modifier un membre : « Annuler » du formulaire, « + Ajouter un rôle », « Retirer le rôle 2 », nom, entité, rôle Validateur sur Ventes | Ligne « Anna Keller / nordis-fr / Validateur / Ventes », après rechargement (plan 0023 ; ADR 0021) | ui-administration.spec.ts | vert | |
 | S-UI-107-10 | 107 | Lire le tableau des membres et le dépôt rattaché | En-têtes Nom / Entité / Rôle / Domaines ; adresse et branche main en lecture seule, sans « Rattacher » (ADR 0021 ; maquette 10.7) | ui-administration.spec.ts | vert | |
-| S-UI-107-11 | 107 | Confirmation de sortie au clavier : focus initial, Tab, Maj+Tab, Échap, Entrée | Focus sur « Annuler » ; Tab reste entre les deux boutons ; Échap reste et rend le focus au lien ; Entrée quitte, brouillon abandonné (ADR 0043 ; plan 0034, « Clavier et focus ») | ui-administration.spec.ts ; ui-administration.webkit.spec.ts | vert Chromium, **rouge WebKit** | Sous WebKit, Tab depuis « Annuler » part sur BODY, puis sur les champs « Validateurs requis » derrière le dialogue |
+| S-UI-107-11 | 107 | Confirmation de sortie au clavier : focus initial, Tab, Maj+Tab, Échap, Entrée | Focus sur « Annuler » ; Tab reste entre les deux boutons ; Échap reste et rend le focus au lien ; Entrée quitte, brouillon abandonné (ADR 0043 ; plan 0034, « Clavier et focus ») | ui-administration.spec.ts ; ui-administration.webkit.spec.ts | vert Chromium, **reporté WebKit** | Reporté le 13 novembre 2026 : navigation au clavier non prioritaire. Sous WebKit, Tab depuis « Annuler » part sur BODY, puis sur les champs « Validateurs requis » derrière le dialogue |
 | S-UI-107-12 | 107 | Quitter par le sélecteur d'espace avec un brouillon | « Annuler » rend le focus au sélecteur, brouillon gardé ; « Quitter sans enregistrer » ouvre l'accueil (ADR 0043) | ui-administration.spec.ts | vert | |
 | S-UI-107-13 | 107 | Ouvrir l'Administration quand le chargement échoue (500), puis « Réessayer » | Bandeau avec le message **et l'action** (plan 0010, États ; ADR 0013 ; guide 3.7) | ui-administration.spec.ts | **rouge** | Bandeau « Erreur interne du serveur. » sans bouton, formulaire absent ; seul le rechargement en sort |
 | S-UI-107-14 | 107 | Enregistrer serveur injoignable, puis « Réessayer » | Brouillon conservé, bouton actif, puis fusion ; BigQuery coché après rechargement (guide 3.7 ; plan 0010) | ui-administration.spec.ts | vert | |

@@ -11,6 +11,8 @@
 # données de test (ATLAS_COMPARE_DATA), coffre en mémoire (ATLAS_VAULT=memory).
 set -euo pipefail
 
+export ATLAS_ALLOW_LOCAL_GIT=1
+
 root=$(cd "$(dirname "$0")/../.." && pwd)
 demo=${1:-$HOME/atlas-demo}
 account=${DEMO_COMPTE:-julien.h}
@@ -56,7 +58,7 @@ stop_server() { # `uv run` et le serveur Python, son enfant
 trap stop_server EXIT
 ready=
 for _ in $(seq 100); do
-  curl -sf "http://127.0.0.1:$port/health" >/dev/null && ready=1 && break
+  curl -sf -H "Authorization: Bearer $token" "http://127.0.0.1:$port/health" >/dev/null && ready=1 && break
   sleep 0.2
 done
 if [[ -z "$ready" ]]; then

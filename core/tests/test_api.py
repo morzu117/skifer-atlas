@@ -141,3 +141,17 @@ def test_server_starts_on_loopback_with_a_token_or_in_dev_mode(monkeypatch, env)
     FakeServer.started = False
     server.main()
     assert FakeServer.started
+
+
+def test_unexpected_error_keeps_cors_and_hides_details():
+    app = create_app(token="secret")
+
+    @app.get("/test-erreur")
+    def broken():
+        raise RuntimeError("détail privé")
+
+    client = TestClient(app)
+    response = client.get("/test-erreur", headers={"Origin": "http://localhost:1420"})
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == "http://localhost:1420"
+    assert "détail privé" not in response.text

@@ -41,7 +41,7 @@ async function mouseClick(page: Page, target: Locator) {
   const box = (await target.boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
-const filter = (page: Page, name: "Domaine" | "Statut" | "Entité") => page.getByRole("combobox", { name });
+const filter = (page: Page, name: "Domaine" | "Statut" | "Entité" | "KPI" | "Auteur") => page.getByRole("combobox", { name });
 
 test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: "ignoreErrors" }); // relevés de la coque encore en vol
@@ -335,4 +335,25 @@ test("[S-UI-104-15] hors ligne : changer de filtre affiche le bandeau du serveur
   await expect(banner).toHaveCount(0);
   await expect(filter(page, "Statut")).toHaveValue("merged");
   await expect(queue(page).getByRole("link").first()).toContainText("Fusionnée");
+});
+
+
+test("[S-UI-104-21] filtrer par KPI puis auteur conserve les choix et les combine", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, API);
+  await page.goto(`${ws.root}/propositions`);
+  await expect(queue(page).getByRole("link")).toHaveCount(5);
+  await filter(page, "KPI").selectOption({ label: "Revenu net" });
+  await expect(queue(page).getByRole("link")).toHaveCount(4);
+  await filter(page, "Auteur").selectOption({ label: "Julien H." });
+  await expect(queue(page).getByRole("link")).toHaveCount(1);
+  await expect(entry(page, "Revenu net · canonique v5")).toBeVisible();
+  await expect(page).toHaveURL(/kpi=revenu-net/);
+  await expect(page).toHaveURL(/author=julien.h/);
+  await page.reload();
+  await expect(filter(page, "KPI")).toHaveValue("revenu-net");
+  await expect(filter(page, "Auteur")).toHaveValue("julien.h");
+  await expect(queue(page).getByRole("link")).toHaveCount(1);
+  await page.goBack();
+  await expect(filter(page, "Auteur")).toHaveValue("");
+  await expect(queue(page).getByRole("link")).toHaveCount(4);
 });

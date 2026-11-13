@@ -14,7 +14,7 @@ import {
   type MissingAccess,
   type Workspace,
 } from "../api";
-import { Banner } from "../components/Banner";
+import { Banner, RetryAction } from "../components/Banner";
 import { Select } from "../components/Select";
 import { TableWrap } from "../components/TableWrap";
 import { openExternal } from "../external";
@@ -148,7 +148,7 @@ export function Comparison({ ws, params, heading }: { ws: Workspace; params: Par
             </p>
           )}
           {matrix.kind === "error" && (
-            <Banner tone="bad" title={matrix.error.title}>
+            <Banner tone="bad" title={matrix.error.title} action={<RetryAction onRetry={() => setRevision((n) => n + 1)} />}>
               {matrix.error.text}
             </Banner>
           )}

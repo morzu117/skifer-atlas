@@ -23,7 +23,8 @@ test("[S-UI-108-09] WebKit : retour arrière et avance du navigateur entre les �
   await walkHistory(page, ws.root);
 });
 
-test("[S-UI-100-10] WebKit : les panneaux de l'accueil gardent le focus, Échap les ferme et rend le focus au bouton", async ({ page, request }) => {
+// Navigation au clavier reportée par décision du 13 novembre 2026.
+test.fixme("[S-UI-100-10] WebKit : les panneaux de l'accueil gardent le focus, Échap les ferme et rend le focus au bouton", async ({ page, request }) => {
   await isolatedDemo(request, API); // au moins une carte à l'accueil
   await page.goto("/");
   const create = page.getByRole("button", { name: "Créer un espace" });

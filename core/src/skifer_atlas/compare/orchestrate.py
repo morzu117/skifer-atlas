@@ -181,14 +181,14 @@ def _side(document: Any, dialect: str, scope: Scope, analysis: Analysis, calenda
     try:
         compiled = compile_document(document, dialect, scope, analysis.library, calendars,
                                     renames)
+        rewritten = apply_granularity(document, scope, analysis.library)
+        dims = _output_group_by(rewritten)
     except CompileError as error:
         raise RepoError("not_compilable", f"{what} ne se compile pas.",
                         [i.to_dict() for i in error.issues]) from None
     except NotCompilable as error:
         raise RepoError("not_compilable", f"{what} ne se compile pas en {dialect} : "
                         f"{error.node_id}, {error.reason}.") from None
-    rewritten = apply_granularity(document, scope, analysis.library)
-    dims = _output_group_by(rewritten)
     schemas, _ = propagate(rewritten, analysis.library)
     values = [c for c in schemas[rewritten.graph.output] or {} if c not in dims]
     if len(values) != 1:
@@ -221,7 +221,11 @@ def prepare(analysis: Analysis, calendars: dict, governance_tolerance: float,
                         "le corriger avant de comparer.",
                         [i.to_dict() for i in entry.issues if i.severity == "error"])
     declared = _scope(kpi, request)
-    granularity = list(declared.granularity or _output_group_by(kpi))
+    try:
+        granularity = list(declared.granularity or _output_group_by(kpi))
+    except CompileError as error:
+        raise RepoError("not_compilable", "Le KPI ne se compile pas.",
+                        [i.to_dict() for i in error.issues]) from None
     scope = Scope(declared.period.text() if declared.period else None,
                   tuple(declared.perimeter or ()), tuple(granularity))
     tolerance = next(t for t in (request.tolerance,

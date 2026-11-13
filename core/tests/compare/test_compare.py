@@ -721,3 +721,26 @@ def test_concurrent_reads_of_the_history(tmp_path):
         for thread in threads:
             thread.join()
     assert errors == []
+
+
+def test_setup_kpi_sortant_d_une_jointure_sans_scope(space, monkeypatch):
+    from skifer_atlas.compare import service
+
+    folder = space / "variants" / "panier-moyen"
+    folder.mkdir(parents=True)
+    variant = {
+        "schema_version": 1, "kind": "variant",
+        "data_product": {"id": "panier-moyen--nordis-fr", "version": 1, "owner": "claire.m"},
+        "variant_of": {"id": "panier-moyen", "version": 1}, "entity": "nordis-fr",
+        "mode": "override", "justification": "Déclinaison française du panier moyen.",
+        "overrides": [{"node": "n03", "justification": "Mois fiscal local.", "replace": {
+            "id": "n03", "type": "temporal", "inputs": ["n02"], "operation": "period",
+            "column": "date_commande", "target": "mois_fiscal", "grain": "month"}}],
+    }
+    (folder / "nordis-fr.yaml").write_text(yaml.safe_dump(variant), encoding="utf-8")
+    monkeypatch.setattr(service, "_workspace", lambda _: object())
+    monkeypatch.setattr(service, "repo_dir", lambda _: space)
+    result = service.comparison_setup("test", "panier-moyen")
+    assert result["scopes"] == []
+    assert [v["entity"] for v in result["variants"]] == ["nordis-fr"]
+    assert result["variants"][0]["unavailable"]

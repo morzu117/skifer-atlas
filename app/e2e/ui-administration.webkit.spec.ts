@@ -13,7 +13,8 @@ test("[S-UI-107-08] WebKit : plateformes autorisées à la barre d'espace, enreg
   await platformsByKeyboard(page, request);
 });
 
-test("[S-UI-107-11] WebKit : confirmation de sortie, focus, Tab enfermé, Échap reste, Entrée quitte", async ({ page, request }) => {
+// Navigation au clavier reportée par décision du 13 novembre 2026.
+test.fixme("[S-UI-107-11] WebKit : confirmation de sortie, focus, Tab enfermé, Échap reste, Entrée quitte", async ({ page, request }) => {
   await leaveConfirmationByKeyboard(page, request);
 });
 
