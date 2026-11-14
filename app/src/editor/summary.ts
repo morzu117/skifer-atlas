@@ -1,3 +1,4 @@
+import { parseCondition } from "./condition";
 import { inputsOf, type NodeRaw, type Raw } from "./model";
 
 // Texte d'un nœud en édition (guide 4) : l'expression en mono, puis une ligne de
@@ -38,7 +39,7 @@ const isRaw = (value: unknown): value is Raw => typeof value === "object" && val
 
 export function conditionText(condition: unknown): string {
   if (isRaw(condition)) return text(condition.expr);
-  const [column, operator, value] = text(condition).split(":", 3);
+  const { column, operator, value } = parseCondition(condition);
   if (!operator) return text(condition);
   return [column, OPERATORS[operator] ?? operator, value?.split(",").join(", ")].filter(Boolean).join(" ");
 }
@@ -57,7 +58,7 @@ export function summary(node: NodeRaw): { main: string; meta: string } {
       const table = text(node.table);
       return {
         main: table.split(".").pop() || "table ?",
-        meta: [table.split(".").slice(0, -1).join("."), columns.length ? `${columns.length} col.` : "", dated ? `${text(dated.name)} · ${text(dated.timezone)}` : ""]
+        meta: [table.split(".").slice(0, -1).join("."), columns.length ? `${columns.length} col.` : "", dated ? [text(dated.name), text(dated.timezone)].filter(Boolean).join(" · ") : ""]
           .filter(Boolean)
           .join(" · "),
       };
@@ -95,7 +96,7 @@ export function summary(node: NodeRaw): { main: string; meta: string } {
         node.operation === "period"
           ? `${GRAINS[text(node.grain)] ?? text(node.grain)} de ${text(node.column)}`
           : node.operation === "to_date"
-            ? `date de ${text(node.column)} · ${text(node.timezone)}`
+            ? [text(node.column) ? `date de ${text(node.column)}` : "", text(node.timezone)].filter(Boolean).join(" · ")
             : node.operation === "convert_timezone"
               ? `${text(node.column)} → ${text(node.to)}`
               : node.operation === "window"

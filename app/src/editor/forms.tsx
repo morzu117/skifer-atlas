@@ -1,3 +1,4 @@
+import { parseCondition } from "./condition";
 import type { Vocabulary } from "../api";
 import {
   ChoiceProp,
@@ -128,19 +129,19 @@ function SourceForm({ node, set, vocabulary, readOnly }: FormProps) {
   );
 }
 
-function parseCondition(condition: unknown): { column: string; operator: string; value: string } {
-  const [column = "", operator = "", value = ""] = (typeof condition === "string" ? condition : "").split(":", 3);
-  return { column, operator, value };
-}
-
 function FilterForm({ node, set, columns, vocabulary, readOnly }: FormProps) {
   const sql = isRaw(node.condition);
   const parts = parseCondition(node.condition);
   const upstream = names(columns(inputsOf(node)[0]));
   const arity = vocabulary.operators.find((o) => o.name === parts.operator)?.arity;
   const write = (next: Partial<typeof parts>) => {
-    const { column, operator, value } = { ...parts, ...next };
-    const noValue = vocabulary.operators.find((o) => o.name === operator)?.arity === "none";
+    const { column, operator } = { ...parts, ...next };
+    let value = next.value ?? parts.value;
+    const nextArity = vocabulary.operators.find((o) => o.name === operator)?.arity;
+    if (next.operator !== undefined && arity === "list" && nextArity === "single") {
+      value = value.split(/[,;]/)[0].trim();
+    }
+    const noValue = nextArity === "none";
     if (!column && !operator && !value) set(["condition"], undefined);
     else set(["condition"], noValue || !value ? `${column}:${operator}` : `${column}:${operator}:${value}`);
   };
