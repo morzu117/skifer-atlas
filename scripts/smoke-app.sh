@@ -161,6 +161,11 @@ end run'''
 else:
     script = 'tell application id "io.skifer.atlas" to quit'
     command = ["osascript", "-"]
+if method == "cmdq":
+    # System Events démarre à froid en plusieurs secondes sur les runners Intel : il est
+    # lancé avant la mesure, pour que les 4 s restent celles de l'app.
+    subprocess.run(["osascript", "-e", 'tell application "System Events" to get name'],
+                   capture_output=True, timeout=60, check=False)
 started = time.monotonic()
 try:
     result = subprocess.run(command, input=script, text=True, capture_output=True, timeout=4)
