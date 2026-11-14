@@ -388,6 +388,8 @@ function testMessage(result: ConnectionTest): { text: string; tone: "ok" | "bad"
 export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject<HTMLHeadingElement> }) {
   const [revision, setRevision] = useState(0);
   const list = useLoad(() => api.connections(ws.id), [ws.id, revision], true);
+  const listAnswered = useRef(false);
+  if (list.kind !== "loading") listAnswered.current = true;
   const platforms = useLoad(() => api.platforms(ws.id), [ws.id]);
   const panel = useRef<HTMLElement>(null);
   const canDeclare = ws.role !== "lecteur";
@@ -409,7 +411,7 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
           <span className="muted">Espace {ws.name} · vos tokens sont chiffrés sur cette machine, jamais sur un serveur ni dans Git.</span>
         </div>
         {canDeclare && canChoosePlatform && (
-          <button type="button" className="btn btn-primary" onClick={openPanel}>
+          <button type="button" className="btn btn-primary" onClick={openPanel} disabled={!listAnswered.current}>
             <Icon name="plus" className="icon-sm" />
             Ajouter un point d'accès
           </button>
@@ -468,7 +470,8 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
             {ws.space_referent && <a className="btn btn-primary" href={href.view(ws.id, "administration")}>Configurer les plateformes</a>}
           </aside>
         )}
-        {canDeclare && canChoosePlatform && (
+        {canDeclare && canChoosePlatform && !listAnswered.current && <p role="status">Chargement du formulaire…</p>}
+        {canDeclare && canChoosePlatform && listAnswered.current && (
           <NewAccessPoint
             panelRef={panel}
             ws={ws}
@@ -794,7 +797,7 @@ function NewAccessPoint({
 }) {
   const first = platforms.find((p) => p.supported)?.id ?? platforms[0]?.id ?? "";
   // Par défaut, la première entité dont le point d'accès n'est pas encore déclaré.
-  const free = ws.entities.find((e) => !taken.includes(suggestedId(first, e)));
+  const [free] = useState(() => ws.entities.find((e) => !taken.includes(suggestedId(first, e))));
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [keyStored, setKeyStored] = useState(false);
   const [entityTouched, setEntityTouched] = useState(false);

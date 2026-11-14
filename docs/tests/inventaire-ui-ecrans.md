@@ -175,6 +175,8 @@ Inventaire initial : 213 actions. Les corrections et le nouveau test S-UI-104-21
 | S-UI-106-13 | 106 | WebKit : se connecter, révoquer à Entrée | Comme 106-01 | ui-connexions.webkit.spec.ts | vert | |
 | S-UI-106-14 | 106 | WebKit : formulaire Snowflake d'une ligne, envoi par Entrée | Entrée ouvre le SSO (guide 6) | ui-connexions.webkit.spec.ts | vert | |
 | S-UI-106-15 | 106 | WebKit : « Annuler la connexion » du panneau | Comme 106-05 | ui-connexions.webkit.spec.ts | vert | |
+| S-UI-106-16 | 106 | Liste des points d'accès lente ; retaper un identifiant déjà pris | « Chargement du formulaire… » sans champ ni « Ajouter » actif ; puis identifiant libre (dbx-de) qui ne change plus ; dbx-fr retapé refusé, saisie gardée (ADR 0020) | ui-connexions.spec.ts | vert | |
+| S-UI-106-17 | 106 | WebKit : liste des points d'accès lente | Comme 106-16 | ui-connexions.webkit.spec.ts | vert | |
 | — | 106 | Tableau : plateforme, schéma, propriétaire, fraîcheur, mon accès | Plan 0016, critère 1 | connexions.spec.ts S-0016-01 | existant | |
 | — | 106 | Double clic sur « Se connecter » ; « Annuler » d'une ligne pendant l'OAuth | Un seul flux ; flux arrêté, la page tardive ne connecte rien (critère 7 ; ADR 0044) | connexions-testables.spec.ts S-0016-07 | existant | |
 | — | 106 | Autorisation laissée sans réponse | Délai dépassé au bout de 5 min, relance possible (ADR 0020) | connexions-etats.spec.ts S-0016-10 | existant | |

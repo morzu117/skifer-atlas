@@ -2,7 +2,7 @@ import type { Ref } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { fakeServer, workspace } from "../test/fakeServer";
+import { ALTAVIA, fakeServer, workspace } from "../test/fakeServer";
 import { api, type Workspace } from "../api";
 import { WorkspaceShell } from "./WorkspaceShell";
 
@@ -10,6 +10,29 @@ vi.mock("./Administration", () => ({ Administration: ({ onMerged, onWorkspaceCha
 vi.mock("./Proposals", () => ({ PROPOSALS_CHANGED: "proposals-changed", Proposals: ({ onMerged, heading }: { onMerged: () => void; heading: Ref<HTMLHeadingElement> }) => <><h1 ref={heading} tabIndex={-1}>Propositions</h1><button onClick={onMerged}>Fusion proposition</button></> }));
 
 afterEach(() => vi.unstubAllGlobals());
+
+it("change d'espace sans conserver les suggestions ni la saisie du précédent", async () => {
+  fakeServer(({ path }) => {
+    if (path === "/api/workspaces/groupe-nordis") return { json: workspace() };
+    if (path === "/api/workspaces/altavia-energie") return { json: ALTAVIA };
+    if (path.endsWith("/connections/platforms")) return { json: [{ id: "databricks", label: "Databricks", supported: true }] };
+    if (path === "/api/workspaces/groupe-nordis/connections") return { json: [{ access_point: "dbx-fr", platform: "databricks", supported: false }] };
+    if (path === "/api/workspaces/altavia-energie/connections") return { json: [{ access_point: "dbx-a1", platform: "databricks", supported: false }] };
+    if (path.includes("proposals")) return { json: [] };
+    return undefined;
+  });
+  const onUnknown = vi.fn();
+  const rendered = render(<WorkspaceShell wsId="groupe-nordis" view="connexions" onUnknown={onUnknown} />);
+  const id = await screen.findByRole("textbox", { name: "Identifiant" });
+  expect(id).toHaveValue("dbx-de");
+  await userEvent.clear(id);
+  await userEvent.type(id, "dbx-perso");
+  await userEvent.type(screen.getByRole("textbox", { name: "Hôte" }), "ancien.example");
+  rendered.rerender(<WorkspaceShell wsId="altavia-energie" view="connexions" onUnknown={onUnknown} />);
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-a2"));
+  expect(screen.getByRole("combobox", { name: "Entité" })).toHaveValue("a2");
+  expect(screen.getByRole("textbox", { name: "Hôte" })).toHaveValue("");
+});
 
 it("le remplacement après rattachement rend le focus au titre", async () => {
   fakeServer(({ path }) => path === "/api/workspaces/groupe-nordis" ? { json: workspace() } : path.includes("proposals") ? { json: [] } : undefined);
