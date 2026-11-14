@@ -21,6 +21,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
+from ..files import remove_tree
 from ..governance.codeowners import PATH as CODEOWNERS_PATH
 from ..governance.codeowners import has_drifted
 from ..governance.model import (
@@ -106,8 +107,9 @@ def create_workspace(meta: WorkspaceMeta, creator: str | None = None) -> Workspa
             repo.mkdir(parents=True)
             created = True
             run_git(["init", "--quiet", f"--initial-branch={meta.main_branch}"], repo)
-            (repo / META_FILE).write_text(_dump(meta.model_dump()), encoding="utf-8")
-            (repo / GOVERNANCE_FILE).write_text(dump_governance(governance), encoding="utf-8")
+            (repo / META_FILE).write_text(_dump(meta.model_dump()), encoding="utf-8", newline="\n")
+            (repo / GOVERNANCE_FILE).write_text(dump_governance(governance), encoding="utf-8",
+                                                newline="\n")
             run_git(["add", META_FILE, GOVERNANCE_FILE], repo)
             run_git(["commit", "--quiet", "-m", f"Création de l'espace {meta.name}"], repo)
             # Dans le bloc nettoyé : un registre illisible ou un disque plein ne laisse pas un
@@ -118,7 +120,7 @@ def create_workspace(meta: WorkspaceMeta, creator: str | None = None) -> Workspa
             ))
         except BaseException:
             if created:
-                shutil.rmtree(repo, ignore_errors=True)
+                remove_tree(repo, best_effort=True)
             raise
 
 
@@ -175,7 +177,7 @@ def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace
             ))
         except BaseException:
             if ours and target is not None:
-                shutil.rmtree(target, ignore_errors=True)
+                remove_tree(target, best_effort=True)
             if stored:
                 try:
                     if previous is None:
@@ -189,7 +191,7 @@ def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace
                                    type(restore_error).__name__)
             raise
         finally:
-            shutil.rmtree(staging, ignore_errors=True)
+            remove_tree(staging, best_effort=True)
     if github_flow is not None:
         device.release(github_flow)
     return joined
@@ -292,8 +294,12 @@ def _identity_commit(repo: Path, commit: str, old_account: str, known_repo: Path
             return None
         if preferred:
             renamed = rename_account(before, old_account, preferred)
-            if renamed is not before and _blob_id(known_repo, dump_governance(renamed)) == listing[2]:
-                return parent, preferred
+            if renamed is not before:
+                expected = dump_governance(renamed)
+                # Un fichier écrit sous Windows peut être enregistré avec des CRLF.
+                if any(_blob_id(known_repo, text) == listing[2] for text in
+                       (expected, expected.replace("\n", "\r\n"))):
+                    return parent, preferred
         content = run_git(["cat-file", "blob", listing[2]], repo, token=token, encoding="utf-8")
         after = Governance.model_validate(yaml.safe_load(content))
     except (RepoError, ValueError, ValidationError, yaml.YAMLError):

@@ -18,7 +18,7 @@ USER = "julien.h"
 
 
 def git(cwd: Path, *args: str) -> str:
-    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True,
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True, encoding="utf-8",
                           env=os.environ).stdout
 
 
