@@ -24,3 +24,7 @@ export function Banner({
     </div>
   );
 }
+
+export function RetryAction({ onRetry }: { onRetry: () => void }) {
+  return <button type="button" className="btn btn-neutral btn-dense" onClick={onRetry}>Réessayer</button>;
+}

@@ -639,3 +639,177 @@ def test_auto_sync_removal_between_check_and_lock(client, joined, monkeypatch):
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "not_found"
     assert not repo_dir("groupe-nordis").parent.exists()
+
+
+@pytest.mark.parametrize(("method", "path"), [
+    ("get", ""),
+    ("get", "/proposals"),
+    ("get", "/proposals?for_me=true"),
+    ("get", "/proposals/queue"),
+    ("get", "/catalog"),
+    ("get", "/catalog/facets"),
+    ("get", "/index"),
+    ("get", "/documents/revenu-net"),
+    ("get", "/documents/revenu-net/summary"),
+    ("get", "/documents/revenu-net/versions"),
+    ("get", "/documents/revenu-net/versions/4"),
+    ("get", "/documents/revenu-net/dependencies"),
+    ("get", "/documents/revenu-net/sheet"),
+    ("get", "/documents/revenu-net/layout"),
+    ("get", "/documents/revenu-net/draft"),
+    ("post", "/sync/auto"),
+])
+@pytest.mark.parametrize("during", [False, True])
+def test_removed_clone_is_not_found(client, joined, monkeypatch, method, path, during):
+    import shutil
+
+    from skifer_atlas.api.routes import catalog, proposals, sheet, workspaces
+
+    repo = repo_dir("groupe-nordis")
+    if during:
+        module = (workspaces if path in ("", "/sync/auto") else proposals
+                  if path.startswith("/proposals") else sheet
+                  if path.endswith(("/sheet", "/layout", "/draft")) else catalog)
+        lookup = module.workspace_or_404
+
+        def remove_after_lookup(ws):
+            workspace = lookup(ws)
+            shutil.rmtree(repo)
+            return workspace
+
+        monkeypatch.setattr(module, "workspace_or_404", remove_after_lookup)
+    else:
+        shutil.rmtree(repo)
+    response = getattr(client, method)(f"{WS}{path}")
+    # Ces lectures peuvent réussir sans autre accès au clone après le retrait.
+    if during and path in ("", "/index", "/sync/auto"):
+        assert response.status_code == 200
+        return
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "not_found", "message": "Espace « groupe-nordis » inconnu."}
+
+
+def test_removed_clone_counts_are_unavailable(client, joined):
+    import shutil
+
+    shutil.rmtree(repo_dir("groupe-nordis"))
+    [workspace] = client.get("/api/workspaces").json()
+    assert workspace["counts"] == {"kpi": None, "concept": None, "open_proposals": None}
+
+
+def _unexpected_error(response, caplog, kind):
+    """Le middleware de l'API (500 générique) a reçu l'erreur d'origine, sans 404 trompeur."""
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Erreur interne du serveur."}
+    errors = [r for r in caplog.records if r.message == "Erreur inattendue de l’API"]
+    assert errors and errors[-1].exc_info[0] is kind
+
+
+def test_io_error_with_existing_clone_is_not_hidden(client, joined, monkeypatch, caplog):
+    from skifer_atlas.api.routes import catalog
+
+    def fail(*args):
+        raise PermissionError("accès refusé")
+
+    monkeypatch.setattr(catalog, "ensure_index", fail)
+    _unexpected_error(client.get(f"{WS}/catalog"), caplog, PermissionError)
+
+
+def test_clone_removed_during_counts(client, joined, monkeypatch):
+    import shutil
+
+    from skifer_atlas.api.routes import workspaces
+
+    def remove_before_index(repo, db):
+        shutil.rmtree(repo)
+        raise FileNotFoundError(str(repo))
+
+    monkeypatch.setattr(workspaces, "ensure_index", remove_before_index)
+    [workspace] = client.get("/api/workspaces").json()
+    assert workspace["counts"] == {"kpi": None, "concept": None, "open_proposals": None}
+
+
+def test_removed_clone_does_not_bypass_token(client, joined):
+    import shutil
+
+    shutil.rmtree(repo_dir("groupe-nordis"))
+    response = client.get(f"{WS}/catalog", headers={"Authorization": "Bearer incorrect"})
+    assert response.status_code == 401
+
+
+def test_counts_permission_error_does_not_block_list(client, joined, monkeypatch):
+    from skifer_atlas.api.routes import workspaces
+
+    def fail(*args):
+        raise PermissionError("accès refusé")
+
+    monkeypatch.setattr(workspaces, "ensure_index", fail)
+    response = client.get("/api/workspaces")
+    assert response.status_code == 200
+    assert response.json()[0]["counts"] == {
+        "kpi": None, "concept": None, "open_proposals": None}
+
+
+@pytest.mark.parametrize("outcome", ["success", "http_error", "repo_error"])
+def test_registry_busy_after_route_does_not_replace_result(client, joined, monkeypatch, outcome):
+    from fastapi import HTTPException
+
+    from skifer_atlas.api.routes import common, proposals
+    from skifer_atlas.repo.git import RepoError
+
+    def busy(_ws):
+        raise RepoError("registry_busy", "Registre occupé.")
+
+    def create(*args):
+        monkeypatch.setattr(common, "get_workspace", busy)
+        if outcome == "http_error":
+            raise HTTPException(status_code=409, detail="Conflit métier.")
+        if outcome == "repo_error":
+            raise RepoError("workspace_dirty", "Conflit métier.")
+        return {"id": 42}
+
+    monkeypatch.setattr(proposals.proposals, "create_proposal", create)
+    response = client.post(f"{WS}/proposals", json={
+        "document_yaml": "contenu", "justification": "raison"})
+    if outcome == "success":
+        assert response.status_code == 201
+        assert response.json() == {"id": 42}
+    elif outcome == "http_error":
+        assert response.status_code == 409
+        assert response.json()["detail"] == "Conflit métier."
+    else:
+        assert response.status_code == 409
+        assert response.json()["detail"] == {"code": "workspace_dirty", "message": "Conflit métier."}
+
+
+def test_registry_busy_preserves_original_io_error(client, joined, monkeypatch, caplog):
+    from skifer_atlas.api.routes import catalog, common
+    from skifer_atlas.repo.git import RepoError
+
+    def busy(_ws):
+        raise RepoError("registry_busy", "Registre occupé.")
+
+    def fail(*args):
+        monkeypatch.setattr(common, "get_workspace", busy)
+        raise PermissionError("accès refusé")
+
+    monkeypatch.setattr(catalog, "ensure_index", fail)
+    _unexpected_error(client.get(f"{WS}/catalog"), caplog, PermissionError)
+
+
+def test_registry_busy_after_successful_read_does_not_replace_result(client, joined, monkeypatch):
+    from skifer_atlas.api.routes import catalog, common
+    from skifer_atlas.repo.git import RepoError
+
+    def busy(_ws):
+        raise RepoError("registry_busy", "Registre occupé.")
+
+    def search(*args):
+        monkeypatch.setattr(common, "get_workspace", busy)
+        return []
+
+    monkeypatch.setattr(catalog, "search_catalog", search)
+    response = client.get(f"{WS}/catalog")
+    assert response.status_code == 200
+    assert response.json() == []

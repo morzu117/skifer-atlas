@@ -14,7 +14,7 @@ import {
   type Workspace,
 } from "../api";
 import { AttachRemote } from "../components/AttachRemote";
-import { Banner } from "../components/Banner";
+import { Banner, RetryAction } from "../components/Banner";
 import { Confirmation } from "../components/Confirmation";
 import { Field } from "../components/Field";
 import { Icon } from "../components/Icon";
@@ -178,7 +178,7 @@ export function Administration({
         </p>
       )}
       {load.kind === "error" && (
-        <Banner tone="bad" title={load.forbidden ? "Réservée aux référents de l'espace" : load.error.title}>
+        <Banner tone="bad" title={load.forbidden ? "Réservée aux référents de l'espace" : load.error.title} action={!load.forbidden && <RetryAction onRetry={() => setRevision((n) => n + 1)} />}>
           {load.forbidden ? "Seul un référent de l'espace, sans restriction de domaine, modifie ses paramètres." : load.error.text}
         </Banner>
       )}

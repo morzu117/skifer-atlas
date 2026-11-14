@@ -13,7 +13,7 @@ from ...admin import is_space_referent
 from ...dbfile import without_waiting
 from ...index import ensure_index, index_fresh
 from ...repo.git import RepoError, clone_lock, head
-from ...repo.layout import WorkspaceMeta
+from ...repo.layout import WorkspaceMeta, read_governance
 from ...repo.reset_remote import attachment_state, reset_remote
 from ...repo.sync import create_workspace, join_workspace, set_remote, sync_workspace
 from ...workspaces import (
@@ -24,9 +24,9 @@ from ...workspaces import (
     list_workspaces,
     repo_dir,
 )
-from .common import not_found, workspace_or_404
+from .common import WorkspaceRoute, not_found, workspace_or_404
 
-router = APIRouter(prefix="/api/workspaces")
+router = APIRouter(route_class=WorkspaceRoute, prefix="/api/workspaces")
 
 
 class JoinRequest(BaseModel):
@@ -57,14 +57,20 @@ def _counts(ws: Workspace) -> dict:
         found.update(kpi=kinds.get("kpi", 0), concept=kinds.get("concept", 0))
     except (RepoError, OSError, duckdb.Error):
         pass
+    if not repo_dir(ws.id).exists():  # retiré pendant la requête : rien à compter
+        return {"kpi": None, "concept": None, "open_proposals": None}
     if not ws.git_remote:
         found["open_proposals"] = 0  # pas encore de dépôt distant, donc pas de proposition
-        return found
     return found
 
 
 def _out(ws: Workspace, counts: bool = False) -> dict:
     found = {**ws.model_dump(), "role_label": ROLE_LABELS[ws.role]}
+    try:
+        governance = read_governance(repo_dir(ws.id))
+        found["user_name"] = next((m.name for m in governance.members if m.account == ws.account), None) if governance else None
+    except (RepoError, OSError):
+        found["user_name"] = None
     if counts:
         found["counts"] = _counts(ws)
     else:
