@@ -39,6 +39,7 @@ Statut : plans validés le 30 octobre 2026, développement lancé par le plan 00
 | 0033 | Rattacher un espace neuf à un dépôt vide | Administration et création : adresse d'un dépôt vide, connexion GitHub, push de l'espace, créateur toujours référent | 0005, 0008, 0017, 0025, 0032 | M |
 | 0034 | Réinitialiser le rattachement | remise à zéro locale d'un rattachement interrompu (`origin`, références, commit d'identité), le dépôt distant intact | 0005, 0017, 0033 | S |
 | 0035 | Parcours de bout en bout | dix histoires Playwright à plusieurs comptes et plusieurs écrans (équipe, relecture, évolution, déclinaison, comparaison, session expirée, fusion refusée, hors ligne, deux espaces, suivi après fusion), contrôlées à l'écran et dans le dépôt | 0005–0034 | M |
+| 0036 | Points d'accès REST | `atlas compare` sur des sources servies par un point d'accès `rest` : clé au coffre ou en variable d'environnement, budgets, registre d'usage, cache Parquet (`--refresh`) | 0007, 0008, 0009, 0018 | L |
 
 **Chemin critique** : 0001 → 0002 → 0003 → 0005 → 0006 → 0010 → 0011 → 0012 → 0013 → 0014. La branche « chiffrée » 0007 → 0008 → 0009 → 0018 peut avancer en parallèle dès 0002, et l'extraction 0004 dès 0003.
 
