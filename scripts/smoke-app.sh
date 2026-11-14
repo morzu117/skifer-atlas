@@ -150,22 +150,39 @@ import time
 
 pid, method = int(sys.argv[1]), sys.argv[2]
 if method == "cmdq":
-    script = '''on run argv
-  set appPid to item 1 of argv as integer
-  tell application "System Events"
-    set frontmost of (first application process whose unix id is appPid) to true
-    keystroke "q" using command down
-  end tell
-end run'''
-    command = ["osascript", "-", str(pid)]
+    script = '''tell application "System Events" to keystroke "q" using command down'''
+    command = ["osascript", "-"]
 else:
     script = 'tell application id "io.skifer.atlas" to quit'
     command = ["osascript", "-"]
+if method == "cmdq":
+    # L'utilisateur tape Cmd-Q dans l'app déjà au premier plan. Sur les runners Intel,
+    # démarrer System Events et activer l'app prennent plusieurs secondes : c'est fait avant
+    # la mesure, pour que les 4 s restent celles de l'app.
+    activate = '''on run argv
+  set appPid to item 1 of argv as integer
+  tell application "System Events"
+    set appProcess to first application process whose unix id is appPid
+    set frontmost of appProcess to true
+    repeat 100 times
+      if frontmost of appProcess then return "ok"
+      delay 0.1
+    end repeat
+  end tell
+  return "pas au premier plan"
+end run'''
+    ready = subprocess.run(["osascript", "-", str(pid)], input=activate, text=True,
+                           capture_output=True, timeout=60, check=False)
+    if ready.returncode or ready.stdout.strip() != "ok":
+        print(f"Fermeture {method} : l'app n'a pas pu passer au premier plan "
+              f"({(ready.stderr or ready.stdout).strip()})", file=sys.stderr)
+        sys.exit(1)
 started = time.monotonic()
 try:
     result = subprocess.run(command, input=script, text=True, capture_output=True, timeout=4)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "AppleScript a échoué")
+    sent = time.monotonic() - started  # durée de la commande AppleScript seule
     while True:
         try:
             os.kill(pid, 0)
@@ -177,12 +194,13 @@ try:
         if not state or state.startswith("Z"):
             break
         if time.monotonic() - started >= 4:
-            raise TimeoutError("l'application ne s'est pas terminée à temps")
+            raise TimeoutError(f"l'application ne s'est pas terminée à temps (AppleScript {sent:.2f} s)")
         time.sleep(0.05)
     elapsed = time.monotonic() - started
     if elapsed >= 4:
         raise TimeoutError("l'application a dépassé 4 s")
-    print(f"Fermeture {method} : {elapsed:.2f} s", file=sys.stderr)
+    print(f"Fermeture {method} : {elapsed:.2f} s (AppleScript {sent:.2f} s, puis app {elapsed - sent:.2f} s)",
+          file=sys.stderr)
 except (subprocess.TimeoutExpired, OSError, RuntimeError, TimeoutError) as error:
     print(f"Fermeture {method} : {error}", file=sys.stderr)
     sys.exit(1)
