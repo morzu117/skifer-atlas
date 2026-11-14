@@ -182,6 +182,7 @@ try:
     result = subprocess.run(command, input=script, text=True, capture_output=True, timeout=4)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "AppleScript a échoué")
+    sent = time.monotonic() - started  # durée de la commande AppleScript seule
     while True:
         try:
             os.kill(pid, 0)
@@ -193,12 +194,13 @@ try:
         if not state or state.startswith("Z"):
             break
         if time.monotonic() - started >= 4:
-            raise TimeoutError("l'application ne s'est pas terminée à temps")
+            raise TimeoutError(f"l'application ne s'est pas terminée à temps (AppleScript {sent:.2f} s)")
         time.sleep(0.05)
     elapsed = time.monotonic() - started
     if elapsed >= 4:
         raise TimeoutError("l'application a dépassé 4 s")
-    print(f"Fermeture {method} : {elapsed:.2f} s", file=sys.stderr)
+    print(f"Fermeture {method} : {elapsed:.2f} s (AppleScript {sent:.2f} s, puis app {elapsed - sent:.2f} s)",
+          file=sys.stderr)
 except (subprocess.TimeoutExpired, OSError, RuntimeError, TimeoutError) as error:
     print(f"Fermeture {method} : {error}", file=sys.stderr)
     sys.exit(1)
