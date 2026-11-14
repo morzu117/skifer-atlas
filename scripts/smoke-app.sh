@@ -142,13 +142,34 @@ quit_app() {
   local what="$1" method="$2"
   # Le délai inclut l'exécution d'AppleScript. Aucun signal de secours ne peut
   # transformer une commande native défaillante en succès.
-  python3 - "$APP_PID" "$method" <<'PY' || fail "$what : AppleScript a échoué ou l'app n'a pas quitté en moins de 4 s."
+  python3 - "$APP_PID" "$method" "$LOG" <<'PY' || fail "$what : AppleScript a échoué ou l'app n'a pas quitté en moins de 4 s."
 import os
 import subprocess
 import sys
 import time
 
-pid, method = int(sys.argv[1]), sys.argv[2]
+pid, method, log = int(sys.argv[1]), sys.argv[2], sys.argv[3]
+# Instant d'apparition de chaque étape dans le journal : situe le délai éventuel
+# avant l'interception (raccourci du menu) ou après (fermeture de la fenêtre).
+steps = {}
+
+
+def note_steps():
+    try:
+        lines = open(log, encoding="utf-8", errors="replace").read().splitlines()
+    except OSError:
+        return
+    for line in lines:
+        if line in ("[atlas] quitter intercepté", "[atlas] fermeture demandée",
+                    "[atlas] fenêtre détruite", "[atlas] sortie confirmée"):
+            steps.setdefault(line.removeprefix("[atlas] "), time.monotonic() - started)
+
+
+def timeline():
+    note_steps()
+    return ", ".join(f"{name} {at:.2f} s" for name, at in steps.items()) or "aucune étape"
+
+
 if method == "cmdq":
     script = '''tell application "System Events" to keystroke "q" using command down'''
     command = ["osascript", "-"]
@@ -184,6 +205,7 @@ try:
         raise RuntimeError(result.stderr.strip() or "AppleScript a échoué")
     sent = time.monotonic() - started  # durée de la commande AppleScript seule
     while True:
+        note_steps()
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
@@ -201,8 +223,10 @@ try:
         raise TimeoutError("l'application a dépassé 4 s")
     print(f"Fermeture {method} : {elapsed:.2f} s (AppleScript {sent:.2f} s, puis app {elapsed - sent:.2f} s)",
           file=sys.stderr)
+    print(f"Étapes {method} : {timeline()}", file=sys.stderr)
 except (subprocess.TimeoutExpired, OSError, RuntimeError, TimeoutError) as error:
     print(f"Fermeture {method} : {error}", file=sys.stderr)
+    print(f"Étapes {method} : {timeline()}", file=sys.stderr)
     sys.exit(1)
 PY
   wait "$APP_PID" || fail "$what : l'app s'est terminée en erreur."
