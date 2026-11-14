@@ -238,6 +238,20 @@ describe("propositions", () => {
     expect(window.location.hash).toContain("domain=tous");
   });
 
+  it("combine KPI et auteur, et conserve les choix dans l’adresse", async () => {
+    proposalServer();
+    render(<Harness />);
+    await queueList();
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Domaine" }), "tous");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "KPI" }), "revenu-net");
+    expect(within(await queueList()).getAllByRole("link")).toHaveLength(2);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Auteur" }), "julien.h");
+    expect(within(await queueList()).getAllByRole("link")).toHaveLength(1);
+    expect(window.location.hash).toContain("kpi=revenu-net");
+    expect(window.location.hash).toContain("author=julien.h");
+    expect(within(await queueList()).getByText("Revenu net · canonique v5")).toBeInTheDocument();
+  });
+
   it("filtre d'entité : le canonique seul", async () => {
     window.location.hash = "#/w/groupe-nordis/propositions?domain=tous&entity=canonique";
     proposalServer();

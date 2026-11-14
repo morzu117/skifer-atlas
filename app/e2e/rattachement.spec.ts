@@ -198,7 +198,14 @@ test("[S-0033-03] [S-0033-04] [S-0033-02] GitHub : connexion avant le rattacheme
 
   await createSpace(page, id, "perrault-fr");
   await expect(page).toHaveURL(new RegExp(`#/w/${id}/catalogue$`));
-  await expect(page.locator(".sidebar-user")).toContainText("anna.k");
+  const createdResponse = await request.get(`${RATTACHEMENT}/api/workspaces/${id}`);
+  expect(createdResponse.ok()).toBe(true);
+  const created = await createdResponse.json();
+  expect(created).toMatchObject({ account: "anna.k", role: "referent" });
+  expect(created.user_name).toEqual(expect.any(String));
+  expect(created.user_name).not.toBe("");
+  await expect(page.locator(".sidebar-user")).toContainText(created.user_name);
+  await expect(page.locator(".sidebar-user")).toContainText("Référent d'annuaire");
   await page.goto(`/#/w/${id}/administration`);
   const form = attachment(page);
 
@@ -234,7 +241,13 @@ test("[S-0033-03] [S-0033-04] [S-0033-02] GitHub : connexion avant le rattacheme
   // et garde son rôle de référent.
   await attach(page, url(names.empty));
   await expect(repository(page).getByText(`Dépôt rattaché : l'espace est publié sur ${url(names.empty)}, sous le compte julien.h.`)).toBeVisible();
-  await expect(page.locator(".sidebar-user")).toContainText("julien.h");
+  const attachedResponse = await request.get(`${RATTACHEMENT}/api/workspaces/${id}`);
+  expect(attachedResponse.ok()).toBe(true);
+  const attached = await attachedResponse.json();
+  expect(attached).toMatchObject({ git_remote: url(names.empty), account: "julien.h", role: "referent", space_referent: true });
+  expect(attached.user_name).toEqual(expect.any(String));
+  expect(attached.user_name).not.toBe("");
+  await expect(page.locator(".sidebar-user")).toContainText(attached.user_name);
   await expect(page.locator(".sidebar-user")).toContainText("Référent d'annuaire");
   await expect(page.getByRole("heading", { level: 1, name: `Administration — Rattachement ${id}` })).toBeVisible();
   const members = page.getByRole("table", { name: "Utilisateurs et rôles" });
@@ -245,8 +258,6 @@ test("[S-0033-03] [S-0033-04] [S-0033-02] GitHub : connexion avant le rattacheme
     `Création de l'espace Rattachement ${id}`,
   ]);
   expect(git(bare(names.empty), "show", "main:governance.yaml")).toContain("account: julien.h");
-  const attached = await (await request.get(`${RATTACHEMENT}/api/workspaces/${id}`)).json();
-  expect(attached).toMatchObject({ git_remote: url(names.empty), account: "julien.h", role: "referent", space_referent: true });
   expect(git(clone(root, id), "status", "--porcelain")).toBe("");
   expect(await seriousViolations(page)).toEqual([]);
 
@@ -275,10 +286,14 @@ test("[S-0033-05] Créer un espace avec une adresse GitHub : la connexion et le 
   await connectGitHub(page, form);
   await form.getByRole("button", { name: "Rattacher le dépôt" }).click();
   await expect(page).toHaveURL(new RegExp(`#/w/${id}/catalogue$`));
-  await expect(page.locator(".sidebar-user")).toContainText("julien.h");
-  await expect(page.locator(".sidebar-user")).toContainText("Référent d'annuaire");
-  const attached = await (await request.get(`${RATTACHEMENT}/api/workspaces/${id}`)).json();
+  const attachedResponse = await request.get(`${RATTACHEMENT}/api/workspaces/${id}`);
+  expect(attachedResponse.ok()).toBe(true);
+  const attached = await attachedResponse.json();
   expect(attached).toMatchObject({ git_remote: url, account: "julien.h", role: "referent" });
+  expect(attached.user_name).toEqual(expect.any(String));
+  expect(attached.user_name).not.toBe("");
+  await expect(page.locator(".sidebar-user")).toContainText(attached.user_name);
+  await expect(page.locator(".sidebar-user")).toContainText("Référent d'annuaire");
   expect(git(target, "log", "--format=%s", "main").split("\n")).toHaveLength(2);
 });
 

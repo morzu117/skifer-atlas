@@ -446,3 +446,25 @@ def test_atlas_merge_between_auto_and_manual_sync(client, joined, as_):
     assert git(bare, "rev-parse", "doc/revenu-net/v5^{commit}").strip()
     result = client.post(f"{WS}/sync").json()
     assert not any(w["code"] == "versions_tagged" for w in result["warnings"])
+
+
+def test_awaiting_review_when_clone_disappears(client, joined, as_, monkeypatch):
+    import shutil
+
+    from skifer_atlas.proposals import status
+    from skifer_atlas.workspaces import repo_dir
+
+    as_("claire.m")
+    assert propose(client, revenu_net(), 4).status_code == 201
+    as_("marc.d")
+    original = status._awaiting
+
+    def remove_before_awaiting(context, pull, block, decision):
+        shutil.rmtree(repo_dir(context.workspace.id))
+        return original(context, pull, block, decision)
+
+    monkeypatch.setattr(status, "_awaiting", remove_before_awaiting)
+    response = client.get(PROPOSALS, params={"for_me": 1})
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "not_found", "message": "Espace « groupe-nordis » inconnu."}

@@ -17,6 +17,7 @@ export type Workspace = {
   sector: string;
   git_remote: string;
   account: string;
+  user_name?: string | null;
   role: Role;
   role_label: string;
   domains: string[];

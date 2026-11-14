@@ -33,7 +33,7 @@ export function Home({ notice, onDismissNotice }: { notice: string | null; onDis
   useEffect(() => heading.current?.focus(), []);
 
   const open = (ws: Workspace) => navigate(href.view(ws.id));
-  const account = load.kind === "ready" ? load.workspaces.find((w) => w.account)?.account : undefined;
+  const account = load.kind === "ready" ? load.workspaces.find((w) => w.account)?.user_name || load.workspaces.find((w) => w.account)?.account : undefined;
 
   return (
     <div className="home">

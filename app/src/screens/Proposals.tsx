@@ -10,7 +10,7 @@ import {
   type ProposalStatus,
   type Workspace,
 } from "../api";
-import { Banner } from "../components/Banner";
+import { Banner, RetryAction } from "../components/Banner";
 import { DiffColumns } from "../components/DiffColumns";
 import { Select } from "../components/Select";
 import { ago, initials, NATURES, plural } from "../format";
@@ -118,10 +118,16 @@ export function Proposals({ ws, params, heading: title, onMerged }: { ws: Worksp
   const domain = (params.domain === MINE && ready?.review_domains.length === 0 ? ALL : params.domain)
     || (ready && ready.review_domains.length > 0 ? MINE : ALL);
   const entity = params.entity ?? "";
+  const kpi = params.kpi ?? "";
+  const author = params.author ?? "";
+  const kpiOf = (item: ProposalItem) => item.kpi_id ?? (item.document_kind === "kpi" ? item.document_id : null);
+  const kpis = [...new Map((ready?.items ?? []).filter((i) => kpiOf(i)).map((i) => [kpiOf(i)!, i.document_label])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const authors = [...new Set((ready?.items ?? []).map((i) => i.author))].sort();
   const items = (ready?.items ?? []).filter(
     (item) =>
       (domain === ALL || (domain === MINE ? ready!.review_domains.includes(item.domain ?? "") : item.domain === domain)) &&
-      (entity === "" || (entity === CANONICAL ? item.entity === null : item.entity === entity)),
+      (entity === "" || (entity === CANONICAL ? item.entity === null : item.entity === entity)) &&
+      (!kpi || kpiOf(item) === kpi) && (!author || item.author === author),
   );
   const selected = items.find((item) => String(item.id) === params.n) ?? items[0] ?? null;
   const name = (account: string) => ready?.members[account] ?? account;
@@ -181,6 +187,14 @@ export function Proposals({ ws, params, heading: title, onMerged }: { ws: Worksp
                 </option>
               ))}
             </Select>
+            <Select aria-label="KPI" className="select-filter" value={kpi} onChange={(event) => setParams({ kpi: event.target.value, n: "" }, { push: true })}>
+              <option value="">Tous les KPI</option>
+              {kpis.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </Select>
+            <Select aria-label="Auteur" className="select-filter" value={author} onChange={(event) => setParams({ author: event.target.value, n: "" }, { push: true })}>
+              <option value="">Tous les auteurs</option>
+              {authors.map((id) => <option key={id} value={id}>{name(id)}</option>)}
+            </Select>
           </div>
         </div>
         {queue.kind === "loading" && (
@@ -189,7 +203,7 @@ export function Proposals({ ws, params, heading: title, onMerged }: { ws: Worksp
           </p>
         )}
         {queue.kind === "error" && (
-          <Banner tone="bad" title={queue.error.title}>
+          <Banner tone="bad" title={queue.error.title} action={<RetryAction onRetry={() => setRevision((n) => n + 1)} />}>
             {queue.error.text}
           </Banner>
         )}
@@ -401,6 +415,7 @@ function Detail({
       )}
       {/* Seul habilité (ADR 0008) : la fusion se fait sans revue, et la proposition le dit. */}
       {open && shown.merge_mode === "no_other_eligible" && shown.mention && <p className="proposal-status muted">{shown.mention}</p>}
+      {detail.kind === "error" && <Banner tone="bad" title={detail.error.title} action={<RetryAction onRetry={() => onChanged()} />}>{detail.error.text}</Banner>}
       {failure && (
         <Banner tone="bad" title={failure.title}>
           {failure.text}
