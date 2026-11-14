@@ -17,7 +17,8 @@ def test_git_decodes_utf8_with_an_ascii_python_locale(tmp_path):
                     "user.email=e@example.test", "commit", "--allow-empty", "-qm", "Création"],
                    check=True)
     code = ("from pathlib import Path; from skifer_atlas.repo.git import run_git; "
-            "assert 'Création' in run_git(['log', '-1', '--format=%s'], Path(__import__('sys').argv[1]))")
+            "assert 'Cr\\u00e9ation' in run_git(['log', '-1', '--format=%s'], Path(__import__('sys').argv[1]))")
+    # Le code passe par argv, décodé selon la locale : l'accent y est donc échappé.
     env = os.environ | {"PYTHONUTF8": "0", "LC_ALL": "C", "PYTHONIOENCODING": "ascii"}
     subprocess.run([sys.executable, "-c", code, str(tmp_path)], env=env, check=True)
 
