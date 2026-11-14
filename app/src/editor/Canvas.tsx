@@ -123,6 +123,7 @@ export type CanvasProps = {
 export function Canvas(props: CanvasProps) {
   const { nodes, positions, selected, pending, output, variation, overridden, locked, issues, tool } = props;
   const flow = useReactFlow();
+  const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   const byNode = useMemo(() => {
@@ -137,6 +138,7 @@ export function Canvas(props: CanvasProps) {
     id: node.id,
     type: "card",
     position: positions[node.id] ?? { x: 0, y: 0 },
+    measured: measured[node.id],
     selected: node.id === selected,
     draggable: tool === "select",
     connectable: !locked,
@@ -166,6 +168,16 @@ export function Canvas(props: CanvasProps) {
   })));
 
   const onNodesChange = (changes: NodeChange<CardNode>[]) => {
+    const dimensions = changes.filter((change) => change.type === "dimensions" && change.dimensions);
+    if (dimensions.length) {
+      setMeasured((current) => {
+        const next = { ...current };
+        for (const change of dimensions) {
+          if (change.type === "dimensions" && change.dimensions) next[change.id] = change.dimensions;
+        }
+        return next;
+      });
+    }
     for (const change of changes) {
       if (change.type === "select" && tool !== "edge") {
         if (change.selected) props.onSelect(change.id);
