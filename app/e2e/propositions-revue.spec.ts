@@ -101,12 +101,15 @@ test("[S-0014-08] une proposition fusionnée ailleurs pendant l'affichage dit qu
   await relay(page, CLAIRE);
   await page.goto(`${ws.root}/propositions?n=5&status=open&domain=tous`);
   await expect(entry(page, "Revenu net · nordis-de")).toContainText("Validations : 2 / 2");
+  // Le détail chargé : sinon il peut arriver après la fusion de Marc, et l'écran la montre déjà fusionnée.
+  const merge = page.getByRole("button", { name: "Fusionner", exact: true });
+  await expect(merge).toBeVisible();
 
   // Marc la fusionne depuis son poste pendant que l'écran de Claire est resté ouvert.
   const merged = await request.post(`${MARC}/api/workspaces/${ws.id}/proposals/5/merge`);
   expect(merged.ok(), await merged.text()).toBe(true);
 
-  await page.getByRole("button", { name: "Fusionner", exact: true }).click();
+  await merge.click();
   const refusal = selection(page).getByRole("alert").filter({ hasText: "La proposition n'est plus ouverte" });
   await expect(refusal).toContainText("Elle a déjà été fusionnée ou fermée.");
   await expect(page.getByText("L'opération a échoué")).toHaveCount(0);
