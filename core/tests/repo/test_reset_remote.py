@@ -6,7 +6,6 @@ registre, et les références du dépôt distant avant et après : il n'est jama
 """
 
 import os
-import shutil
 import tempfile
 import threading
 import time
@@ -26,6 +25,7 @@ from test_set_remote import (
 from workspace_helpers import atlas_env, commit_all, git
 
 from skifer_atlas.api.app import create_app
+from skifer_atlas.files import remove_tree
 from skifer_atlas.governance.model import role_of
 from skifer_atlas.repo import RepoError
 from skifer_atlas.repo import reset_remote as reset_module
@@ -555,7 +555,7 @@ def test_the_reset_never_talks_to_the_remote(github, monkeypatch):
     assert interrupted.value.code == "attach_incomplete"
     assert published(bare) != ""
     calls = list(github["calls"])
-    shutil.rmtree(bare)  # le dépôt distant disparaît : rien à contacter
+    remove_tree(bare)  # le dépôt distant disparaît : rien à contacter
     original = reset_module.run_git
     network = []
 

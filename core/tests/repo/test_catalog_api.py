@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from workspace_helpers import REVENU_NET, atlas_env, commit_all, git, remote
 
 from skifer_atlas.api.app import create_app
+from skifer_atlas.files import remove_tree
 from skifer_atlas.workspaces import index_path, repo_dir
 
 __all__ = ["atlas_env", "remote"]  # fixtures importées
@@ -577,7 +578,6 @@ def test_auto_sync_defers_tagging_to_manual_sync(client, joined, remote, existin
 
 
 def test_auto_sync_workspace_removed_during_request(client, joined, monkeypatch):
-    import shutil
 
     from skifer_atlas.api.routes import workspaces as routes
     from skifer_atlas.workspaces import load_registry, save_registry
@@ -589,7 +589,7 @@ def test_auto_sync_workspace_removed_during_request(client, joined, monkeypatch)
         registry = load_registry()
         registry.workspaces = []
         save_registry(registry)
-        shutil.rmtree(repo_dir(ws).parent)
+        remove_tree(repo_dir(ws).parent)
         return workspace
 
     monkeypatch.setattr(routes, "workspace_or_404", remove_after_lookup)
@@ -621,7 +621,6 @@ def test_auto_sync_fetches_published_version_for_sheet(client, joined, remote):
 
 
 def test_auto_sync_removal_between_check_and_lock(client, joined, monkeypatch):
-    import shutil
 
     from skifer_atlas.api.routes import workspaces as routes
     from skifer_atlas.workspaces import load_registry, save_registry
@@ -632,7 +631,7 @@ def test_auto_sync_removal_between_check_and_lock(client, joined, monkeypatch):
         registry = load_registry()
         registry.workspaces = []
         save_registry(registry)
-        shutil.rmtree(repo.parent)
+        remove_tree(repo.parent)
         return original(repo, **kwargs)
 
     monkeypatch.setattr(routes, "clone_lock", remove_before_lock)

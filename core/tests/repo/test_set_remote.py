@@ -1551,3 +1551,26 @@ def test_a_branch_changed_during_the_attachment_stays_partial_not_incomplete(
         with pytest.raises(RepoError) as error:
             set_remote(META.id, str(bare))
     assert error.value.code == "remote_partial" and "rattachement" in error.value.message
+
+
+def test_identity_with_crlf_governance_is_recognised_without_loading_blob(
+        identity_host, tmp_path, monkeypatch):
+    bare = bare_repository(tmp_path)
+    repo = repo_dir(META.id)
+    git(repo, "config", "core.autocrlf", "false")
+    work = tmp_path / "autre-crlf"
+    git(tmp_path, "clone", "--quiet", str(repo), str(work))
+    git(work, "config", "core.autocrlf", "false")
+    renamed = rename_account(read_governance(work), "ancien", "nouveau")
+    (work / "governance.yaml").write_bytes(
+        dump_governance(renamed).replace("\n", "\r\n").encode("utf-8"))
+    commit_all(work, "identité publiée ailleurs")
+    git(work, "push", "--quiet", str(bare), "main")
+    original = repo_sync.run_git
+
+    def no_blob(args, *a, **kwargs):
+        assert args[:2] != ["cat-file", "blob"]
+        return original(args, *a, **kwargs)
+
+    monkeypatch.setattr(repo_sync, "run_git", no_blob)
+    assert set_remote(META.id, str(bare)).account == "nouveau"
