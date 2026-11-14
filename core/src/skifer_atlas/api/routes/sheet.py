@@ -11,9 +11,9 @@ from ...index import ensure_index
 from ...index.schema import index_state
 from ...repo.git import show
 from ...workspaces import index_path, repo_dir
-from .common import document_id_or_404, not_found, workspace_or_404
+from .common import WorkspaceRoute, document_id_or_404, not_found, workspace_or_404
 
-router = APIRouter(prefix="/api/workspaces/{ws}/documents/{document_id}")
+router = APIRouter(route_class=WorkspaceRoute, prefix="/api/workspaces/{ws}/documents/{document_id}")
 
 
 def _repo(ws: str):

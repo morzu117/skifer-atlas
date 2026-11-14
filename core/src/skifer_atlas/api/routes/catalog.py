@@ -24,9 +24,9 @@ from ...repo import versions as repo_versions
 from ...repo.git import show
 from ...repo.layout import read_governance
 from ...workspaces import index_path, repo_dir
-from .common import document_id_or_404, not_found, workspace_or_404
+from .common import WorkspaceRoute, document_id_or_404, not_found, workspace_or_404
 
-router = APIRouter(prefix="/api/workspaces/{ws}")
+router = APIRouter(route_class=WorkspaceRoute, prefix="/api/workspaces/{ws}")
 
 
 def _repo(ws: str):

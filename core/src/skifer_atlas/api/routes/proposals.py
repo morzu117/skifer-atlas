@@ -9,9 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ... import proposals
 from ...proposals import view
-from .common import workspace_or_404
+from .common import WorkspaceRoute, workspace_or_404
 
-router = APIRouter(prefix="/api/workspaces/{ws}/proposals")
+router = APIRouter(route_class=WorkspaceRoute, prefix="/api/workspaces/{ws}/proposals")
 
 
 class _Body(BaseModel):
