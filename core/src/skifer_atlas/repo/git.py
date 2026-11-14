@@ -47,8 +47,8 @@ def git_version() -> tuple[int, ...]:
     if shutil.which("git") is None:
         raise RepoError("git_missing", "Git est introuvable : installer Git 2.30 ou plus récent "
                        "(https://git-scm.com/downloads), puis relancer Atlas.")
-    output = subprocess.run(["git", "--version"], capture_output=True, text=True, check=False,
-                            timeout=10).stdout
+    output = subprocess.run(["git", "--version"], capture_output=True, text=True, encoding="utf-8",
+                            check=False, timeout=10).stdout
     match = re.search(r"(\d+)\.(\d+)", output)
     version = tuple(int(part) for part in match.groups()) if match else (0, 0)
     if version < MIN_VERSION:
@@ -70,11 +70,12 @@ _CREDENTIAL_HELPER = ('!f() { test "$1" = get || exit 0; '
 def run_git(args: list[str], cwd: Path | None = None, timeout: int = TIMEOUT,
             error_code: str = "git_failed", *, input: str | None = None,
             env: dict[str, str] | None = None, token: str | None = None,
-            encoding: str | None = None) -> str:
+            encoding: str = "utf-8") -> str:
     """Sortie standard d'une commande git ; lève `RepoError` si elle échoue."""
     git_version()
     command = ["git", "-c", "protocol.allow=never", "-c", "protocol.https.allow=always",
-               "-c", "protocol.ssh.allow=always"]
+               "-c", "protocol.ssh.allow=always", "-c", "i18n.logOutputEncoding=UTF-8",
+               "-c", "core.quotepath=false"]
     if os.environ.get("ATLAS_ALLOW_LOCAL_GIT") == "1":
         command += ["-c", "protocol.file.allow=always"]
     environment = _env() | (env or {})

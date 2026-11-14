@@ -13,7 +13,7 @@ INVALID = sorted((FIXTURES / "documents-invalid").glob("*.yaml"))
 
 
 def run(*args):
-    return subprocess.run([str(ATLAS), *map(str, args)], capture_output=True, text=True, check=False)
+    return subprocess.run([str(ATLAS), *map(str, args)], capture_output=True, text=True, encoding="utf-8", check=False)
 
 
 def test_valid_documents_exit_zero():
@@ -148,7 +148,7 @@ def test_fingerprint_is_stable_under_different_hash_seeds():
         result = subprocess.run(
             [str(ATLAS), "fingerprint", "--with", str(CANONICAL), str(CANONICAL), str(DE),
              str(ES)],
-            capture_output=True, text=True, check=False, env=env,
+            capture_output=True, text=True, encoding="utf-8", check=False, env=env,
         )
         assert result.returncode == 0, result.stderr
         outputs.add(result.stdout)
@@ -205,3 +205,13 @@ def test_diff_exit_codes(tmp_path):
     assert run("diff", CANONICAL, "absent.yaml").returncode == 1
     missing = run("diff", DE, ES)
     assert missing.returncode == 1 and "[missing_canonical]" in missing.stderr
+
+
+def test_cli_emits_utf8_when_environment_requests_ascii(tmp_path):
+    import os
+
+    result = subprocess.run([str(ATLAS), "diff", str(CANONICAL), str(CANONICAL)],
+                            capture_output=True, check=False,
+                            env=os.environ | {"PYTHONIOENCODING": "ascii"})
+    assert result.returncode == 0, result.stderr.decode("utf-8")
+    assert "→" in result.stdout.decode("utf-8")

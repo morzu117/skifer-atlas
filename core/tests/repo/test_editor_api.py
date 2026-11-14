@@ -5,6 +5,7 @@ import copy
 import json
 import statistics
 import subprocess
+import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,14 +24,14 @@ __all__ = ["atlas_env"]  # fixture importée
 
 AUTH = {"Authorization": "Bearer secret"}
 EDITOR = "/api/workspaces/groupe-nordis/editor"
-SCRIPT = EXAMPLE.parent / "depot-nordis.sh"
+SCRIPT = EXAMPLE.parent / "depot-nordis.py"
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "documents" / "revenu-net.yaml"
 
 
 @pytest.fixture
 def client(atlas_env, tmp_path, monkeypatch):
     monkeypatch.setenv("ATLAS_ACCOUNT", "anna.k")  # contributrice de Groupe Nordis
-    subprocess.run(["bash", str(SCRIPT), str(tmp_path / "demo")], check=True,
+    subprocess.run([sys.executable, str(SCRIPT), str(tmp_path / "demo")], check=True,
                    capture_output=True)
     client = TestClient(create_app(token="secret"), headers=AUTH)
     joined = client.post("/api/workspaces/join",

@@ -3,6 +3,7 @@ historique (`examples/depot-nordis.sh` : Revenu net v1 à v4)."""
 
 import difflib
 import subprocess
+import sys
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,12 +18,12 @@ __all__ = ["atlas_env"]  # fixture importée
 
 AUTH = {"Authorization": "Bearer secret"}
 DOCS = "/api/workspaces/groupe-nordis/documents"
-SCRIPT = EXAMPLE.parent / "depot-nordis.sh"
+SCRIPT = EXAMPLE.parent / "depot-nordis.py"
 
 
 @pytest.fixture
 def client(atlas_env, tmp_path):
-    subprocess.run(["bash", str(SCRIPT), str(tmp_path / "demo")], check=True,
+    subprocess.run([sys.executable, str(SCRIPT), str(tmp_path / "demo")], check=True,
                    capture_output=True)
     client = TestClient(create_app(token="secret"), headers=AUTH)
     joined = client.post("/api/workspaces/join",

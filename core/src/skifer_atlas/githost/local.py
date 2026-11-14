@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import tempfile
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..files import remove_tree
 from ..governance.model import account_from_name
 from ..governance.rules import Review
 from ..repo.git import RepoError, run_git
@@ -153,7 +153,7 @@ class LocalHost(GitHost):
                 run_git(["push", "--quiet", "origin", self.main_branch], clone,
                         error_code="merge_refused")
             finally:
-                shutil.rmtree(work, ignore_errors=True)
+                remove_tree(work, best_effort=True)
             data.update(state="merged", merged_commit=merged, head=head)
             self._save(data)
         return merged

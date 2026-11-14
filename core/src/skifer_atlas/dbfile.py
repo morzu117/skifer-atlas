@@ -24,7 +24,8 @@ WAIT_SECONDS = 10.0
 # « IO Error: Could not set lock on file "…": Conflicting lock is held in … ». DuckDB n'a
 # pas d'exception propre à ce cas ; `test_dbfile.py` vérifie ces libellés sur la version
 # installée, pour qu'un changement de libellé fasse échouer un test plutôt qu'une requête.
-LOCK_MESSAGES = ("Could not set lock", "Conflicting lock")
+LOCK_MESSAGES = ("Could not set lock", "Conflicting lock",
+                 "The process cannot access the file because it is being used by another process")
 _no_wait: ContextVar[bool] = ContextVar("no_wait", default=False)
 # Deux threads qui ouvrent le même fichier au même instant se gênent : DuckDB refuse le
 # second (« Unique file handle conflict ») au lieu de partager la base. C'est le cas dès que

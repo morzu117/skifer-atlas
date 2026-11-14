@@ -114,6 +114,61 @@ def test_join_clones_and_registers(remote):
     assert error.value.code == "workspace_exists"
 
 
+def test_join_succeeds_when_staging_was_already_removed(remote, monkeypatch):
+    from skifer_atlas.files import remove_tree
+
+    bare, _ = remote
+    original_move = repo_sync.shutil.move
+
+    def move_and_remove_staging(source, destination):
+        result = original_move(source, destination)
+        remove_tree(source.parent)
+        return result
+
+    monkeypatch.setattr(repo_sync.shutil, "move", move_and_remove_staging)
+    assert join_workspace(str(bare)).id == "groupe-nordis"
+
+
+def test_join_succeeds_when_staging_cleanup_fails(remote, monkeypatch, caplog):
+    from skifer_atlas import files
+
+    bare, _ = remote
+    original_remove = files.shutil.rmtree
+
+    def fail_staging(path, *args, **kwargs):
+        if path.name.startswith("clone-"):
+            raise PermissionError("détail privé")
+        return original_remove(path, *args, **kwargs)
+
+    monkeypatch.setattr(files.shutil, "rmtree", fail_staging)
+    assert join_workspace(str(bare)).id == "groupe-nordis"
+    assert "clone-" in caplog.text and "PermissionError" in caplog.text
+    assert "détail privé" not in caplog.text
+
+
+def test_join_preserves_business_error_when_cleanup_fails(remote, monkeypatch, caplog):
+    from skifer_atlas import files
+
+    bare, _ = remote
+    business_error = RepoError("registry_busy", "registre occupé")
+
+    def refuse_workspace(workspace):
+        raise business_error
+
+    def fail_cleanup(*args, **kwargs):
+        raise PermissionError("secret à ne pas journaliser")
+
+    monkeypatch.setattr(repo_sync, "add_workspace", refuse_workspace)
+    monkeypatch.setattr(files.shutil, "rmtree", fail_cleanup)
+    with pytest.raises(RepoError) as error:
+        join_workspace(str(bare))
+    assert error.value is business_error
+    assert "PermissionError" in caplog.text
+    assert str(repo_dir("groupe-nordis")) in caplog.text
+    assert "clone-" in caplog.text
+    assert "secret à ne pas journaliser" not in caplog.text
+
+
 def test_join_refuses_a_repository_that_is_not_a_workspace(atlas_env, tmp_path):
     other = tmp_path / "autre"
     other.mkdir()

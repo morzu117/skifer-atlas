@@ -117,3 +117,11 @@ def test_opening_one_space_does_not_wait_for_another(tmp_path, monkeypatch, perf
     finally:
         release.set()
         opening.join()
+
+
+def test_windows_lock_message_is_recognized():
+    error = duckdb.IOException(
+        'IO Error: Cannot open file "C:\\atlas.duckdb": The process cannot access the file '
+        'because it is being used by another process.')
+    assert dbfile.is_locked_by_another_process(error)
+    assert not dbfile.is_locked_by_another_process(duckdb.IOException("access denied"))
