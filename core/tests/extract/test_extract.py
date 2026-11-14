@@ -229,7 +229,7 @@ def test_demo_shows_the_announced_differences(tmp_path):
 
 # --- banc d'essai -------------------------------------------------------------------------
 
-def test_two_thousand_lines_extract_quickly(tmp_path):
+def test_two_thousand_lines_extract_quickly(tmp_path, perf_factor):
     block = (SQL / "08_kpi_monthly.sql").read_text(encoding="utf-8")
     lines = block.count("\n")
     script = tmp_path / "gros.sql"
@@ -239,4 +239,4 @@ def test_two_thousand_lines_extract_quickly(tmp_path):
     result = extract_file(script, "databricks")
     elapsed = time.perf_counter() - start
     assert len(result.extractions) == 2000 // lines + 1
-    assert elapsed < 2, f"{elapsed:.2f} s"
+    assert elapsed < 2 * perf_factor, f"{elapsed:.2f} s"

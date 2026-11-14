@@ -389,7 +389,7 @@ def test_document_row(index):
 
 # --- banc d'essai -------------------------------------------------------------------------
 
-def test_rebuild_of_a_thousand_documents_is_fast(repo, tmp_path):
+def test_rebuild_of_a_thousand_documents_is_fast(repo, tmp_path, perf_factor):
     kpi = load("kpis/taux-de-service.yaml")
     concept = load("concepts/client-actif.yaml")
     for n in range(500):
@@ -401,7 +401,7 @@ def test_rebuild_of_a_thousand_documents_is_fast(repo, tmp_path):
     start = time.perf_counter()
     build_index(repo, tmp_path / "atlas.duckdb")
     elapsed = time.perf_counter() - start
-    assert elapsed < 5, f"{elapsed:.2f} s"
+    assert elapsed < 5 * perf_factor, f"{elapsed:.2f} s"
 
 
 VARIANTS = [{"id": "k--de", "mode": "override"}, {"id": "k--es", "mode": "from_scratch"}]

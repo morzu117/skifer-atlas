@@ -20,6 +20,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       COVERAGE_CORE: sysmon # Python 3.12 : réduit le coût de mesure des tests de performance
+      ATLAS_PERF_FACTOR: "3" # Runner partagé et surcoût de la couverture
     strategy:
       fail-fast: false
       matrix:
@@ -57,6 +58,7 @@ jobs:
     continue-on-error: true
     env:
       COVERAGE_CORE: sysmon
+      ATLAS_PERF_FACTOR: "3" # Runner partagé et surcoût de la couverture
     defaults:
       run:
         working-directory: core

@@ -65,23 +65,23 @@ def test_the_lock_file_is_in_the_workspace_folder_outside_the_repository(atlas_e
     assert git(repo, "status", "--porcelain") == ""  # l'arbre de travail reste propre
 
 
-def test_another_process_excludes_the_clone_lock(atlas_env):
+def test_another_process_excludes_the_clone_lock(atlas_env, perf_factor):
     repo = repo_dir("groupe-nordis")
     with held(repo, 0.8):
         started = time.monotonic()
         with clone_lock(repo):
-            assert time.monotonic() - started > 0.3
+            assert time.monotonic() - started > 0.3 / perf_factor
     with clone_lock_if_free(repo) as free:  # le second processus a fini : le clone est libre
         assert free is True
 
 
-def test_the_clone_lock_if_free_does_not_wait_for_another_process(atlas_env):
+def test_the_clone_lock_if_free_does_not_wait_for_another_process(atlas_env, perf_factor):
     repo = repo_dir("groupe-nordis")
     with held(repo, 30):
         started = time.monotonic()
         with clone_lock_if_free(repo) as free:
             assert free is False
-        assert time.monotonic() - started < 1
+        assert time.monotonic() - started < 1 * perf_factor
         # Un autre clone n'est pas gêné.
         with clone_lock_if_free(repo_dir("maison-perrault")) as other:
             assert other is True

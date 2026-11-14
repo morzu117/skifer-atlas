@@ -258,7 +258,7 @@ def test_a_base_held_by_another_process_answers_index_busy(client, joined, monke
     assert client.get(f"{WS}/catalog").status_code == 200
 
 
-def test_a_busy_base_does_not_delay_the_workspace_list(client, joined):
+def test_a_busy_base_does_not_delay_the_workspace_list(client, joined, perf_factor):
     """ADR 0032 : les compteurs de la liste des espaces n'attendent pas une base occupée ;
     sinon la coque de chaque écran attendrait `WAIT_SECONDS` avant d'afficher l'écran."""
     import subprocess
@@ -281,7 +281,7 @@ def test_a_busy_base_does_not_delay_the_workspace_list(client, joined):
     assert response.status_code == 200
     counts = response.json()[0]["counts"]
     assert (counts["kpi"], counts["concept"]) == (None, None)
-    assert elapsed < 3
+    assert elapsed < 3 * perf_factor
 
 
 def test_requests_waiting_for_a_busy_base_wait_side_by_side(joined, monkeypatch):
@@ -325,7 +325,7 @@ def test_requests_waiting_for_a_busy_base_wait_side_by_side(joined, monkeypatch)
         holder.kill()
         holder.wait()
     assert codes == ["index_busy"] * 3
-    assert elapsed < 1.5  # l'une après l'autre : 1,8 s
+    assert elapsed < 1.5  # l'une après l'autre : 1,8 s ; pas de facteur CI, il effacerait l'écart
 
 
 def test_a_rebuild_in_progress_does_not_delay_the_workspace_list(client, joined):

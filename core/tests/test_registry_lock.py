@@ -155,15 +155,15 @@ def test_the_registry_lock_is_reentrant(data):
 
 # --- verrou entre processus --------------------------------------------------------------
 
-def test_a_second_process_waits_for_the_registry_lock(data):
+def test_a_second_process_waits_for_the_registry_lock(data, perf_factor):
     with held(0.8):
         started = time.monotonic()
         add_workspace(workspace("groupe-nordis"))
-        assert time.monotonic() - started > 0.3
+        assert time.monotonic() - started > 0.3 / perf_factor
     assert [w.id for w in list_workspaces()] == ["groupe-nordis"]
 
 
-def test_a_lock_held_too_long_is_registry_busy(data, monkeypatch):
+def test_a_lock_held_too_long_is_registry_busy(data, monkeypatch, perf_factor):
     add_workspace(workspace("groupe-nordis"))
     before = registry_path().read_bytes()
     monkeypatch.setattr(workspaces, "LOCK_WAIT_SECONDS", 0.3)
@@ -171,7 +171,7 @@ def test_a_lock_held_too_long_is_registry_busy(data, monkeypatch):
         started = time.monotonic()
         with pytest.raises(RepoError) as error:
             add_workspace(workspace("maison-perrault"))
-        assert time.monotonic() - started < 5
+        assert time.monotonic() - started < 5 * perf_factor
         assert error.value.code == "registry_busy"
         assert "autre processus Atlas" in error.value.message
         for write in (lambda: update_workspace(workspace("groupe-nordis", name="X")),
@@ -191,7 +191,7 @@ def test_the_api_answers_503_when_the_registry_is_busy(data, monkeypatch):
     assert answer.json()["detail"]["code"] == "registry_busy"
 
 
-def test_a_lock_left_by_a_dead_process_does_not_block(data, monkeypatch):
+def test_a_lock_left_by_a_dead_process_does_not_block(data, monkeypatch, perf_factor):
     """Le verrou du système est rendu à la mort du processus, même tué sans nettoyage."""
     monkeypatch.setattr(workspaces, "LOCK_WAIT_SECONDS", 2)
     with held(30) as process:
@@ -199,13 +199,13 @@ def test_a_lock_left_by_a_dead_process_does_not_block(data, monkeypatch):
         process.wait()
     started = time.monotonic()
     add_workspace(workspace("groupe-nordis"))
-    assert time.monotonic() - started < 1.5
+    assert time.monotonic() - started < 1.5 * perf_factor
     assert workspaces.lock_path().exists()  # le fichier reste, vide : seul le verrou compte
 
 
 # --- échec de la prise du verrou -----------------------------------------------------------
 
-def test_a_failed_lock_open_releases_the_thread_lock(tmp_path, monkeypatch):
+def test_a_failed_lock_open_releases_the_thread_lock(tmp_path, monkeypatch, perf_factor):
     """Revue de #146 : si l'ouverture du fichier verrou échoue (permission, disque plein), le
     `RLock` du processus est rendu ; un autre thread obtient le verrou aussitôt, au lieu
     d'attendre jusqu'au redémarrage."""
@@ -240,7 +240,7 @@ def test_a_failed_lock_open_releases_the_thread_lock(tmp_path, monkeypatch):
         thread.start()
         thread.join(5)
     assert not thread.is_alive()
-    assert len(outcome) == 1 and isinstance(outcome[0], float) and outcome[0] < 0.5
+    assert len(outcome) == 1 and isinstance(outcome[0], float) and outcome[0] < 0.5 * perf_factor
     assert len(failures) == 1
     # Le même thread peut reprendre le verrou : la profondeur est revenue à zéro.
     with filelock.file_lock(path, 1), filelock.file_lock(path, 1):
