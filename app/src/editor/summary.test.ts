@@ -66,13 +66,13 @@ describe("summary", () => {
 
   // Le commentaire de summary.ts promet qu'un champ manquant est « simplement omis ».
   // bug : summary.ts:66 compose « nom · fuseau » sans filtrer un fuseau absent : la carte affiche « date_facture · ».
-  it.fails("une colonne datée sans fuseau n'affiche pas de séparateur orphelin", () => {
+  it("une colonne datée sans fuseau n'affiche pas de séparateur orphelin", () => {
     const text = summary(node({ id: "n01", type: "source", table: "s.t", columns: [{ name: "date_facture", type: "date" }] }));
     expect(text.meta).toBe("s · 1 col. · date_facture");
   });
 
   // bug : summary.ts:96 écrit « date de <colonne> · <fuseau> » même sans fuseau : « date de ts · ».
-  it.fails("une conversion en date sans fuseau n'affiche pas de séparateur orphelin", () => {
+  it("une conversion en date sans fuseau n'affiche pas de séparateur orphelin", () => {
     expect(summary(node({ id: "n01", type: "temporal", operation: "to_date", column: "ts", target: "jour" })).meta).toBe("date de ts");
   });
 });
@@ -100,7 +100,7 @@ describe("conditionText", () => {
   // Le moteur Skifer découpe « colonne:opérateur:valeur » en trois au plus
   // (schema_loader._normalize_filter_string, split(":", 2)) : la valeur peut contenir « : ».
   // bug : summary.ts:42 utilise split(":", 3), qui tronque la valeur au deuxième « : » (« 10:30 » devient « 10 »).
-  it.fails("une valeur qui contient « : » s'affiche entière", () => {
+  it("une valeur qui contient « : » s'affiche entière", () => {
     expect(conditionText("heure:equals:10:30")).toBe("heure = 10:30");
   });
 });

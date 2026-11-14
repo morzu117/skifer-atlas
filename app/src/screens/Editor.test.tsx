@@ -161,6 +161,30 @@ describe("éditeur", () => {
     });
   });
 
+  it("la liste des entités qui arrive ne déplace pas le formulaire : le mode choisi pendant le chargement reste", async () => {
+    // Sous WebKit, un message de chargement retiré entre l'appui et le relâchement décalait le
+    // formulaire de 28 px : le relâchement tombait hors du bouton radio et le clic était perdu.
+    window.location.hash = "#/w/groupe-nordis/editeur?variant_of=revenu-net";
+    const sheet = deferred<{ json: unknown }>();
+    fakeServer(({ path }) => (path === "/api/workspaces/groupe-nordis/documents/revenu-net/sheet" ? sheet.promise : undefined));
+    render(<Harness ws={workspace({ account: "anna.k", role: "contributeur", entities: ["nordis-fr", "nordis-it"] })} />);
+    const form = (await screen.findByRole("heading", { level: 1, name: "Nouvelle déclinaison de revenu-net" })).closest("form")!;
+    // Blocs qui occupent de la place au-dessus du choix du mode.
+    const above = () => {
+      const blocks = Array.from(form.children);
+      return blocks.slice(0, blocks.findIndex((block) => block.tagName === "FIELDSET")).filter((block) => !block.classList.contains("sr-only"));
+    };
+    expect(screen.getByRole("status")).toHaveTextContent("Chargement des entités…");
+    const during = above();
+    await userEvent.click(screen.getByRole("radio", { name: "Graphe indépendant" }));
+
+    await act(async () => sheet.resolve({ json: { kind: "kpi", variants: [{ entity: "nordis-fr" }] } }));
+    expect(await screen.findByRole("option", { name: "nordis-it" })).toBeInTheDocument();
+    expect(above()).toEqual(during);
+    expect(screen.getByRole("status")).toHaveTextContent("");
+    expect(screen.getByRole("radio", { name: "Graphe indépendant" })).toBeChecked();
+  });
+
   it("ouvre la copie en v5 ; un filtre sans nulls bloque la soumission et « Aller au nœud » le sélectionne (critère 4)", async () => {
     server();
     editor();

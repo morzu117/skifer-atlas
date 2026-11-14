@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { ReactFlowProvider } from "@xyflow/react";
+import { ReactFlowProvider, useStoreApi } from "@xyflow/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockReactFlow } from "../test/reactFlow";
 import { Canvas, LARGE_GRAPH, type CanvasProps } from "./Canvas";
@@ -211,7 +211,16 @@ describe("cartes du canevas (guide 4)", () => {
   // bug : Canvas.tsx:168-176, onNodesChange ne retient que « select » et « position » : les nœuds
   // passés à React Flow n'ont jamais de `measured`, et la MiniMap ne dessine que les nœuds mesurés
   // (nodeHasDimensions sur le nœud utilisateur). La mini-carte du guide 10.3 est donc vide.
-  it.fails("la mini-carte dessine chaque nœud, coloré selon sa famille", async () => {
+  it("mesurer les nœuds ne déplace aucun nœud", async () => {
+    const onMove = vi.fn();
+    const initial = props(JOINED, { onMove });
+    const { container } = render(view(initial));
+    await waitFor(() => expect(container.querySelectorAll(".react-flow__minimap-node")).toHaveLength(4));
+    expect(onMove).not.toHaveBeenCalled();
+    expect(initial.positions).toEqual(layout(JOINED));
+  });
+
+  it("la mini-carte dessine chaque nœud, coloré selon sa famille", async () => {
     const { container } = render(view(props(JOINED)));
     const minimap = await screen.findByLabelText("Mini-carte du graphe");
     await waitFor(() => expect(container.querySelectorAll(".react-flow__minimap-node")).toHaveLength(4), { timeout: 500 });
@@ -315,5 +324,45 @@ describe("sélection et arêtes", () => {
     fireEvent.click(card(container, "n01").querySelector(".react-flow__handle.source")!);
     fireEvent.click(card(container, "n04").querySelector(".react-flow__handle.target")!);
     expect(onConnect).toHaveBeenCalledWith("n01", "n04", undefined);
+  });
+});
+
+describe("poignées pendant une relecture", () => {
+  // Dans un navigateur, ResizeObserver ne répond qu'à l'image suivante : on retient ses
+  // réponses pour voir le graphe entre le rendu et la mesure.
+  const pending: (() => void)[] = [];
+  class LateResizeObserver {
+    constructor(private readonly callback: (entries: { target: Element; contentRect: DOMRect }[], observer: unknown) => void) {}
+    observe(target: Element) { pending.push(() => this.callback([{ target, contentRect: target.getBoundingClientRect() }], this)); }
+    unobserve() {}
+    disconnect() {}
+  }
+  const measure = () => act(() => { pending.splice(0).forEach((answer) => answer()); });
+
+  it("un nœud dont le contenu change garde ses poignées et reste visible avant sa nouvelle mesure", () => {
+    // Le résultat de la validation arrivait pendant le glisser d'une liaison : React Flow
+    // oubliait la taille et les poignées de la carte jusqu'à la mesure suivante, la cachait,
+    // et le relâchement sur sa poignée ne reliait rien (S-UI-103-01 sous WebKit).
+    const original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = LateResizeObserver as unknown as typeof ResizeObserver;
+    try {
+      let store: ReturnType<typeof useStoreApi> | null = null;
+      function Probe() { store = useStoreApi(); return null; }
+      const base = props(chain(2));
+      const graph = (p: CanvasProps) => <ReactFlowProvider><Canvas {...p} /><Probe /></ReactFlowProvider>;
+      const { rerender, container } = render(graph(base));
+      measure();
+      measure();
+      const handles = () => store!.getState().nodeLookup.get("n002")?.internals.handleBounds;
+      const card = () => container.querySelector<HTMLElement>('.react-flow__node[data-id="n002"]')!;
+      expect(handles()?.target).toHaveLength(1);
+
+      rerender(graph({ ...base, issues: [{ path: "graph.nodes[1].inputs", node_id: "n002", code: "required", message: "Champ requis manquant : « inputs ».", severity: "error" }] }));
+      expect(screen.getByText("Champ requis manquant : « inputs ».")).toBeInTheDocument();
+      expect(handles()?.target).toHaveLength(1);
+      expect(card().style.visibility).not.toBe("hidden");
+    } finally {
+      globalThis.ResizeObserver = original;
+    }
   });
 });
