@@ -158,9 +158,11 @@ Plan 0010, suivi de la revue globale (#151) · Test : `app/e2e/accueil.spec.ts` 
 - Limite : l'analyse de plusieurs adresses invalides (espace, fiche, `%` isolé) est rendue sans navigateur par `app/src/format.test.ts` › `[S-0010-11]`.
 
 ### S-0010-12 — Sous Tauri, l'échec de `get_server_info` ne laisse pas de repli sans token
-Plan 0010, suivi de la revue globale (#151) · Tests : `app/e2e/serveur-tauri.spec.ts` › `[S-0010-12]` ; Vitest : `app/src/api.test.ts` › `[S-0010-12]` (six tests)
+Plan 0010, suivi de la revue globale (#151) · Tests : `app/e2e/serveur-tauri.spec.ts` › `[S-0010-12]` ; Vitest : `app/src/api.test.ts` › `[S-0010-12]` (six tests) et `app/src/App.test.tsx` › `[S-0010-12]`
 - **Étant donné** un pont Tauri simulé dans la page (`window.__TAURI_INTERNALS__`) dont la commande `get_server_info` échoue, l'horloge de la page avançant à la main (`page.clock`), et le vrai serveur derrière
-- **Quand** j'ouvre l'accueil, puis laisse le démarrage épuiser ses essais
+- **Quand** j'ouvre l'accueil
+- **Alors** le démarrage est affiché sans bandeau ni requête vers le serveur
+- **Quand** je laisse le démarrage épuiser ses essais
 - **Alors** le bandeau « Serveur local injoignable » s'affiche, `invoke` a été réessayé (au moins trois appels) et aucune requête n'est partie vers le serveur
 - **Quand** l'application devient prête et que je clique « Réessayer »
 - **Alors** rien n'avait été retenu : `invoke` est interrogé de nouveau, le bandeau disparaît, l'accueil liste Groupe Nordis, toutes les requêtes portent `Authorization: Bearer` avec le token fourni, et axe-core ne relève aucune violation sérieuse, sur l'écran de démarrage avec son bandeau comme après la reprise
