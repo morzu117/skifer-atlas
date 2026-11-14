@@ -166,6 +166,28 @@ describe("administration", () => {
     await waitFor(() => expect(api.calls.filter((c) => c.path === `${API}/admin`)).toHaveLength(2));
   });
 
+  it("attend la relecture après fusion avant de permettre une nouvelle modification", async () => {
+    let reads = 0;
+    let finish!: (reply: Reply) => void;
+    server(state(), ({ path }) => {
+      if (path === `${API}/admin` && ++reads === 2) return new Promise<Reply>((resolve) => { finish = resolve; });
+      return undefined;
+    });
+    render(screenFor());
+    await userEvent.click(await screen.findByRole("button", { name: "Domaine" }));
+    const form = within(screen.getByRole("group", { name: "Nouveau domaine" }));
+    await userEvent.type(form.getByRole("textbox", { name: /Libellé/ }), "Data");
+    await userEvent.click(form.getByRole("button", { name: "Ajouter le domaine" }));
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(reads).toBe(2));
+    expect(screen.getByRole("button", { name: "Modifier Julien H." })).toBeDisabled();
+    expect(screen.queryByText(/fusionnée sans revue/)).not.toBeInTheDocument();
+    await act(async () => finish({ json: state({ base_digest: "d2" }) }));
+    expect(await screen.findByText(/fusionnée sans revue/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Modifier Julien H." }));
+    expect(within(screen.getByRole("group", { name: "Membre Julien H." })).getByRole("button", { name: "Annuler" })).toBeEnabled();
+  });
+
   it("un identifiant de domaine déjà pris est refusé", async () => {
     server();
     render(screenFor());

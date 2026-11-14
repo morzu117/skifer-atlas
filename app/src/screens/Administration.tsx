@@ -127,6 +127,7 @@ export function Administration({
   // et la relecture qui suit un commit d'identité défait n'est pas celle d'un rattachement.
   const [resetNotice, setResetNotice] = useState("");
   const [reloadAfterReset, setReloadAfterReset] = useState(false);
+  const [reloadAfterMerge, setReloadAfterMerge] = useState(false);
   // Gardé ici : la fusion relit les paramètres, ce qui remonte le formulaire.
   const [saved, setSaved] = useState<AdminSaved | null>(null);
 
@@ -200,9 +201,10 @@ export function Administration({
             </button>
           }
         >
-          {reloadAfterReset ? "Le rattachement est réinitialisé" : "Le dépôt est rattaché"}, mais les paramètres n'ont pas pu être relus. {reloadError.text}
+          {reloadAfterMerge ? "La proposition est fusionnée" : reloadAfterReset ? "Le rattachement est réinitialisé" : "Le dépôt est rattaché"}, mais les paramètres n'ont pas pu être relus. {reloadError.text}
         </Banner>
       )}
+      {reloading && !reloadError && <p className="muted" role="status">Actualisation des paramètres…</p>}
       {load.kind === "ready" && (
         <Settings
           key={`${load.state.base_digest}|${load.state.repository.url}`}
@@ -224,6 +226,7 @@ export function Administration({
             setResetNotice(message);
             setDiscarded(pending.discarded);
             setCarried(pending.carried);
+            setReloadAfterMerge(false);
             setReloadAfterReset(true);
             setReloading(true);
             setRevision((n) => n + 1);
@@ -231,6 +234,7 @@ export function Administration({
           onAttached={(next, pending, conflict) => {
             setDiscarded(conflict ? `le compte ${next.account} figurait déjà dans le brouillon` : null);
             setResetNotice("");
+            setReloadAfterMerge(false);
             setReloadAfterReset(false);
             setCarried(pending && { ...pending, governance: renameAccount(pending.governance, ws.account, next.account) });
             setAttached(`Dépôt rattaché : l'espace est publié sur ${next.git_remote}, sous le compte ${next.account}.`);
@@ -238,7 +242,7 @@ export function Administration({
             onWorkspaceChange?.(next);
             setRevision((n) => n + 1);
           }}
-          onMerged={() => { onMerged?.(); setRevision((n) => n + 1); }}
+          onMerged={() => { onMerged?.(); setReloadAfterMerge(true); setReloading(true); setRevision((n) => n + 1); }}
           onReload={() => setRevision((n) => n + 1)}
         />
       )}
@@ -595,7 +599,7 @@ function Settings({
           )}
         </Banner>
       )}
-      {saved && (
+      {saved && !reloading && (
         <p className="tone-ok admin-saved" role="status">
           {saved.merged ? `Paramètres enregistrés : proposition n° ${saved.id} fusionnée sans revue.` : `Proposition n° ${saved.id} ouverte : elle attend la revue d'un autre référent.`}{" "}
           <a href={href.view(ws.id, "propositions", { n: String(saved.id), status: saved.merged ? "merged" : "open", domain: "tous" })}>Voir la proposition</a>

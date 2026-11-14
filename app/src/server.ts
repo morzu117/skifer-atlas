@@ -42,7 +42,10 @@ export function useServer(startup: Startup): ServerState {
       setVersion(found);
       setState(found ? "ready" : "unreachable");
     });
-    const stop = onUnreachable(() => alive.current && setState("unreachable"));
+    // La sonde seule décide de la fin du démarrage, malgré les échecs intermédiaires.
+    const stop = onUnreachable(() => {
+      if (alive.current) setState((current) => current === "starting" ? current : "unreachable");
+    });
     return () => {
       alive.current = false;
       stop();

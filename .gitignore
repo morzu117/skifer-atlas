@@ -11,3 +11,6 @@ dist/
 build/
 *.spec
 !core/skifer-atlas-server.spec
+
+.coverage
+.coverage.*

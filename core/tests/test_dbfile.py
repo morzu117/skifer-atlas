@@ -34,13 +34,13 @@ def held(db, seconds):
         process.wait()
 
 
-def test_a_second_process_waits_for_the_file(tmp_path):
+def test_a_second_process_waits_for_the_file(tmp_path, perf_factor):
     db = tmp_path / "atlas.duckdb"
     store.history(db)  # schéma `results` créé
     with held(db, 0.6):
         started = time.monotonic()
         assert store.history(db) == []
-        assert time.monotonic() - started > 0.3
+        assert time.monotonic() - started > 0.3 / perf_factor
 
 
 def test_requests_waiting_together_all_get_the_file(tmp_path):
@@ -76,11 +76,11 @@ def test_a_file_held_too_long_is_index_busy(tmp_path, monkeypatch):
     assert "autre processus Atlas" in error.value.message
 
 
-def test_other_io_errors_are_not_retried(tmp_path):
+def test_other_io_errors_are_not_retried(tmp_path, perf_factor):
     started = time.monotonic()
     with pytest.raises(duckdb.IOException):
         dbfile.open_db(tmp_path / "absent" / "atlas.duckdb")
-    assert time.monotonic() - started < 1
+    assert time.monotonic() - started < 1 * perf_factor
 
 
 def test_the_pinned_duckdb_still_says_the_file_is_locked(tmp_path):
@@ -92,7 +92,7 @@ def test_the_pinned_duckdb_still_says_the_file_is_locked(tmp_path):
     assert dbfile.is_locked_by_another_process(error.value)
 
 
-def test_opening_one_space_does_not_wait_for_another(tmp_path, monkeypatch):
+def test_opening_one_space_does_not_wait_for_another(tmp_path, monkeypatch, perf_factor):
     """Le verrou d'ouverture est propre à chaque fichier."""
     import threading
 
@@ -113,7 +113,7 @@ def test_opening_one_space_does_not_wait_for_another(tmp_path, monkeypatch):
         assert entered.wait(5)
         started = time.monotonic()
         dbfile.open_db(other).close()
-        assert time.monotonic() - started < 1
+        assert time.monotonic() - started < 1 * perf_factor
     finally:
         release.set()
         opening.join()

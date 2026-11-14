@@ -31,10 +31,16 @@ test("[S-0010-12] Sous Tauri, l'échec de get_server_info ne laisse pas de repli
   await page.clock.install();
   await page.goto("/#/");
   const banner = page.getByRole("alert").filter({ hasText: "Serveur local injoignable" });
-  await expect(banner).toBeVisible();
+  const starting = page.getByText("Démarrage du serveur local…");
+  await expect(starting).toBeVisible();
+  await expect(banner).toHaveCount(0);
   expect(sent).toEqual([]); // aucune requête sans token
-  await page.clock.runFor(30_000); // le démarrage a épuisé ses essais
-  await expect(page.getByText("Démarrage du serveur local…")).toHaveCount(0);
+  // Le démarrage a épuisé ses essais. Chaque essai attend un import et des promesses avant de
+  // programmer le minuteur suivant : l'horloge avance donc par pas jusqu'à la fin du démarrage.
+  await expect(async () => {
+    await page.clock.runFor(1_000);
+    await expect(starting).toHaveCount(0, { timeout: 100 });
+  }).toPass({ timeout: 60_000 });
   await expect(banner).toBeVisible();
   expect(sent).toEqual([]);
   expect(await calls()).toBeGreaterThanOrEqual(3); // l'appel est réessayé avant d'abandonner
