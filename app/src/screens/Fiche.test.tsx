@@ -416,3 +416,300 @@ it("relit la fiche après une avance sans démonter son titre", async () => {
   expect(title).toHaveFocus();
   expect(other.calls.filter((call) => call.path === `${DOC}/sheet`)).toHaveLength(2);
 });
+
+// --- onglets et états restants (implémentations, scope, versions, dépendances) -------------
+
+const COMPARISONS = "/api/workspaces/groupe-nordis/comparisons?kpi=revenu-net&limit=3";
+type Reply = ReturnType<Parameters<typeof fakeServer>[0]>;
+
+/** Fiche avec des routes en plus : elles passent avant celles de `sheetServer`. */
+function routes(sheet: DocumentSheet, extra: Record<string, Reply>) {
+  return fakeServer(({ path }) => {
+    if (path in extra) return extra[path];
+    if (path === `${DOC}/sheet`) return { json: sheet };
+    if (path === `${DOC}/layout`) return { json: LAYOUT };
+    return undefined;
+  });
+}
+
+function pending<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => { resolve = yes; });
+  return { promise, resolve };
+}
+
+const IMPLEMENTATIONS: DocumentSheet["implementations"] = [
+  { entity: "nordis-de", platform: "databricks", path: "implementations/revenu-net/nordis-de.databricks.sql", sql: "SELECT SUM(montant) FROM f", extractable: true },
+  { entity: "nordis-fr", platform: "oracle", path: "implementations/revenu-net/nordis-fr.oracle.sql", sql: "SELECT 1 FROM dual", extractable: false },
+];
+const EXTRACT = `${DOC}/implementations/nordis-de/databricks/extract`;
+
+describe("fiche : implémentations", () => {
+  it("sans fichier, l'onglet dit où les poser", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=implementations";
+    sheetServer();
+    fiche();
+    expect(await screen.findByRole("heading", { level: 2, name: "Implémentations" })).toBeInTheDocument();
+    expect(screen.getByText(/Aucun fichier sous/)).toHaveTextContent("Aucun fichier sous implementations/revenu-net/.");
+  });
+
+  it("chaque fichier montre son SQL ; une plateforme sans extraction n'a pas de bouton", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=implementations";
+    routes({ ...SHEET, implementations: IMPLEMENTATIONS }, {});
+    fiche();
+    const de = await screen.findByRole("region", { name: "nordis-de · Databricks" });
+    expect(within(de).getByText("SELECT SUM(montant) FROM f")).toBeInTheDocument();
+    expect(within(de).getByText("implementations/revenu-net/nordis-de.databricks.sql")).toBeInTheDocument();
+    expect(within(de).getByRole("button", { name: "Extraire et comparer au canonique" })).toBeEnabled();
+    // Plateforme inconnue : son identifiant brut reste lisible.
+    const fr = screen.getByRole("region", { name: "nordis-fr · oracle" });
+    expect(within(fr).getByText("Plateforme sans extraction")).toBeInTheDocument();
+    expect(within(fr).queryByRole("button")).toBeNull();
+  });
+
+  it("extrait puis compare : attente, résidus bloquants ou à revoir, fidélité, écarts", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=implementations";
+    const reply = pending<{ json: unknown }>();
+    const server = routes({ ...SHEET, implementations: IMPLEMENTATIONS }, { [EXTRACT]: reply.promise });
+    fiche();
+    const card = await screen.findByRole("region", { name: "nordis-de · Databricks" });
+    const button = within(card).getByRole("button", { name: "Extraire et comparer au canonique" });
+    await userEvent.click(button);
+    expect(within(card).getByRole("status")).toHaveTextContent("Extraction et comparaison en cours…");
+    expect(button).toBeDisabled();
+    expect(server.calls.find((c) => c.path === EXTRACT)?.method).toBe("POST");
+
+    reply.resolve({
+      json: {
+        file: "nordis-de.databricks.sql",
+        residues: [{ code: "comment", message: "Commentaire ignoré en tête de fichier." }],
+        statements: [
+          {
+            id: "s1", line: 3, status: "ok", roundtrip: { status: "verified" }, draft: "",
+            residues: [
+              { code: "udf", message: "Fonction maison non traduite.", blocking: true },
+              { code: "cast", message: "Conversion implicite à vérifier.", blocking: false },
+            ],
+            diff: REPORT,
+          },
+          { id: "s2", line: 12, status: "ok", roundtrip: { status: "differs" }, draft: "", residues: [], diff: null },
+        ],
+      },
+    });
+    expect(await within(card).findByText("Commentaire ignoré en tête de fichier.")).toHaveClass("fact-warn");
+    expect(button).toBeEnabled();
+    expect(within(card).getByText(/Requête ligne 3/)).toHaveTextContent("Requête ligne 3 : brouillon s1, fidélité au SQL vérifiée.");
+    expect(within(card).getByText(/Requête ligne 12/)).toHaveTextContent("fidélité au SQL écarts au SQL source.");
+    const blocking = within(card).getByText("Fonction maison non traduite.", { exact: false }).closest("li")!;
+    expect(within(blocking).getByText("Bloquant")).toHaveClass("tone-bad");
+    const review = within(card).getByText("Conversion implicite à vérifier.", { exact: false }).closest("li")!;
+    expect(within(review).getByText("À revoir")).toHaveClass("tone-warn");
+    const diff = within(card).getByRole("region", { name: "Écarts au canonique" });
+    expect(within(diff).getByText("Écarts au canonique v3")).toBeInTheDocument();
+    expect(within(diff).getByText("2 écarts")).toBeInTheDocument();
+    expect(within(diff).getAllByRole("listitem").filter((li) => li.classList.contains("diff-item"))).toHaveLength(2);
+    expect(within(card).getByText("Brouillon à corriger avant de le comparer.")).toBeInTheDocument();
+  });
+
+  it("un diff identique ne liste aucun écart ; un échec d'extraction s'affiche dans la carte", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=implementations";
+    let fail = true;
+    fakeServer(({ path }) => {
+      if (path === `${DOC}/sheet`) return { json: { ...SHEET, implementations: IMPLEMENTATIONS } };
+      if (path === EXTRACT) {
+        if (fail) return { status: 500, json: { detail: "Extraction impossible." } };
+        return { json: { file: "f", residues: [], statements: [{ id: "s1", line: 1, status: "ok", roundtrip: { status: "skipped" }, draft: "", residues: [], diff: { ...REPORT, identical: true, differences: [] } }] } };
+      }
+      return undefined;
+    });
+    fiche();
+    const card = await screen.findByRole("region", { name: "nordis-de · Databricks" });
+    await userEvent.click(within(card).getByRole("button", { name: "Extraire et comparer au canonique" }));
+    expect(await within(card).findByText("Extraction impossible.")).toBeInTheDocument();
+    fail = false;
+    await userEvent.click(within(card).getByRole("button", { name: "Extraire et comparer au canonique" }));
+    expect(await within(card).findByText("Aucun écart : les deux graphes sont identiques.")).toBeInTheDocument();
+    expect(within(card).queryByText("Extraction impossible.")).toBeNull();
+    expect(within(card).getByText(/fidélité au SQL non vérifiée/)).toBeInTheDocument();
+    expect(card.querySelector(".diff-list")).toBeNull();
+  });
+});
+
+describe("fiche : scope et comparaisons", () => {
+  beforeEach(() => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=scope";
+  });
+
+  it("tolérance propre, scopes déclarés et dernières comparaisons (lien seulement pour une comparaison terminée)", async () => {
+    routes(
+      {
+        ...SHEET,
+        scopes: [
+          { id: "exercice", period: { calendar_period: "FY2026" }, granularity: ["mois", "entité"] },
+          { id: "s1", period: { from: "2026-01-01", to: "2026-06-30" } },
+          { id: "tout" },
+        ],
+      },
+      {
+        [COMPARISONS]: {
+          json: [
+            {
+              id: 7, kpi_version: 4, status: "done", started_at: "2026-11-01T10:00:00Z", finished_at: "2026-11-01T10:05:00Z", tolerance_pct: 1.5, scope: null,
+              results: [
+                { variant_id: "revenu-net--nordis-de", entity: "nordis-de", validation_pct: 99.9, max_gap_pct: 0.2 },
+                { variant_id: "revenu-net--nordis-fr", entity: "nordis-fr", validation_pct: null, max_gap_pct: null },
+              ],
+            },
+            { id: 8, kpi_version: 3, status: "failed", started_at: "2026-11-02T10:00:00Z", finished_at: null, tolerance_pct: 1, scope: null, results: [] },
+            { id: 9, kpi_version: 4, status: "étrange", started_at: "2026-11-02T10:00:00Z", finished_at: null, tolerance_pct: 1, scope: null, results: [] },
+          ],
+        },
+      },
+    );
+    fiche();
+    expect(await screen.findByText("1,5 % (propre au KPI)")).toBeInTheDocument();
+    const scopes = screen.getByRole("group", { name: "Scopes déclarés" });
+    expect(within(scopes).getByRole("rowheader", { name: "exercice" }).closest("tr")).toHaveTextContent("exerciceFY2026mois, entité");
+    expect(within(scopes).getByRole("rowheader", { name: "s1" }).closest("tr")).toHaveTextContent("s12026-01-01 → 2026-06-30—");
+    expect(within(scopes).getByRole("rowheader", { name: "tout" }).closest("tr")).toHaveTextContent("tout——");
+
+    const runs = await screen.findByRole("group", { name: "Comparaisons" });
+    const done = within(runs).getByRole("link", { name: "7" });
+    expect(done).toHaveAttribute("href", "#/w/groupe-nordis/comparaison?kpi=revenu-net&id=7&variant=nordis-de");
+    const row7 = done.closest("tr")!;
+    expect(row7).toHaveTextContent("v4");
+    expect(row7).toHaveTextContent("Terminée");
+    expect(row7).toHaveTextContent("nordis-de 99 % · nordis-fr —");
+    const row8 = within(runs).getByRole("rowheader", { name: "8" }).closest("tr")!;
+    expect(within(row8).queryByRole("link")).toBeNull();
+    expect(row8).toHaveTextContent("Échouée");
+    expect(row8.lastElementChild).toHaveTextContent(/^—$/);
+    expect(within(runs).getByRole("rowheader", { name: "9" }).closest("tr")).toHaveTextContent("étrange");
+  });
+
+  it("sans tolérance propre, celle de l'espace ; sans scope ni comparaison, des messages explicites", async () => {
+    routes({ ...SHEET, tolerance: null }, { [COMPARISONS]: { json: [] } });
+    fiche();
+    expect(await screen.findByText("1 % (défaut de l'espace)")).toBeInTheDocument();
+    expect(screen.getByText(/Aucun scope déclaré/)).toBeInTheDocument();
+    expect(await screen.findByText("Aucune comparaison chiffrée pour ce KPI.")).toBeInTheDocument();
+  });
+
+  it("sans aucune tolérance : un tiret ; comparaisons en chargement puis en échec", async () => {
+    const reply = pending<{ status: number; json: unknown }>();
+    routes({ ...SHEET, tolerance: {}, workspace_tolerance: null }, { [COMPARISONS]: reply.promise });
+    fiche();
+    const tolerance = (await screen.findByText("Tolérance")).closest(".card")!;
+    expect(tolerance.querySelector("p")).toHaveTextContent(/^—$/);
+    expect(screen.getByText("Chargement des comparaisons…")).toHaveAttribute("role", "status");
+    reply.resolve({ status: 500, json: { detail: "Historique illisible." } });
+    expect(await screen.findByText("Historique illisible.")).toBeInTheDocument();
+    expect(screen.queryByText("Chargement des comparaisons…")).toBeNull();
+  });
+});
+
+describe("fiche : états vides et échecs", () => {
+  it("statut non validé, propriétaire inconnu, sans validateurs ni synonymes ni domaine", async () => {
+    sheetServer({ ...SHEET, status: "draft", owner: null, owner_name: null, validators_required: null, synonyms: [], domain: null, domain_label: null });
+    fiche();
+    expect(await screen.findByText("v4 · Brouillon")).toBeInTheDocument();
+    expect(screen.getByText("Propriétaire : —")).toBeInTheDocument();
+    expect(screen.queryByText("Finance")).toBeNull();
+  });
+
+  it("validé sans date de validation : le libellé du statut seul", async () => {
+    sheetServer({ ...SHEET, validated_at: null });
+    fiche();
+    expect(await screen.findByText("v4 · Validé")).toBeInTheDocument();
+  });
+
+  it("un KPI sans déclinaison le dit dans la définition et dans l'onglet", async () => {
+    sheetServer({ ...SHEET, variants: [] });
+    fiche();
+    expect(await screen.findByText("Aucune déclinaison.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Déclinaisons/ }));
+    expect(await screen.findByText(/Ce KPI n'a pas de déclinaison/)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Tableau : Déclinaisons" })).toBeNull();
+  });
+
+  it("le graphe en échec affiche un bandeau, le reste de la fiche reste lisible", async () => {
+    routes(SHEET, { [`${DOC}/layout`]: { status: 500, json: { detail: "Graphe illisible." } } });
+    fiche();
+    expect(await screen.findByText("Graphe illisible.")).toBeInTheDocument();
+    expect(screen.queryByRole("figure")).toBeNull();
+    expect(screen.getByText("Une nouvelle version touchera 2 documents.")).toBeInTheDocument();
+  });
+
+  it("sans version taguée, ni tableau ni formulaire de comparaison", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=versions";
+    routes(SHEET, { [`${DOC}/versions`]: { json: [] } });
+    fiche();
+    expect(await screen.findByText(/Aucune version taguée/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Afficher les écarts" })).toBeNull();
+  });
+
+  it("les listes De / À choisissent les versions comparées", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=versions";
+    sheetServer();
+    fiche();
+    const base = await screen.findByRole("combobox", { name: "De" });
+    await userEvent.selectOptions(base, "4");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "À" }), "3");
+    await userEvent.click(screen.getByRole("button", { name: "Afficher les écarts" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/w/groupe-nordis/fiche/revenu-net?tab=versions&base=4&other=3"));
+  });
+
+  it("un diff de versions en échec s'affiche à la place des écarts", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=versions&base=3&other=4";
+    routes(SHEET, {
+      [`${DOC}/versions`]: { json: VERSIONS },
+      [`${DOC}/diff?base=3&other=4`]: { status: 500, json: { detail: "Diff impossible." } },
+      [`${DOC}/layout?version=3`]: { json: LAYOUT },
+      [`${DOC}/layout?version=4`]: { json: LAYOUT },
+    });
+    fiche();
+    expect(await screen.findByText("Diff impossible.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /Écarts de v3 à v4/ })).toBeNull();
+  });
+
+  it("les versions en échec affichent un bandeau", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=versions";
+    routes(SHEET, { [`${DOC}/versions`]: { status: 500, json: { detail: "Historique Git illisible." } } });
+    fiche();
+    expect(await screen.findByText("Historique Git illisible.")).toBeInTheDocument();
+  });
+
+  it("dépendances : listes vides, et référence introuvable sans lien", async () => {
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net?tab=dependances";
+    sheetServer({
+      ...SHEET,
+      dependencies: {
+        references: [{ id: "fantome", kind: "kpi_ref", version: 2, found: false, document_kind: "kpi", label: null, status: null, domain: null, domain_label: null }],
+        referenced_by: [],
+        impact: 0,
+      },
+    });
+    fiche();
+    const references = await screen.findByRole("region", { name: "Références" });
+    expect(within(references).getByText("fantome (introuvable)")).toBeInTheDocument();
+    expect(within(references).queryByRole("link")).toBeNull();
+    expect(within(references).getByText("KPI · v2")).toBeInTheDocument();
+    const incoming = screen.getByRole("region", { name: "Référencé par" });
+    expect(within(incoming).getByText("Référencé par (0)")).toBeInTheDocument();
+    expect(within(incoming).getByText("Aucun document ne le référence.")).toBeInTheDocument();
+    expect(screen.getByText("Aucun document n'en dépend.")).toBeInTheDocument();
+  });
+
+  it("le diff au canonique en échec s'affiche à la place des graphes", async () => {
+    const VARIANT = "/api/workspaces/groupe-nordis/documents/revenu-net--nordis-de";
+    window.location.hash = "#/w/groupe-nordis/fiche/revenu-net--nordis-de?diff=canonique";
+    fakeServer(({ path }) => {
+      if (path === `${VARIANT}/sheet`) return { json: { ...SHEET, id: "revenu-net--nordis-de", kind: "variant", label: "Revenu net — nordis-de", has_graph: false, variants: [] } };
+      if (path === `${VARIANT}/canonical-diff`) return { status: 500, json: { detail: "Canonique introuvable." } };
+      return undefined;
+    });
+    fiche();
+    expect(await screen.findByText("Canonique introuvable.")).toBeInTheDocument();
+    expect(screen.queryByRole("figure")).toBeNull();
+  });
+});

@@ -136,6 +136,38 @@ describe("Mes connexions : dépôt GitHub de l'espace (plan 0025)", () => {
     expect(await within(github).findByRole("button", { name: "Se connecter à GitHub" })).toBeInTheDocument();
   });
 
+  it("un jeton refusé par GitHub propose de reconnecter, en action principale", async () => {
+    server(() => status({ state: "expired", source: "vault" }));
+    screenOf();
+    const github = await section();
+    expect(within(github).getByText("Jeton refusé")).toHaveClass("tone-warn");
+    expect(within(github).getByRole("button", { name: "Reconnecter GitHub" })).toHaveClass("btn-primary");
+  });
+
+  it("un jeton fourni par l'environnement ne se déconnecte pas depuis l'écran", async () => {
+    server(() => status({ state: "connected", source: "environment", account: "ci-bot" }));
+    screenOf();
+    const github = await section();
+    expect(within(github).getByText("jeton de l'environnement")).toBeInTheDocument();
+    expect(within(github).queryByRole("button")).toBeNull();
+  });
+
+  it("une déconnexion refusée est expliquée et le jeton reste affiché", async () => {
+    fakeServer((call: Call) => {
+      if (call.path === `${API}/connections`) return { json: [] };
+      if (call.path === `${API}/connections/platforms`) return { json: [] };
+      if (call.path === `${API}/github` && call.method === "GET") return { json: status({ state: "connected", source: "vault", account: "anna-k" }) };
+      if (call.path === `${API}/github` && call.method === "DELETE") return { status: 500, json: { detail: { code: "vault_locked", message: "Trousseau verrouillé." } } };
+      return undefined;
+    });
+    screenOf();
+    const github = await section();
+    await userEvent.click(await within(github).findByRole("button", { name: "Déconnecter GitHub" }));
+    expect(await within(github).findByText("Trousseau verrouillé.")).toHaveClass("tone-bad");
+    expect(within(github).getByText("@anna-k")).toBeInTheDocument();
+    expect(within(github).getByRole("button", { name: "Déconnecter GitHub" })).toBeEnabled();
+  });
+
   it("sans client OAuth configuré, ni bouton ni champ ; hors GitHub, pas de section", async () => {
     server(() => status({ configured: false }));
     const { unmount } = screenOf();
