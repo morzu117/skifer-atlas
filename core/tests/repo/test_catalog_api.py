@@ -699,15 +699,22 @@ def test_removed_clone_counts_are_unavailable(client, joined):
     assert workspace["counts"] == {"kpi": None, "concept": None, "open_proposals": None}
 
 
-def test_io_error_with_existing_clone_is_not_hidden(client, joined, monkeypatch):
+def _unexpected_error(response, caplog, kind):
+    """Le middleware de l'API (500 générique) a reçu l'erreur d'origine, sans 404 trompeur."""
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Erreur interne du serveur."}
+    errors = [r for r in caplog.records if r.message == "Erreur inattendue de l’API"]
+    assert errors and errors[-1].exc_info[0] is kind
+
+
+def test_io_error_with_existing_clone_is_not_hidden(client, joined, monkeypatch, caplog):
     from skifer_atlas.api.routes import catalog
 
     def fail(*args):
         raise PermissionError("accès refusé")
 
     monkeypatch.setattr(catalog, "ensure_index", fail)
-    with pytest.raises(PermissionError, match="accès refusé"):
-        client.get(f"{WS}/catalog")
+    _unexpected_error(client.get(f"{WS}/catalog"), caplog, PermissionError)
 
 
 def test_clone_removed_during_counts(client, joined, monkeypatch):
@@ -777,7 +784,7 @@ def test_registry_busy_after_route_does_not_replace_result(client, joined, monke
         assert response.json()["detail"] == {"code": "workspace_dirty", "message": "Conflit métier."}
 
 
-def test_registry_busy_preserves_original_io_error(client, joined, monkeypatch):
+def test_registry_busy_preserves_original_io_error(client, joined, monkeypatch, caplog):
     from skifer_atlas.api.routes import catalog, common
     from skifer_atlas.repo.git import RepoError
 
@@ -789,8 +796,7 @@ def test_registry_busy_preserves_original_io_error(client, joined, monkeypatch):
         raise PermissionError("accès refusé")
 
     monkeypatch.setattr(catalog, "ensure_index", fail)
-    with pytest.raises(PermissionError, match="accès refusé"):
-        client.get(f"{WS}/catalog")
+    _unexpected_error(client.get(f"{WS}/catalog"), caplog, PermissionError)
 
 
 def test_registry_busy_after_successful_read_does_not_replace_result(client, joined, monkeypatch):
