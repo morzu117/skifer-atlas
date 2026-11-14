@@ -661,9 +661,8 @@ def test_auto_sync_removal_between_check_and_lock(client, joined, monkeypatch):
 ])
 @pytest.mark.parametrize("during", [False, True])
 def test_removed_clone_is_not_found(client, joined, monkeypatch, method, path, during):
-    import shutil
-
     from skifer_atlas.api.routes import catalog, proposals, sheet, workspaces
+    from skifer_atlas.files import remove_tree
 
     repo = repo_dir("groupe-nordis")
     if during:
@@ -674,12 +673,12 @@ def test_removed_clone_is_not_found(client, joined, monkeypatch, method, path, d
 
         def remove_after_lookup(ws):
             workspace = lookup(ws)
-            shutil.rmtree(repo)
+            remove_tree(repo)
             return workspace
 
         monkeypatch.setattr(module, "workspace_or_404", remove_after_lookup)
     else:
-        shutil.rmtree(repo)
+        remove_tree(repo)
     response = getattr(client, method)(f"{WS}{path}")
     # Ces lectures peuvent réussir sans autre accès au clone après le retrait.
     if during and path in ("", "/index", "/sync/auto"):
@@ -691,9 +690,9 @@ def test_removed_clone_is_not_found(client, joined, monkeypatch, method, path, d
 
 
 def test_removed_clone_counts_are_unavailable(client, joined):
-    import shutil
+    from skifer_atlas.files import remove_tree
 
-    shutil.rmtree(repo_dir("groupe-nordis"))
+    remove_tree(repo_dir("groupe-nordis"))
     [workspace] = client.get("/api/workspaces").json()
     assert workspace["counts"] == {"kpi": None, "concept": None, "open_proposals": None}
 
@@ -717,12 +716,11 @@ def test_io_error_with_existing_clone_is_not_hidden(client, joined, monkeypatch,
 
 
 def test_clone_removed_during_counts(client, joined, monkeypatch):
-    import shutil
-
     from skifer_atlas.api.routes import workspaces
+    from skifer_atlas.files import remove_tree
 
     def remove_before_index(repo, db):
-        shutil.rmtree(repo)
+        remove_tree(repo)
         raise FileNotFoundError(str(repo))
 
     monkeypatch.setattr(workspaces, "ensure_index", remove_before_index)
@@ -731,9 +729,9 @@ def test_clone_removed_during_counts(client, joined, monkeypatch):
 
 
 def test_removed_clone_does_not_bypass_token(client, joined):
-    import shutil
+    from skifer_atlas.files import remove_tree
 
-    shutil.rmtree(repo_dir("groupe-nordis"))
+    remove_tree(repo_dir("groupe-nordis"))
     response = client.get(f"{WS}/catalog", headers={"Authorization": "Bearer incorrect"})
     assert response.status_code == 401
 
