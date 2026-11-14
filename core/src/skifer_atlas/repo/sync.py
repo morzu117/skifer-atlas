@@ -107,8 +107,9 @@ def create_workspace(meta: WorkspaceMeta, creator: str | None = None) -> Workspa
             repo.mkdir(parents=True)
             created = True
             run_git(["init", "--quiet", f"--initial-branch={meta.main_branch}"], repo)
-            (repo / META_FILE).write_text(_dump(meta.model_dump()), encoding="utf-8")
-            (repo / GOVERNANCE_FILE).write_text(dump_governance(governance), encoding="utf-8")
+            (repo / META_FILE).write_text(_dump(meta.model_dump()), encoding="utf-8", newline="\n")
+            (repo / GOVERNANCE_FILE).write_text(dump_governance(governance), encoding="utf-8",
+                                                newline="\n")
             run_git(["add", META_FILE, GOVERNANCE_FILE], repo)
             run_git(["commit", "--quiet", "-m", f"Création de l'espace {meta.name}"], repo)
             # Dans le bloc nettoyé : un registre illisible ou un disque plein ne laisse pas un

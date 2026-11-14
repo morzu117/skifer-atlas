@@ -421,7 +421,7 @@ def test_generated_sql_parses_in_its_dialect(dialect):
 
 def atlas(*args):
     return subprocess.run([ATLAS, *map(str, args)], capture_output=True, text=True,
-                          check=False)
+                          encoding="utf-8", check=False)
 
 
 def test_cli_compile_finds_the_space_calendars():
@@ -450,7 +450,7 @@ def test_cli_run_reports_the_cardinality_failure():
     folder = FIXTURES / "cardinalite"
     result = atlas("run", folder / "kpi.yaml", "--data", folder)
     assert result.returncode == 1
-    assert "non respectée en n03" in result.stderr
+    assert "cardinalité N:1 non respectée en n03, clés en double à droite : 1" in result.stderr
 
 
 def test_cli_compilability_exit_code():

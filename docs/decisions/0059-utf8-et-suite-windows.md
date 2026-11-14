@@ -16,3 +16,10 @@ retire l'attribut lecture seule des fichiers lorsque nécessaire et laisse remon
 autres erreurs. La démonstration est construite en Python et Git, sans Bash, par `examples/depot-nordis.py`,
 seule source de son historique ; `examples/depot-nordis.sh` n'en est plus qu'un relais.
 La suite conserve des tests portables de ces comportements sur les trois plateformes.
+
+À la création d'un espace, `atlas.yaml` et `governance.yaml` sont écrits en UTF-8
+avec des fins de ligne LF explicites. Les commits d’identité et de retour écrivent
+directement le YAML de gouvernance en UTF-8 avec des fins de ligne LF. Ainsi, l'arbre initial et le commit de retour d'identité
+concordent même si `core.autocrlf` est désactivé sous Windows. Nous ne forçons pas la
+configuration Git des dépôts existants : leurs attributs et préférences de copie de travail
+restent ceux de leurs utilisateurs.

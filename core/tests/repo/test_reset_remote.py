@@ -6,9 +6,11 @@ registre, et les références du dépôt distant avant et après : il n'est jama
 """
 
 import os
+import subprocess
 import tempfile
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -109,6 +111,39 @@ def test_reset_after_a_publication_interrupted_after_the_push(
     assert published(bare) == remote_before  # le dépôt distant garde sa publication partielle
     assert get_workspace(META.id).model_dump() == registry
     assert not get_workspace(META.id).git_remote
+
+
+@pytest.mark.parametrize("autocrlf", ["true", "false"])
+def test_reset_restores_the_exact_tree_with_windows_newlines(atlas_env, tmp_path, monkeypatch,
+                                                              autocrlf):
+    from skifer_atlas.githost.local import LocalHost
+
+    git(tmp_path, "config", "--global", "core.autocrlf", autocrlf)
+    monkeypatch.setattr(LocalHost, "current_account", lambda self: "nouveau")
+    original_write = Path.write_text
+
+    def windows_write(path, data, *args, **kwargs):
+        if path.name in {"atlas.yaml", "governance.yaml"}:
+            kwargs.setdefault("newline", "\r\n")
+        return original_write(path, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", windows_write)
+    create_workspace(META, creator="ancien")
+    repo = repo_dir(META.id)
+    before = git(repo, "rev-parse", "main^{tree}").strip()
+    original = subprocess.run(["git", "show", "main:governance.yaml"], cwd=repo,
+                              capture_output=True, check=True).stdout
+    assert b"\r\n" not in original
+    meta = subprocess.run(["git", "show", "main:atlas.yaml"], cwd=repo,
+                          capture_output=True, check=True).stdout
+    assert b"\r\n" not in meta
+    bare = bare_repository(tmp_path)
+    interrupted_identity(bare, monkeypatch, "branch")
+    assert reset_remote(META.id).status == DONE
+    assert git(repo, "rev-parse", "main^{tree}").strip() == before
+    restored = subprocess.run(["git", "show", "main:governance.yaml"], cwd=repo,
+                              capture_output=True, check=True).stdout
+    assert restored == original
 
 
 @pytest.mark.parametrize("step", ["merge", "branch"])
