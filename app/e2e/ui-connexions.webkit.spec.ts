@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
-import { FAKE_DATABRICKS, FAKE_SNOWFLAKE } from "./demo";
+import { API, FAKE_DATABRICKS, FAKE_SNOWFLAKE } from "./demo";
 import { AUTH_API, isolatedDemo, relay, test } from "./isolation";
 
 // Écran 106 sous WebKit, le moteur de la vue Tauri sous macOS (règle 5) : focus, clavier,
@@ -105,4 +105,24 @@ test("[S-UI-106-15] WebKit : panneau, champs verrouillés pendant l'OAuth puis l
   await expect(form.getByRole("textbox", { name: "Hôte" })).toHaveValue(FAKE_DATABRICKS);
   await expect(form.getByRole("alert")).toHaveCount(0);
   await page.context().unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("[S-UI-106-17] WebKit : liste des points d'accès lente, le panneau attend puis propose un identifiant libre qui ne change plus", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(`${API}/api/workspaces/${ws.id}/connections`, async (route) => { await held; await route.fallback(); });
+  await page.goto(`${ws.root}/connexions`);
+  await expect(page.getByRole("status").filter({ hasText: "Chargement du formulaire…" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Identifiant" })).toHaveCount(0);
+
+  release();
+  await expect(row(page)).toBeVisible();
+  const form = panel(page);
+  await expect(form.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de");
+  await form.getByRole("textbox", { name: "Hôte" }).fill(FAKE_DATABRICKS);
+  await expect(form.getByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-de");
+  await expect(form.getByRole("combobox", { name: "Entité" })).toHaveValue("nordis-de");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });

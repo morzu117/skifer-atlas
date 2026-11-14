@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -141,6 +141,78 @@ describe("libellés", () => {
 });
 
 describe("mes connexions", () => {
+  it("attend la liste avant de proposer une entité et un identifiant stables", async () => {
+    let release!: (reply: { json: Connection[] }) => void;
+    const pending = new Promise<{ json: Connection[] }>((resolve) => { release = resolve; });
+    const api = server(LIST, ({ method, path }) => method === "GET" && path === `${API}/connections` ? pending : undefined);
+    render(screenFor());
+    await waitFor(() => expect(api.calls.some((c) => c.path === `${API}/connections/platforms`)).toBe(true));
+    await screen.findByRole("button", { name: "Ajouter un point d'accès" });
+    expect(screen.queryByRole("textbox", { name: "Identifiant" })).not.toBeInTheDocument();
+    expect(screen.getByText("Chargement des points d'accès…")).toHaveAttribute("role", "status");
+    expect(screen.getByText("Chargement du formulaire…")).toHaveAttribute("role", "status");
+    await act(async () => release({ json: LIST }));
+    const id = await screen.findByRole("textbox", { name: "Identifiant" });
+    expect(id).toHaveValue("dbx-de");
+    expect(screen.getByRole("combobox", { name: "Entité" })).toHaveValue("nordis-de");
+    await act(async () => {});
+    expect(id).toHaveValue("dbx-de");
+  });
+
+  it.each(["saisie", "valeur identique"])("conserve l'identifiant pendant la relecture après un échec : %s", async (mode) => {
+    let release!: (reply: { json: Connection[] }) => void;
+    const pending = new Promise<{ json: Connection[] }>((resolve) => { release = resolve; });
+    let attempts = 0;
+    server(LIST, ({ method, path }) => {
+      if (method === "GET" && path === `${API}/connections`) {
+        return ++attempts === 1 ? { status: 500, json: { detail: { message: "Liste illisible" } } } : pending;
+      }
+      return undefined;
+    });
+    render(screenFor());
+    const alert = await screen.findByRole("alert");
+    const id = await screen.findByRole("textbox", { name: "Identifiant" });
+    expect(id).toHaveValue("dbx-fr");
+    await userEvent.click(within(alert).getByRole("button", { name: "Réessayer" }));
+    expect(screen.getByText("Chargement des points d'accès…")).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Identifiant" })).toBe(id);
+    if (mode === "saisie") {
+      await userEvent.clear(id);
+      await userEvent.type(id, "dbx-fr");
+    } else {
+      fireEvent.change(id, { target: { value: "dbx-fr" } });
+    }
+    await act(async () => release({ json: LIST }));
+    await screen.findByRole("table", { name: "Points d'accès de l'espace" });
+    expect(screen.getByRole("textbox", { name: "Identifiant" })).toBe(id);
+    expect(id).toHaveValue("dbx-fr");
+    expect(screen.getByRole("combobox", { name: "Entité" })).toHaveValue("nordis-fr");
+  });
+
+  it("conserve le formulaire pendant une relecture de la liste déjà chargée", async () => {
+    let release!: (reply: { json: Connection[] }) => void;
+    const pending = new Promise<{ json: Connection[] }>((resolve) => { release = resolve; });
+    let attempts = 0;
+    server(LIST, ({ method, path }) => {
+      if (method === "GET" && path === `${API}/connections` && ++attempts > 1) return pending;
+      if (method === "DELETE" && path === `${API}/connections/dbx-fr/token`) return { json: { revoked: true, remote_revoked: true } };
+      return undefined;
+    });
+    render(screenFor());
+    const id = await screen.findByRole("textbox", { name: "Identifiant" });
+    const host = screen.getByRole("textbox", { name: "Hôte" });
+    await userEvent.type(host, "exemple.net");
+    await userEvent.click(screen.getByRole("button", { name: "Révoquer Databricks · dbx-fr" }));
+    await waitFor(() => expect(attempts).toBe(2));
+    expect(screen.getByRole("textbox", { name: "Hôte" })).toBe(host);
+    await act(async () => release({ json: [...LIST, connection({ access_point: "dbx-de" })] }));
+    await screen.findByRole("button", { name: "Se connecter à Databricks · dbx-de" });
+    expect(id).toHaveValue("dbx-de");
+    expect(host).toHaveValue("exemple.net");
+    expect(screen.getByRole("combobox", { name: "Entité" })).toHaveValue("nordis-de");
+  });
+
   it("évite les repères dupliqués et rend les tableaux accessibles", async () => {
     server();
     render(screenFor());

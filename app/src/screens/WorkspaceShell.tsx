@@ -316,7 +316,7 @@ export function WorkspaceShell({
         {ws && view === "fiche" && doc && <Fiche revision={dataRevision} ws={ws} id={doc} params={params} heading={heading} />}
         {ws && view === "propositions" && <Proposals ws={ws} params={params} heading={heading} onMerged={refreshWorkspace} />}
         {ws && view === "comparaison" && <Comparison ws={ws} params={params} heading={heading} />}
-        {ws && view === "connexions" && <Connections ws={ws} heading={heading} />}
+        {ws && view === "connexions" && <Connections key={ws.id} ws={ws} heading={heading} />}
         {ws && view === "administration" && <Administration ws={ws} heading={heading} onMerged={refreshWorkspace} onWorkspaceChange={replaceWorkspace} />}
       </main>
     </div>

@@ -92,6 +92,27 @@ describe("démarrage et serveur injoignable", () => {
     await userEvent.click(screen.getByRole("button", { name: "Réessayer" }));
     expect(await screen.findByRole("heading", { name: "Catalogue" })).toBeInTheDocument();
   });
+
+  it("recharge le panneau de connexions après une liste injoignable", async () => {
+    let down = true;
+    fakeServer(({ path }) => {
+      if (path === "/api/workspaces/groupe-nordis") return { json: workspace() };
+      if (path === "/api/workspaces/groupe-nordis/connections") return down ? "down" : { json: [] };
+      if (path.endsWith("/connections/platforms")) return { json: [{ id: "databricks", label: "Databricks", supported: true }] };
+      if (path.includes("proposals")) return { json: [] };
+      return undefined;
+    });
+    goTo("#/w/groupe-nordis/connexions");
+    render(<App startup={FAST} />);
+    const banner = await screen.findByRole("alert");
+    expect(banner).toHaveTextContent("Serveur local injoignable");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.queryByRole("textbox", { name: "Identifiant" })).not.toBeInTheDocument();
+    down = false;
+    await userEvent.click(within(banner).getByRole("button", { name: "Réessayer" }));
+    expect(await screen.findByRole("textbox", { name: "Identifiant" })).toHaveValue("dbx-fr");
+    expect(screen.queryByText("Serveur local injoignable")).not.toBeInTheDocument();
+  });
 });
 
 describe("coque d'un espace", () => {

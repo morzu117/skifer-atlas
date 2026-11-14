@@ -292,3 +292,35 @@ a.write_text(yaml.safe_dump(p,allow_unicode=True,sort_keys=False))`, ws.work);
   await expect(option).toHaveCount(1);
   await expect(option).toBeDisabled();
 });
+
+test("[S-UI-106-16] liste des points d'accès lente : le panneau attend, puis propose un identifiant libre qui ne change plus ; un identifiant déjà pris retapé est refusé", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  // La liste des points d'accès répond quand le test la libère ; les plateformes, tout de suite.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(`${API}/api/workspaces/${ws.id}/connections`, async (route) => { await held; await route.fallback(); });
+  await page.goto(`${ws.root}/connexions`);
+  await expect(page.getByRole("status").filter({ hasText: "Chargement du formulaire…" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Identifiant" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Ajouter un point d'accès" })).toBeDisabled();
+
+  release();
+  await expect(row(page)).toBeVisible();
+  const form = panel(page);
+  const id = form.getByRole("textbox", { name: "Identifiant" });
+  // dbx-fr est déjà déclaré : la première entité libre est nordis-de, dès le premier affichage.
+  await expect(id).toHaveValue("dbx-de");
+  await expect(form.getByRole("combobox", { name: "Entité" })).toHaveValue("nordis-de");
+  await expect(page.getByRole("button", { name: "Ajouter un point d'accès" })).toBeEnabled();
+
+  await id.fill("dbx-fr");
+  await form.getByRole("textbox", { name: "Hôte" }).fill(FAKE_DATABRICKS);
+  await form.getByRole("textbox", { name: "SQL warehouse" }).fill("abc123");
+  await form.getByRole("textbox", { name: "Schéma" }).fill("gold.finance");
+  await form.getByRole("button", { name: "Tester la connexion" }).click();
+  await expect(form.getByRole("alert").filter({ hasText: "déjà déclaré" })).toContainText("« dbx-fr » est déjà déclaré : s'y connecter depuis la liste.");
+  await expect(id).toHaveValue("dbx-fr");
+  await expect(form.getByRole("textbox", { name: "Hôte" })).toHaveValue(FAKE_DATABRICKS);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
