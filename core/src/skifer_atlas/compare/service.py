@@ -12,7 +12,7 @@ import threading
 from pathlib import Path
 
 from .. import connections
-from ..compile import load_calendars
+from ..compile import CompileError, load_calendars
 from ..connectors.base import QueryResult
 from ..governance.model import DEFAULT_TOLERANCE
 from ..index import ensure_index
@@ -167,7 +167,11 @@ def comparison_setup(workspace_id: str, kpi_id: str) -> dict:
             "entity": document.entity, "variant_id": document.data_product.id, "mode": document.mode,
             "version": document.data_product.version, "platform": platform,
             "outdated": outdated, "unavailable": unavailable})
-    output = orchestrate._output_group_by(kpi)
+    try:
+        output = orchestrate._output_group_by(kpi) if kpi.scopes else []
+    except CompileError:
+        # Le graphe peut sortir d’une jointure : les scopes explicites restent présentables.
+        output = []
     scopes = []
     for scope in kpi.scopes or []:
         dimensions = list(scope.granularity or output)

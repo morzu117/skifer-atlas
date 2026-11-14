@@ -10,7 +10,7 @@ import {
   type Platform,
   type Workspace,
 } from "../api";
-import { Banner } from "../components/Banner";
+import { Banner, RetryAction } from "../components/Banner";
 import { Field } from "../components/Field";
 import { GitHubConnect } from "../components/GitHubConnect";
 import { Icon } from "../components/Icon";
@@ -424,7 +424,7 @@ export function Connections({ ws, heading }: { ws: Workspace; heading: RefObject
             </p>
           )}
           {list.kind === "error" && (
-            <Banner tone="bad" title={list.error.title}>
+            <Banner tone="bad" title={list.error.title} action={<RetryAction onRetry={reload} />}>
               {list.error.text}
             </Banner>
           )}

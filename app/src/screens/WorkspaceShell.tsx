@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, UnreachableError, type Workspace } from "../api";
-import { Banner } from "../components/Banner";
+import { Banner, RetryAction } from "../components/Banner";
 import { Brand } from "../components/Brand";
 import { Icon, type IconName } from "../components/Icon";
 import { InterruptedAttachment } from "../components/InterruptedAttachment";
@@ -43,6 +43,7 @@ export function WorkspaceShell({
   onUnknown: (id: string) => void;
 }) {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
+  const [loadRetry, setLoadRetry] = useState(0);
   const [waiting, setWaiting] = useState(0);
   const [refresh, setRefresh] = useState<{ id: string; revision: number } | null>(null);
   const [replacement, setReplacement] = useState(0);
@@ -67,7 +68,7 @@ export function WorkspaceShell({
     return () => {
       alive = false;
     };
-  }, [wsId, onUnknown]);
+  }, [wsId, onUnknown, loadRetry]);
 
   // Les relectures conservent les composants et leurs états de saisie.
   const mountedWorkspace = useRef<string | null>(null);
@@ -182,6 +183,7 @@ export function WorkspaceShell({
     : notice?.status === "wrong_branch" ? explain(new ApiError(409, "sync_wrong_branch", ""))
     : notice?.status === "error" ? explain(new ApiError(500, "sync_error", ""))
     : { title: "Dépôt momentanément inaccessible", text: "La copie locale reste disponible. Vérifiez le réseau ou l’accès au dépôt." };
+  useEffect(() => { setNotice(null); }, [syncKey]);
   const syncNotice = notice?.key === syncKey && (
     <Banner tone="info" title={syncMessage.title}>{syncMessage.text}</Banner>
   );
@@ -239,7 +241,7 @@ export function WorkspaceShell({
           </p>
         )}
         {load.kind === "error" && (
-          <Banner tone="bad" title={load.error.title}>
+          <Banner tone="bad" title={load.error.title} action={<RetryAction onRetry={() => setLoadRetry((n) => n + 1)} />}>
             {load.error.text}
           </Banner>
         )}
@@ -288,9 +290,9 @@ export function WorkspaceShell({
         </nav>
         {ws && (
           <div className="sidebar-user">
-            <span className="avatar-round">{initials(ws.account || "?")}</span>
+            <span className="avatar-round">{initials(ws.user_name || ws.account || "?")}</span>
             <span className="sidebar-user-text">
-              <span className="sidebar-user-name">{ws.account}</span>
+              <span className="sidebar-user-name">{ws.user_name || ws.account}</span>
               <span className="sidebar-user-role">{ws.role_label}</span>
             </span>
           </div>
@@ -304,7 +306,7 @@ export function WorkspaceShell({
           </p>
         )}
         {load.kind === "error" && (
-          <Banner tone="bad" title={load.error.title}>
+          <Banner tone="bad" title={load.error.title} action={<RetryAction onRetry={() => setLoadRetry((n) => n + 1)} />}>
             {load.error.text}
           </Banner>
         )}

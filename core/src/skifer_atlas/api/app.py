@@ -168,6 +168,17 @@ def create_app(token: str | None = None, dev_no_token: bool | None = None) -> Fa
     app = FastAPI(title="Skifer Atlas", version=__version__, **docs)
     app.state.token = token
     app.state.dev_no_token = dev_no_token
+
+    @app.middleware("http")
+    async def unexpected_error(request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("Erreur inattendue de l’API")
+            return JSONResponse(status_code=500, content={"detail": "Erreur interne du serveur."})
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["tauri://localhost", "http://tauri.localhost", "http://localhost:1420"],

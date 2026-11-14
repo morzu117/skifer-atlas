@@ -13,7 +13,7 @@ from ...admin import is_space_referent
 from ...dbfile import without_waiting
 from ...index import ensure_index, index_fresh
 from ...repo.git import RepoError, clone_lock, head
-from ...repo.layout import WorkspaceMeta
+from ...repo.layout import WorkspaceMeta, read_governance
 from ...repo.reset_remote import attachment_state, reset_remote
 from ...repo.sync import create_workspace, join_workspace, set_remote, sync_workspace
 from ...workspaces import (
@@ -66,6 +66,11 @@ def _counts(ws: Workspace) -> dict:
 
 def _out(ws: Workspace, counts: bool = False) -> dict:
     found = {**ws.model_dump(), "role_label": ROLE_LABELS[ws.role]}
+    try:
+        governance = read_governance(repo_dir(ws.id))
+        found["user_name"] = next((m.name for m in governance.members if m.account == ws.account), None) if governance else None
+    except (RepoError, OSError):
+        found["user_name"] = None
     if counts:
         found["counts"] = _counts(ws)
     else:
