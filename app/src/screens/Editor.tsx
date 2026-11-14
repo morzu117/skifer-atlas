@@ -125,6 +125,7 @@ function NewVariant({ ws, kpiId, heading }: { ws: Workspace; kpiId: string; head
   }, [ws.id, ws.entities, kpiId]);
 
   const available = ws.entities.filter((candidate) => !existing?.includes(candidate));
+  const loading = existing === null && !failure;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -164,12 +165,14 @@ function NewVariant({ ws, kpiId, heading }: { ws: Workspace; kpiId: string; head
         <form className="card form editor-new-card" onSubmit={submit} noValidate>
           <h1 ref={heading} tabIndex={-1}>Nouvelle déclinaison de {kpiId}</h1>
           <p className="muted">Le brouillon reste sur ce poste jusqu'à la soumission d'une proposition.</p>
-          {existing === null && !failure ? <p role="status">Chargement des entités…</p> : null}
+          {/* Le chargement s'annonce sans occuper de place : la liste qui arrive ne déplace pas le
+              formulaire sous le pointeur, et un choix fait pendant ce temps n'est pas perdu. */}
+          <p role="status" className="sr-only">{loading ? "Chargement des entités…" : ""}</p>
           {existing !== null && available.length === 0 ? <p>Aucune entité de cet espace n'est disponible pour une nouvelle déclinaison.</p> : null}
           <div className="field">
             <label htmlFor={ids.entity}>Entité<span className="required"> requise</span></label>
             <Select id={ids.entity} value={entity} aria-invalid={errors.entity ? true : undefined} aria-describedby={errors.entity ? `${ids.entity}-error` : undefined} onChange={(event) => { setEntity(event.target.value); setResume(null); }}>
-              <option value="">Choisir…</option>
+              <option value="">{loading ? "Chargement des entités…" : "Choisir…"}</option>
               {available.map((value) => <option key={value} value={value}>{value}</option>)}
             </Select>
             {errors.entity && <span id={`${ids.entity}-error`} className="field-error">{errors.entity}</span>}
