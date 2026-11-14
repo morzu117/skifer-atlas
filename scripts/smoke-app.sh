@@ -150,22 +150,33 @@ import time
 
 pid, method = int(sys.argv[1]), sys.argv[2]
 if method == "cmdq":
-    script = '''on run argv
-  set appPid to item 1 of argv as integer
-  tell application "System Events"
-    set frontmost of (first application process whose unix id is appPid) to true
-    keystroke "q" using command down
-  end tell
-end run'''
-    command = ["osascript", "-", str(pid)]
+    script = '''tell application "System Events" to keystroke "q" using command down'''
+    command = ["osascript", "-"]
 else:
     script = 'tell application id "io.skifer.atlas" to quit'
     command = ["osascript", "-"]
 if method == "cmdq":
-    # System Events démarre à froid en plusieurs secondes sur les runners Intel : il est
-    # lancé avant la mesure, pour que les 4 s restent celles de l'app.
-    subprocess.run(["osascript", "-e", 'tell application "System Events" to get name'],
-                   capture_output=True, timeout=60, check=False)
+    # L'utilisateur tape Cmd-Q dans l'app déjà au premier plan. Sur les runners Intel,
+    # démarrer System Events et activer l'app prennent plusieurs secondes : c'est fait avant
+    # la mesure, pour que les 4 s restent celles de l'app.
+    activate = '''on run argv
+  set appPid to item 1 of argv as integer
+  tell application "System Events"
+    set appProcess to first application process whose unix id is appPid
+    set frontmost of appProcess to true
+    repeat 100 times
+      if frontmost of appProcess then return "ok"
+      delay 0.1
+    end repeat
+  end tell
+  return "pas au premier plan"
+end run'''
+    ready = subprocess.run(["osascript", "-", str(pid)], input=activate, text=True,
+                           capture_output=True, timeout=60, check=False)
+    if ready.returncode or ready.stdout.strip() != "ok":
+        print(f"Fermeture {method} : l'app n'a pas pu passer au premier plan "
+              f"({(ready.stderr or ready.stdout).strip()})", file=sys.stderr)
+        sys.exit(1)
 started = time.monotonic()
 try:
     result = subprocess.run(command, input=script, text=True, capture_output=True, timeout=4)
