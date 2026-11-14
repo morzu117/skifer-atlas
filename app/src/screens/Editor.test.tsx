@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, type CheckResult, type EditorDocument, type Workspace } from "../api";
 import * as model from "../editor/model";
 import { useRoute } from "../router";
-import { fakeServer, workspace, type Call } from "../test/fakeServer";
+import { fakeServer, settle, workspace, type Call } from "../test/fakeServer";
 import { mockReactFlow } from "../test/reactFlow";
 import { Editor } from "./Editor";
 
@@ -118,7 +118,9 @@ beforeEach(() => {
   mockReactFlow();
   window.location.hash = "#/w/groupe-nordis/editeur?from=revenu-net";
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+// L'éditeur enregistre son brouillon en partant : on laisse finir cet envoi avant de
+// retirer le faux serveur et l'environnement.
+afterEach(async () => { await settle(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("éditeur", () => {
   it.each([
@@ -807,5 +809,367 @@ describe("nouveau document", () => {
     await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
     await waitFor(() => expect(window.location.hash).toBe("#/w/groupe-nordis/editeur?from=revenu-net-2"));
     expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ kind: "kpi", id: "revenu-net-2", label: "Revenu net", domain: "finance", owner: "anna.k" });
+  });
+});
+
+// --- formulaires de création, barre d'outils, clavier, YAML, surcharge ---------------------
+
+const SHEET_PATH = "/api/workspaces/groupe-nordis/documents/revenu-net/sheet";
+const counter = () => screen.getByText(/^schéma 1 ·/);
+const node = (container: HTMLElement, id: string) => container.querySelector(`[data-node-id="${id}"]`)!;
+
+describe("nouvelle déclinaison : refus et erreurs", () => {
+  beforeEach(() => {
+    window.location.hash = "#/w/groupe-nordis/editeur?variant_of=revenu-net";
+  });
+
+  const variantWs = (overrides = {}) => workspace({ account: "anna.k", role: "contributeur", entities: ["nordis-fr", "nordis-it"], ...overrides });
+
+  it("sans entité libre, le formulaire le dit et ne peut pas être envoyé", async () => {
+    fakeServer(({ path }) => path === SHEET_PATH ? { json: { kind: "kpi", variants: [{ entity: "nordis-fr" }, { entity: "nordis-it" }] } } : undefined);
+    render(<Harness ws={variantWs()} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Chargement des entités…");
+    expect(await screen.findByText("Aucune entité de cet espace n'est disponible pour une nouvelle déclinaison.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Annuler" })).toHaveAttribute("href", "#/w/groupe-nordis/fiche/revenu-net?tab=declinaisons");
+  });
+
+  it("signale chaque champ requis manquant sans rien envoyer", async () => {
+    const { calls } = fakeServer(({ path }) => path === SHEET_PATH ? { json: { kind: "kpi", variants: [] } } : undefined);
+    render(<Harness ws={variantWs()} />);
+    const entity = await screen.findByLabelText(/^Entité/);
+    await waitFor(() => expect(entity).toHaveValue("nordis-fr"));
+    await userEvent.selectOptions(entity, "");
+    await userEvent.clear(screen.getByLabelText(/^Propriétaire/));
+    await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    expect(entity).toHaveAccessibleDescription("Choisir une entité sans déclinaison.");
+    expect(screen.getByLabelText(/^Propriétaire/)).toHaveAccessibleDescription("Indiquer le propriétaire.");
+    expect(screen.getByLabelText(/^Justification/)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Expliquer pourquoi cette déclinaison est nécessaire.")).toBeInTheDocument();
+    expect(screen.getByText("Vous remplacerez les nœuds nécessaires du canonique.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Graphe indépendant" }));
+    expect(screen.getByText("Vous construirez un graphe à partir d'un canevas vide.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+
+  it("un brouillon existant pour l'entité propose sa reprise ; changer d'entité retire le lien", async () => {
+    fakeServer(({ path, method }) => {
+      if (path === SHEET_PATH) return { json: { kind: "kpi", variants: [] } };
+      if (path === `${EDITOR}/variants` && method === "POST") return { status: 409, json: { detail: { code: "draft_exists", message: "Un brouillon existe déjà pour nordis-fr." } } };
+      return undefined;
+    });
+    render(<Harness ws={variantWs()} />);
+    await waitFor(() => expect(screen.getByLabelText(/^Entité/)).toHaveValue("nordis-fr"));
+    await userEvent.type(screen.getByLabelText(/^Justification/), "Règle locale.");
+    await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    expect(await screen.findByText("Un brouillon existe déjà pour nordis-fr.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Reprendre le brouillon" })).toHaveAttribute("href", "#/w/groupe-nordis/editeur?from=revenu-net--nordis-fr");
+    expect(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" })).toBeEnabled();
+    await userEvent.selectOptions(screen.getByLabelText(/^Entité/), "nordis-it");
+    expect(screen.queryByRole("link", { name: "Reprendre le brouillon" })).toBeNull();
+  });
+
+  it("un échec inattendu à la création s'affiche en bandeau, pas sous un champ", async () => {
+    fakeServer(({ path, method }) => {
+      if (path === SHEET_PATH) return { json: { kind: "kpi", variants: [] } };
+      if (path === `${EDITOR}/variants` && method === "POST") return { status: 500, json: { detail: "Dépôt verrouillé." } };
+      return undefined;
+    });
+    render(<Harness ws={variantWs()} />);
+    await waitFor(() => expect(screen.getByLabelText(/^Entité/)).toHaveValue("nordis-fr"));
+    await userEvent.type(screen.getByLabelText(/^Justification/), "Règle locale.");
+    await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    expect(await screen.findByText("Dépôt verrouillé.")).toBeInTheDocument();
+    expect(screen.getByText("L'opération a échoué")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Entité/)).not.toHaveAttribute("aria-invalid");
+    expect(window.location.hash).toBe("#/w/groupe-nordis/editeur?variant_of=revenu-net");
+  });
+
+  it("la fiche du KPI illisible : bandeau d'échec, plus de chargement annoncé", async () => {
+    fakeServer(({ path }) => path === SHEET_PATH ? { status: 500, json: { detail: "Fiche illisible." } } : undefined);
+    render(<Harness ws={variantWs()} />);
+    expect(await screen.findByText("Fiche illisible.")).toBeInTheDocument();
+    expect(screen.queryByText("Chargement des entités…")).toBeNull();
+    expect(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" })).toBeDisabled();
+  });
+});
+
+describe("nouveau document : type, domaine et échecs", () => {
+  beforeEach(() => {
+    window.location.hash = "#/w/groupe-nordis/editeur";
+  });
+
+  it("crée un concept : le type choisi part au serveur", async () => {
+    const { calls } = fakeServer((call) => call.path === `${EDITOR}/documents` ? { status: 201, json: {} } : undefined);
+    editor();
+    await userEvent.click(screen.getByRole("radio", { name: "Concept" }));
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Commande client" } });
+    await userEvent.selectOptions(screen.getByLabelText(/^Domaine/), "ventes");
+    await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/w/groupe-nordis/editeur?from=commande-client"));
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ kind: "concept", id: "commande-client", label: "Commande client", domain: "ventes", owner: "anna.k" });
+  });
+
+  it("libellé, domaine et propriétaire vides : une erreur sous chacun", async () => {
+    const { calls } = fakeServer(() => undefined);
+    editor();
+    await userEvent.selectOptions(screen.getByLabelText(/^Domaine/), "");
+    await userEvent.clear(screen.getByLabelText(/^Propriétaire/));
+    await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    expect(screen.getByLabelText(/^Libellé/)).toHaveAccessibleDescription("Donner un libellé.");
+    expect(screen.getByLabelText(/^Domaine/)).toHaveAccessibleDescription("Choisir un domaine.");
+    expect(screen.getByLabelText(/^Propriétaire/)).toHaveAccessibleDescription("Indiquer le propriétaire.");
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+
+  it("un échec inattendu s'affiche en bandeau et rend le bouton", async () => {
+    fakeServer((call) => call.path === `${EDITOR}/documents` ? { status: 500, json: { detail: "Écriture impossible." } } : undefined);
+    editor();
+    fireEvent.change(screen.getByLabelText(/^Libellé/), { target: { value: "Stock moyen" } });
+    await userEvent.click(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" }));
+    expect(await screen.findByText("Écriture impossible.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Identifiant/)).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByRole("button", { name: "Créer et ouvrir l'éditeur" })).toBeEnabled();
+  });
+});
+
+describe("session d'édition : ouverture, outils et clavier", () => {
+  it("annonce l'ouverture puis l'échec, avec un titre neutre", async () => {
+    const opening = deferred<{ status: number; json: unknown }>();
+    fakeServer((call) => {
+      if (call.path === `${EDITOR}/documents/revenu-net`) return opening.promise;
+      if (call.path.startsWith("/api/workspaces/groupe-nordis/catalog")) return { json: [] };
+      return undefined;
+    });
+    editor();
+    expect(screen.getByRole("heading", { level: 1, name: "Ouverture de l'éditeur…" })).toBeInTheDocument();
+    await act(async () => opening.resolve({ status: 500, json: { detail: "Document illisible." } }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Éditeur" })).toBeInTheDocument();
+    expect(screen.getByText("Document illisible.")).toBeInTheDocument();
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("outil arête : guide, Échap annule le départ, une arête existante est refusée puis le message se ferme", async () => {
+    server();
+    const { container } = editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Ajouter une arête" }));
+    expect(screen.getByRole("button", { name: "Ajouter une arête" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Cliquer le nœud de départ, puis celui d'arrivée.")).toBeInTheDocument();
+    fireEvent.click(node(container, "n01"));
+    expect(screen.getByText("Arête depuis n01 : cliquer le nœud d'arrivée.")).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.getByText("Cliquer le nœud de départ, puis celui d'arrivée.")).toBeInTheDocument();
+    fireEvent.click(node(container, "n01"));
+    fireEvent.click(node(container, "n02"));
+    expect(screen.getByRole("alert")).toHaveTextContent("Cette arête existe déjà entre n01 et n02.");
+    expect(counter()).toHaveTextContent("2 nœuds · 1 arête");
+    await userEvent.click(screen.getByRole("button", { name: "Fermer le message" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Sélection" }));
+    expect(screen.queryByText(/Cliquer le nœud de départ/)).toBeNull();
+  });
+
+  it("outil arête : relie deux nœuds dans l'ordre des clics", async () => {
+    const { calls } = server();
+    const { container } = editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    expect(counter()).toHaveTextContent("3 nœuds · 1 arête");
+    await userEvent.click(screen.getByRole("button", { name: "Ajouter une arête" }));
+    fireEvent.click(node(container, "n02"));
+    fireEvent.click(node(container, "n08"));
+    expect(counter()).toHaveTextContent("3 nœuds · 2 arêtes");
+    expect(screen.getByText("Cliquer le nœud de départ, puis celui d'arrivée.")).toBeInTheDocument();
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true), { timeout: 2000 });
+    const saved = calls.filter((c) => c.method === "PUT").at(-1)!.body as { document: typeof DOCUMENT };
+    expect(saved.document.graph.nodes.find((n) => n.id === "n08")).toMatchObject({ inputs: ["n02"] });
+  });
+
+  it("Dupliquer puis Supprimer depuis le panneau de propriétés", async () => {
+    server();
+    const { container } = editor();
+    await screen.findByText("Schéma invalide");
+    fireEvent.click(node(container, "n02"));
+    await userEvent.click(within(panel()).getByRole("button", { name: "Dupliquer" }));
+    expect(counter()).toHaveTextContent("3 nœuds · 2 arêtes");
+    expect(within(panel()).getByText("n08")).toBeInTheDocument();
+    expect(node(container, "n08")).toHaveTextContent("statut = validée");
+    await userEvent.click(within(panel()).getByRole("button", { name: "Supprimer" }));
+    expect(counter()).toHaveTextContent("2 nœuds · 1 arête");
+    expect(within(panel()).getByRole("heading", { name: "Document" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Annuler" }));
+    expect(counter()).toHaveTextContent("3 nœuds · 2 arêtes");
+  });
+
+  it("Disposition automatique et Aligner réécrivent les positions du brouillon, jamais le document", async () => {
+    const { calls } = server(opened({ positions: { n01: { x: 30, y: 37 }, n02: { x: 301, y: 50 } } }));
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Aligner" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true), { timeout: 2000 });
+    const aligned = calls.filter((c) => c.method === "PUT").at(-1)!.body as { positions: model.Positions; document: typeof DOCUMENT };
+    expect(aligned.positions).toEqual(model.snap({ n01: { x: 30, y: 37 }, n02: { x: 301, y: 50 } }));
+    expect(aligned.positions).not.toEqual({ n01: { x: 30, y: 37 }, n02: { x: 301, y: 50 } });
+    expect(aligned.document).toEqual(DOCUMENT);
+    const before = calls.filter((c) => c.method === "PUT").length;
+    await userEvent.click(screen.getByRole("button", { name: "Disposition automatique" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "PUT").length).toBeGreaterThan(before), { timeout: 2000 });
+    const laid = calls.filter((c) => c.method === "PUT").at(-1)!.body as { positions: model.Positions };
+    expect(laid.positions).toEqual(model.autoLayout(model.nodesOf(DOCUMENT)));
+    // Les positions ne passent pas par l'historique.
+    expect(screen.getByRole("button", { name: "Annuler" })).toBeDisabled();
+  });
+
+  it("Aperçu SQL ouvre l'onglet SQL ; Valider le graphe relance la validation sur l'onglet Problèmes", async () => {
+    const { calls } = server();
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Aperçu SQL (Databricks)" }));
+    expect(within(bottom()).getByRole("tab", { name: "SQL compilé" })).toHaveAttribute("aria-selected", "true");
+    expect(within(bottom()).getByText("Le SQL se compile une fois les erreurs corrigées.")).toBeInTheDocument();
+    await userEvent.click(within(bottom()).getByRole("radio", { name: "Snowflake" }));
+    expect(screen.getByRole("button", { name: "Aperçu SQL (Snowflake)" })).toBeInTheDocument();
+    const checks = calls.filter((c) => c.path === `${EDITOR}/check`).length;
+    await userEvent.click(screen.getByRole("button", { name: "Valider le graphe" }));
+    expect(within(bottom()).getByRole("tab", { name: /Problèmes/ })).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(calls.filter((c) => c.path === `${EDITOR}/check`).length).toBe(checks + 1));
+  });
+
+  it("Ctrl+Z annule, Ctrl+Maj+Z et Ctrl+Y rétablissent ; pas dans un champ de saisie", async () => {
+    server();
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    expect(counter()).toHaveTextContent("3 nœuds");
+    // Dans un champ, la frappe garde son propre historique.
+    fireEvent.keyDown(within(panel()).getByLabelText(/^Libellé/), { key: "z", ctrlKey: true });
+    expect(counter()).toHaveTextContent("3 nœuds");
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(counter()).toHaveTextContent("2 nœuds");
+    fireEvent.keyDown(document.body, { key: "Z", ctrlKey: true, shiftKey: true });
+    expect(counter()).toHaveTextContent("3 nœuds");
+    fireEvent.keyDown(document.body, { key: "z", metaKey: true });
+    expect(counter()).toHaveTextContent("2 nœuds");
+    fireEvent.keyDown(document.body, { key: "y", ctrlKey: true });
+    expect(counter()).toHaveTextContent("3 nœuds");
+    // Sans modificateur, rien ne bouge.
+    fireEvent.keyDown(document.body, { key: "z" });
+    expect(counter()).toHaveTextContent("3 nœuds");
+  });
+
+  it("une validation en cours sur le document déjà validé retient la soumission", async () => {
+    const info = opened();
+    (info.document.graph as { nodes: Nodes }).nodes[1].nulls = "drop";
+    server(info);
+    editor();
+    await screen.findByText("Compilable Databricks, Snowflake");
+    const again = deferred<CheckResult>();
+    vi.spyOn(api, "editorCheck").mockReturnValue(again.promise);
+    await userEvent.click(screen.getByRole("button", { name: "Valider le graphe" }));
+    await userEvent.click(screen.getByRole("button", { name: "Soumettre la proposition" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Validation en cours : réessayer dans un instant.");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await act(async () => again.resolve(checked(info.document)));
+  });
+
+  it("un échec d'enregistrement du brouillon est signalé", async () => {
+    server(opened(), (call) => call.method === "PUT" ? { status: 500, json: { detail: "Disque plein." } } : undefined);
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Calcul de colonne" }));
+    expect(await screen.findByText("Le brouillon n'a pas pu être enregistré sur ce poste.", {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.getByText("Non enregistré")).toBeInTheDocument();
+  });
+
+  it("mode surcharge : outil arête désactivé ; Retirer la surcharge rend le nœud en lecture", async () => {
+    server(
+      opened({
+        mode: "override",
+        kind: "variant",
+        canonical: { ...structuredClone(DOCUMENT), variation_points: ["n02"] },
+        document: { schema_version: 1, kind: "variant", data_product: { id: "revenu-net--nordis-de", version: 4, owner: "anna.k" }, variant_of: { id: "revenu-net", version: 4 }, entity: "nordis-de", mode: "override", justification: "x" },
+      }),
+    );
+    const { container } = editor();
+    await screen.findByText("schéma 1 · 2 nœuds · 1 arête");
+    expect(screen.getByRole("button", { name: "Ajouter une arête" })).toBeDisabled();
+    expect(screen.getByText("Surcharge : seuls les nœuds existants se remplacent.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "revenu-net" })).toHaveAttribute("href", "#/w/groupe-nordis/fiche/revenu-net");
+    fireEvent.click(node(container, "n02"));
+    expect(within(panel()).getByText("Point de variation déclaré par le canonique.")).toBeInTheDocument();
+    expect(within(panel()).queryByRole("button", { name: "Définir comme sortie du graphe" })).toBeNull();
+    await userEvent.click(within(panel()).getByRole("button", { name: "Remplacer ce nœud" }));
+    expect(within(panel()).queryByText(/Hors points déclarés/)).toBeNull();
+    expect(node(container, "n02")).toHaveTextContent("Surcharge");
+    await userEvent.click(within(panel()).getByRole("button", { name: "Retirer la surcharge" }));
+    expect(within(panel()).getByRole("button", { name: "Remplacer ce nœud" })).toBeInTheDocument();
+    expect(within(panel()).getByLabelText(/^Valeur/)).toHaveAttribute("readonly");
+    expect(node(container, "n02")).not.toHaveTextContent("Surcharge");
+  });
+});
+
+describe("session d'édition : vue YAML", () => {
+  it("le texte saisi est analysé puis validé ; une erreur de syntaxe bloque le retour", async () => {
+    const parsed = { ...structuredClone(DOCUMENT), label: "Revenu net modifié" };
+    const { calls } = server(opened(), (call) => {
+      if (call.path !== `${EDITOR}/parse`) return undefined;
+      const text = (call.body as { text: string }).text;
+      if (text.includes("[")) return { json: { document: null, issues: [{ path: "/", node_id: null, code: "yaml_syntax", message: "Crochet non fermé ligne 1.", severity: "error" }] } };
+      return { json: { document: parsed, issues: [] } };
+    });
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Éditer en YAML" }));
+    const input = await screen.findByRole("textbox", { name: "YAML de Revenu net" });
+    expect(input).toHaveValue("label: Revenu net\n# 2 nœuds\n");
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.getByRole("button", { name: "Soumettre la proposition" })).toHaveAttribute("aria-disabled", "true");
+
+    fireEvent.change(input, { target: { value: "label: [Revenu" } });
+    expect(await within(bottom()).findByText("Crochet non fermé ligne 1.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Revenir au canevas" })).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Revenir au canevas" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("YAML illisible : corriger l'erreur signalée pour revenir au canevas.");
+    expect(input).toBeInTheDocument();
+
+    const checks = calls.filter((c) => c.path === `${EDITOR}/check`).length;
+    fireEvent.change(input, { target: { value: "label: Revenu net modifié" } });
+    await waitFor(() => expect(calls.filter((c) => c.path === `${EDITOR}/check`).length).toBe(checks + 1));
+    expect(await within(bottom()).findByText("« nulls » est requis : gardés ou exclus.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Revenir au canevas" })).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("revenir au canevas applique le YAML au document, annulable, et l'enregistre", async () => {
+    const parsed = { ...structuredClone(DOCUMENT), label: "Revenu net modifié" };
+    const { calls } = server(opened(), (call) => call.path === `${EDITOR}/parse` ? { json: { document: parsed, issues: [] } } : undefined);
+    editor();
+    await screen.findByText("Schéma invalide");
+    await userEvent.click(screen.getByRole("button", { name: "Éditer en YAML" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "YAML de Revenu net" }), { target: { value: "label: Revenu net modifié" } });
+    await userEvent.click(screen.getByRole("button", { name: "Revenir au canevas" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Revenu net modifié : v5 · brouillon" })).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Outils du canevas" })).toBeInTheDocument();
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true), { timeout: 2000 });
+    expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toMatchObject({ document: { label: "Revenu net modifié" }, yaml_text: null });
+    await userEvent.click(screen.getByRole("button", { name: "Annuler" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Revenu net : v5 · brouillon" })).toBeInTheDocument();
+  });
+});
+
+describe("session d'édition : zoom", () => {
+  it("Zoom avant et Zoom arrière changent le pourcentage affiché", async () => {
+    server();
+    editor();
+    await screen.findByText("Schéma invalide");
+    const zoom = screen.getByLabelText("Zoom");
+    const value = () => Number(zoom.textContent!.replace(/\D/g, ""));
+    await waitFor(() => expect(value()).toBeGreaterThan(0));
+    const start = value();
+    await userEvent.click(screen.getByRole("button", { name: "Zoom avant" }));
+    await waitFor(() => expect(value()).toBeGreaterThan(start));
+    const zoomed = value();
+    await userEvent.click(screen.getByRole("button", { name: "Zoom arrière" }));
+    await waitFor(() => expect(value()).toBeLessThan(zoomed));
   });
 });

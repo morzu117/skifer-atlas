@@ -449,8 +449,7 @@ def test_atlas_merge_between_auto_and_manual_sync(client, joined, as_):
 
 
 def test_awaiting_review_when_clone_disappears(client, joined, as_, monkeypatch):
-    import shutil
-
+    from skifer_atlas.files import remove_tree
     from skifer_atlas.proposals import status
     from skifer_atlas.workspaces import repo_dir
 
@@ -460,7 +459,7 @@ def test_awaiting_review_when_clone_disappears(client, joined, as_, monkeypatch)
     original = status._awaiting
 
     def remove_before_awaiting(context, pull, block, decision):
-        shutil.rmtree(repo_dir(context.workspace.id))
+        remove_tree(repo_dir(context.workspace.id))
         return original(context, pull, block, decision)
 
     monkeypatch.setattr(status, "_awaiting", remove_before_awaiting)

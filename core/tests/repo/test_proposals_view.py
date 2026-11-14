@@ -26,7 +26,7 @@ EXAMPLES = EXAMPLE.parent
 @pytest.fixture
 def client(atlas_env, tmp_path, monkeypatch):
     demo = tmp_path / "demo"
-    subprocess.run(["bash", str(EXAMPLES / "depot-nordis.sh"), str(demo)], check=True,
+    subprocess.run([sys.executable, str(EXAMPLES / "depot-nordis.py"), str(demo)], check=True,
                    capture_output=True)
     subprocess.run([sys.executable, str(EXAMPLES / "propositions-nordis.py"),
                     str(demo / "distant.git")], check=True, capture_output=True)

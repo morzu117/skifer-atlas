@@ -21,7 +21,7 @@ ATLAS = Path(sys.executable).with_name("atlas")
 
 
 def run(*args, cwd=None):
-    return subprocess.run([str(ATLAS), *map(str, args)], capture_output=True, text=True,
+    return subprocess.run([str(ATLAS), *map(str, args)], capture_output=True, text=True, encoding="utf-8",
                           check=False, cwd=cwd)
 
 

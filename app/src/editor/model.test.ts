@@ -1,13 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+  ancestors,
   apply,
   autoLayout,
   COLUMN,
   edgesOf,
   emptyHistory,
+  getField,
   GRID,
   nextId,
+  nodeById,
   nodesOf,
   OpError,
   outputOf,
@@ -15,6 +18,7 @@ import {
   record,
   redo,
   ROW,
+  snap,
   undo,
   variationPoints,
   viewNodes,
@@ -233,5 +237,98 @@ describe("disposition", () => {
     expect(positions.n01).toEqual({ x: GRID, y: GRID });
     expect(positions.n04).toEqual({ x: GRID, y: GRID + ROW });
     expect(positions.n03).toEqual({ x: GRID + 2 * COLUMN, y: GRID });
+  });
+});
+
+describe("lecture et écriture ciblées", () => {
+  it("ancestors suit les entrées en remontant, jointures comprises, sans boucler sur un cycle", () => {
+    const doc = run(chain(), [
+      { kind: "add_node", type: "join", id: "n05" },
+      { kind: "connect", source: "n03", target: "n05", side: "left" },
+      { kind: "connect", source: "n04", target: "n05", side: "right" },
+    ]);
+    expect(ancestors(nodesOf(doc), "n05")).toEqual(new Set(["n03", "n02", "n01", "n04"]));
+    expect(ancestors(nodesOf(doc), "n01")).toEqual(new Set());
+    expect(ancestors(nodesOf(doc), "inconnu")).toEqual(new Set());
+    // Un cycle écrit à la main dans le YAML ne fait pas tourner la recherche indéfiniment.
+    const cyclic = [
+      { id: "n01", type: "filter", inputs: ["n02"] },
+      { id: "n02", type: "filter", inputs: ["n01"] },
+    ] as ReturnType<typeof nodesOf>;
+    expect(ancestors(cyclic, "n01")).toEqual(new Set(["n02", "n01"]));
+  });
+
+  it("getField et nodeById lisent le graphe comme le replace d'une surcharge", () => {
+    const doc = apply(chain(), { kind: "set_field", id: "n01", path: ["columns"], value: [{ name: "statut", type: "string" }] });
+    expect(getField(doc, "n01", ["columns", 0, "name"])).toBe("statut");
+    expect(getField(doc, "n01", ["columns", 3, "name"])).toBeUndefined();
+    expect(getField(doc, "n02", ["columns", 0])).toBeUndefined();
+    expect(getField(doc, "absent", ["label"])).toBeUndefined();
+    const variant = apply({ kind: "variant" }, { kind: "override", id: "n02", node: { id: "n02", type: "filter", nulls: "keep" } });
+    expect(getField(variant, "n02", ["nulls"])).toBe("keep");
+    expect(nodeById(variant, "n02")).toEqual({ id: "n02", type: "filter", nulls: "keep" });
+    expect(nodeById(variant, "n09")).toBeUndefined();
+  });
+
+  it("set_field crée les listes et mappings manquants, et refuse un nœud inconnu", () => {
+    const doc = apply(chain(), { kind: "set_field", id: "n04", path: ["columns", 0, "name"], value: "d" });
+    expect(nodesOf(doc).find((n) => n.id === "n04")?.columns).toEqual([{ name: "d" }]);
+    expect(() => apply(doc, { kind: "set_field", id: "n99", path: ["label"], value: "x" })).toThrow("Nœud introuvable.");
+  });
+
+  it("set_doc écrit et retire un élément de liste par son rang", () => {
+    let doc = apply(KPI, { kind: "set_doc", path: ["synonyms"], value: ["CA", "net", "chiffre"] });
+    doc = apply(doc, { kind: "set_doc", path: ["synonyms", 1], value: "revenu" });
+    expect(doc.synonyms).toEqual(["CA", "revenu", "chiffre"]);
+    doc = apply(doc, { kind: "set_doc", path: ["synonyms", 0], value: undefined });
+    expect(doc.synonyms).toEqual(["revenu", "chiffre"]);
+  });
+
+  it("set_variation retire la clé quand le dernier point disparaît et trie les points", () => {
+    let doc = run(chain(), [
+      { kind: "set_variation", id: "n03", on: true },
+      { kind: "set_variation", id: "n01", on: true },
+    ]);
+    expect(doc.variation_points).toEqual(["n01", "n03"]);
+    doc = run(doc, [
+      { kind: "set_variation", id: "n01", on: false },
+      { kind: "set_variation", id: "n03", on: false },
+    ]);
+    expect("variation_points" in doc).toBe(false);
+  });
+
+  it("replace substitue une copie du document fourni", () => {
+    const next: Raw = { ...KPI, label: "Autre" };
+    const doc = apply(chain(), { kind: "replace", document: next });
+    expect(doc).toEqual(next);
+    expect(doc).not.toBe(next);
+  });
+
+  it("dupliquer un nœud inconnu est refusé", () => {
+    expect(() => apply(chain(), { kind: "duplicate", id: "n99", copy: "n10" })).toThrow(OpError);
+  });
+});
+
+describe("historique des propriétés du document", () => {
+  it("les frappes sur un même champ du document forment une seule entrée", () => {
+    let history = emptyHistory();
+    let doc = KPI;
+    for (const value of ["R", "Re", "Rev"]) {
+      const op: Op = { kind: "set_doc", path: ["label"], value };
+      const after = apply(doc, op);
+      history = record(history, { op, before: doc, after });
+      doc = after;
+    }
+    expect(history.past).toHaveLength(1);
+    expect(undo(history)!.document).toEqual(KPI);
+    const other: Op = { kind: "set_doc", path: ["data_product", "owner"], value: "anna.k" };
+    history = record(history, { op: other, before: doc, after: apply(doc, other) });
+    expect(history.past).toHaveLength(2);
+  });
+});
+
+describe("alignement", () => {
+  it("snap ramène chaque position sur la trame la plus proche", () => {
+    expect(snap({ n01: { x: 35, y: 37 }, n02: { x: 11, y: 0 } })).toEqual({ n01: { x: 24, y: 48 }, n02: { x: 0, y: 0 } });
   });
 });

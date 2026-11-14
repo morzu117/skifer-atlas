@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import tempfile
 import time
 from dataclasses import dataclass
@@ -22,6 +21,7 @@ from pathlib import Path
 
 import yaml
 
+from ..files import remove_tree
 from ..governance.model import Governance, dump_governance, rename_account, space_referents
 from ..workspaces import Workspace, repo_dir
 from .git import RepoError, clone_lock, clone_lock_if_free, run_git
@@ -294,7 +294,7 @@ def _forget_leftovers() -> None:
             info = folder.lstat()
             if (folder.is_dir() and not folder.is_symlink() and now - info.st_mtime > _STAGING_MAX_AGE
                     and (owner is None or info.st_uid == owner)):
-                shutil.rmtree(folder, ignore_errors=True)
+                remove_tree(folder, best_effort=True)
         except OSError:
             continue
 
