@@ -24,9 +24,9 @@ from ...workspaces import (
     list_workspaces,
     repo_dir,
 )
-from .common import not_found, workspace_or_404
+from .common import WorkspaceRoute, not_found, workspace_or_404
 
-router = APIRouter(prefix="/api/workspaces")
+router = APIRouter(route_class=WorkspaceRoute, prefix="/api/workspaces")
 
 
 class JoinRequest(BaseModel):
@@ -57,9 +57,10 @@ def _counts(ws: Workspace) -> dict:
         found.update(kpi=kinds.get("kpi", 0), concept=kinds.get("concept", 0))
     except (RepoError, OSError, duckdb.Error):
         pass
+    if not repo_dir(ws.id).exists():  # retiré pendant la requête : rien à compter
+        return {"kpi": None, "concept": None, "open_proposals": None}
     if not ws.git_remote:
         found["open_proposals"] = 0  # pas encore de dépôt distant, donc pas de proposition
-        return found
     return found
 
 
