@@ -262,11 +262,18 @@ describe("champs par type, branchés sur le document", () => {
   // « heure:equals:10:30 » a pour valeur « 10:30 ».
   // bug : forms.tsx:132 découpe avec split(":", 3), qui tronque la valeur ; changer
   // d'opérateur réécrit alors « heure:greater_than:10 » et perd « :30 ».
-  it.fails("filtre : une valeur qui contient « : » reste entière quand on change d'opérateur", async () => {
+  it("filtre : une valeur qui contient « : » reste entière quand on change d'opérateur", async () => {
     const { node } = live({ id: "n03", type: "filter", inputs: ["n01"], condition: "heure:equals:10:30" });
     expect(screen.getByLabelText(/^Valeur/)).toHaveValue("10:30");
     await pick(/^Opérateur/, "in");
     expect(node().condition).toBe("heure:in:10:30");
+  });
+
+  it("filtre : adapte une liste au passage à une valeur simple", async () => {
+    const { node } = live({ id: "n03", type: "filter", inputs: ["n01"], condition: "statut:in:FR,DE" });
+    await pick(/^Opérateur/, "equals");
+    expect(node().condition).toBe("statut:equals:FR");
+    expect(screen.getByLabelText(/^Valeur/)).toHaveValue("FR");
   });
 
   it("jointure : type, paires de clés, cardinalité, contrôle contourné avec sa raison", async () => {
