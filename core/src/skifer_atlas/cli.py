@@ -434,16 +434,24 @@ def _compare_text(found: dict) -> str:
                     if cell["missing"] else f"écart {_number(cell['gap_pct'], 2)} %")
             lines.append(f"  hors tolérance : {dims} : canonique {cell['canonical_value']}, "
                          f"déclinaison {cell['variant_value']}, {what}")
+    for report in found.get("rest", []):
+        cache = {"none": "neuf", "immutable": "immuable", "provisional": "provisoire (15 min)",
+                 "refreshed": "rafraîchi"}[report["cache"]]
+        source = "coffre" if report["key_source"] == "vault" else "environnement"
+        lines.append(f"sources REST : {report['access_point']} · {report['table']} : "
+                     f"{report['calls']} appel(s), {report['bytes']} octets, cache {cache} ; clé : {source}")
     return "\n".join(lines) + "\n"
 
 
 def _compare(args: argparse.Namespace) -> int:
+    from . import connections
     from .compare import LocalRunner, service, store
     from .compare.orchestrate import start
 
-    local = Path(args.duckdb_data) if args.duckdb_data else None
+    local = Path(args.duckdb_data) if args.duckdb_data else service.local_data()
     workspace = get_workspace(args.workspace)
     folder = Path(args.workspace)
+    prepared = None
     with tempfile.TemporaryDirectory() as scratch:
         try:
             request = _compare_request(args)
@@ -454,7 +462,13 @@ def _compare(args: argparse.Namespace) -> int:
                     service.check_access(workspace.id, prepared)
                 db = Path(args.db) if args.db else index_path(workspace.id)
                 account = workspace.account or None
-                runner = LocalRunner(local) if local else service.remote_runner(workspace.id)
+                runner = LocalRunner(local) if local else service.remote_runner(workspace.id, args.refresh)
+                if not local:
+                    for diagnostic in connections.registry(workspace.id).diagnostics:
+                        print(f"{diagnostic['code']} : {diagnostic['file']}", file=sys.stderr)
+                if local and (repo_dir(workspace.id) / "rest_access_points.yaml").exists():
+                    print("Données locales (--duckdb-data) : les points d'accès REST de l'espace "
+                          "ne sont pas appelés.", file=sys.stderr)
             elif folder.is_dir() and local is not None:
                 prepared = service.prepare_in(folder, request, None, True)
                 db = Path(args.db) if args.db else Path(scratch) / "atlas.duckdb"
@@ -464,8 +478,16 @@ def _compare(args: argparse.Namespace) -> int:
                       "ne se compare qu'en local (--duckdb-data).", file=sys.stderr)
                 return 1
             found = store.get(db, start(db, account, prepared, runner, wait=True).number)
+            if isinstance(runner, service.RemoteRunner):
+                found["rest"] = runner.report()
         except RepoError as error:
             print(f"{error.code} : {error.message}", file=sys.stderr)
+            if error.code == "vault_unavailable" and workspace is not None and prepared is not None:
+                used = {plan.access_point for plan in prepared.plans}
+                for point in connections.registry(workspace.id).access_points:
+                    if point.id in used and point.platform == "rest":
+                        print("Sans trousseau : variable " + connections.rest_key_variable(point.id),
+                              file=sys.stderr)
             for issue in error.details or []:
                 print(f"  {issue}", file=sys.stderr)
             return 1
@@ -492,6 +514,51 @@ def _add_scope(command: argparse.ArgumentParser) -> None:
                          help="condition sur un attribut de concept, ex. entite:in:FR,DE")
     command.add_argument("--by", metavar="dimensions",
                          help="granularité : dimensions séparées par des virgules")
+
+
+def _rest_key(args: argparse.Namespace) -> int:
+    import getpass
+
+    from . import connections
+
+    try:
+        if get_workspace(args.workspace) is None:
+            print("not_found : Espace inconnu.", file=sys.stderr)
+            return 1
+        key = getpass.getpass("Clé d'API : ") if sys.stdin.isatty() else sys.stdin.read()
+        connections.store_api_key(args.workspace, args.point, key)
+    except RepoError as error:
+        message = "Point d'accès inconnu." if error.code == "not_found" else error.message
+        print(f"{error.code} : {message}", file=sys.stderr)
+        if error.code == "vault_unavailable":
+            print("Sans trousseau : variable " + connections.rest_key_variable(args.point),
+                  file=sys.stderr)
+        return 1
+    print("Clé rangée dans le coffre personnel.")
+    return 0
+
+
+def _rest_usage(args: argparse.Namespace) -> int:
+    from datetime import date
+
+    from .connectors.rest_budget import read_usage
+
+    try:
+        if get_workspace(args.workspace) is None:
+            raise RepoError("not_found", "Espace inconnu.")
+        rows = read_usage(args.workspace, point_id=args.point,
+                          day=date.fromisoformat(args.day) if args.day else None)
+    except (RepoError, ValueError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    if args.format == "json":
+        print(json.dumps(rows, ensure_ascii=False, default=str))
+    else:
+        for row in rows:
+            print(f"{row['day']} · {row['access_point']} · {row['dataset']} : "
+                  f"{row['calls']} appel(s), {row['bytes']} octets, {row['errors']} erreur(s), "
+                  f"{row['cache_hits']} cache(s)")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -589,7 +656,20 @@ def build_parser() -> argparse.ArgumentParser:
     compare_cmd.add_argument("--db", metavar="fichier",
                              help="base DuckDB des résultats ; par défaut celle de l'espace")
     compare_cmd.add_argument("--format", choices=("text", "json"), default="text")
+    compare_cmd.add_argument("--refresh", action="store_true", help="rafraîchir le cache REST")
     compare_cmd.set_defaults(handler=_compare)
+
+    rest_key = commands.add_parser("rest-key", help="ranger une clé REST lue sur l'entrée standard")
+    rest_key.add_argument("workspace", metavar="espace")
+    rest_key.add_argument("point")
+    rest_key.set_defaults(handler=_rest_key)
+
+    usage = commands.add_parser("rest-usage", help="registre d'usage REST de l'espace")
+    usage.add_argument("workspace", metavar="espace")
+    usage.add_argument("--point")
+    usage.add_argument("--day", metavar="AAAA-MM-JJ")
+    usage.add_argument("--format", choices=("text", "json"), default="text")
+    usage.set_defaults(handler=_rest_usage)
 
     schema = commands.add_parser("schema", help="écrire le JSON Schema des documents")
     schema.add_argument("--kind", choices=("document", "diff"), default="document",
@@ -603,7 +683,15 @@ def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    actual = sys.argv[1:] if argv is None else argv
+    if actual and actual[0] == "rest-key":
+        args, extra = parser.parse_known_args(actual)
+        if extra:
+            # argparse recopierait l'argument inconnu, qui peut être la clé refusée.
+            parser.error("La clé REST se lit uniquement sur l'entrée standard.")
+    else:
+        args = parser.parse_args(argv)
     return args.handler(args)
 
 

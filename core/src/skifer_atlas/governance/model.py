@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ..model.errors import Issue, issues_from_validation_error
 from ..model.nodes import PLATFORMS
 
+ACCESS_POINT_PLATFORMS = (*PLATFORMS, "rest")
+
 Role = Literal["referent", "validateur", "contributeur", "lecteur"]
 ROLE_RANK: dict[str, int] = {"lecteur": 0, "contributeur": 1, "validateur": 2, "referent": 3}
 ACCOUNT_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,38}$"
@@ -67,7 +69,7 @@ class Governance(_Model):
     validators_required: ValidatorsRequired = Field(default_factory=ValidatorsRequired)
     domains: list[Domain] = Field(default_factory=list)
     members: list[Member] = Field(default_factory=list)
-    allowed_platforms: list[Literal[PLATFORMS]] = Field(default_factory=list)
+    allowed_platforms: list[Literal[ACCESS_POINT_PLATFORMS]] = Field(default_factory=list)
     tolerance: Tolerance | None = None  # écart admis d'une comparaison chiffrée (plan 0009)
 
     @property

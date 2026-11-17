@@ -10,6 +10,7 @@ Une `Credential` ne s'affiche jamais : sa représentation masque les secrets, et
 | `sso`     | jeton de session            | jeton maître    | Snowflake (plan 0018) |
 | `keypair` | passphrase de la clé privée | —               | Snowflake (plan 0018) |
 | `github`  | jeton du device flow        | de rafraîchissement, s'il y en a | GitHub (plan 0025) |
+| `apikey`  | clé d'API                  | —               | REST (plan 0036) |
 
 Une session SSO que le connecteur n'a pas pu exporter vit en mémoire seulement : son
 entrée ne porte alors aucun jeton (`access_token` vide).
@@ -22,7 +23,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-Kind = Literal["oauth", "pat", "sso", "keypair", "github"]
+Kind = Literal["oauth", "pat", "sso", "keypair", "github", "apikey"]
 REFRESH_MARGIN = 60  # secondes : on rafraîchit un jeton qui expire dans moins d'une minute
 
 

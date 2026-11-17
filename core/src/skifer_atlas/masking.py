@@ -8,9 +8,17 @@ troncature : un jeton coupé en deux par la limite de longueur ne se reconnaîtr
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 MASK = "***"
+
+
+def mask_url(url: str, key_name: str) -> str:
+    """Masque la valeur du paramètre déclaré, même sans connaître son secret."""
+    parts = urlsplit(url)
+    query = [(name, MASK if name == key_name else value)
+             for name, value in parse_qsl(parts.query, keep_blank_values=True)]
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
 
 def mask_secrets(text: str, *secrets: str | None) -> str:

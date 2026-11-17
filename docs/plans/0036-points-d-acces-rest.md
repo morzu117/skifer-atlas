@@ -20,6 +20,9 @@ ADR 0050 à 0054 (acceptées le 15 novembre 2026, commitées avec ce plan) ; pla
 
 Origine : **J** = tranché par le propriétaire (91811, 91871 et revue du 10 novembre), **D** = « (choix de droplet) », modifiable par le propriétaire.
 
+**R** = décision de relecture F1–F3 (99519), approuvée par le commanditaire
+le 17 novembre 2026 avant la reprise 1 de PR 208 (#5663).
+
 | ADR | Point | Réponse | |
 |---|---|---|---|
 | 0050 | Nom de l'énumération | `ACCESS_POINT_PLATFORMS = (*PLATFORMS, "rest")`, définie dans `governance/model.py`, pas dans `connectors/access_points.py` : ce dernier importe `Governance` (`access_points.py:45`) et `governance/model.py:70` en a besoin, d'où un import circulaire. seul `allowed_platforms` (`governance/model.py:70`) s'y rapporte ; `AccessPoint.platform` (`access_points.py:65`) reste `Literal[PLATFORMS]` | D |
@@ -43,6 +46,9 @@ Origine : **J** = tranché par le propriétaire (91811, 91871 et revue du 10 nov
 | 0053 | Forme du masquage | `ApiKey` (valeur hors `repr`) ; réutiliser `masking.mask_secrets` et `mask_body` (ADR 0044, jetons masqués), en passant la clé comme secret à `message_of(body, *secrets)` et au masquage de `host_unreachable`, avant toute troncature. Seul complément : `mask_url(url, key_name)` dans `masking.py`, qui masque aussi la valeur du paramètre de requête `key_name` ; toute URL rendue passe par ce complément et par `mask_secrets` avec la clé. Aucun message n'embarque d'URL ni de corps de réponse | D |
 | 0053 | Où afficher la source de clé | clé `key_source` (`vault`, `env` ou `None`) dans le résultat de `connections.status` pour un point `rest`, et ligne « clé : coffre/environnement » de la sortie de `atlas compare` ; l'écran est hors branche | D |
 | 0050/0052 | Identifiant → variable | `ATLAS_REST_KEY_` + identifiant en majuscules, `-` devenu `_` ; coffre d'abord, variable seulement sur `vault_unavailable`, jamais écrite | J |
+| 0052 / F1 | Clôture d'une entrée provisoire | Une entrée écrite provisoire est refaite une fois après la clôture UTC de sa fenêtre, même avant expiration des 15 minutes. Cette nouvelle réponse est écrite non provisoire, puis reste immuable. Test : `RUN::test_window_becomes_immutable_after_utc_midnight` | R |
+| 0052 / F2 | Même table, périmètres distincts | Deux sources d'une même table dont les périmètres diffèrent sont refusées en préparation REST, avant tout appel et sans ligne de comparaison : `rest_perimeter_conflict`, HTTP 422. Pas de chargement par union dans cette branche. Test : `DS::test_same_table_different_perimeters_refused_before_run` | R |
+| 0052 / F3 | Variable de données locales pour tous les espaces | La CLI conserve la lecture de `ATLAS_COMPARE_DATA` : changement de comportement pour tous les espaces, même sans point REST, annoncé dans la PR et `core/README.md`. `--duckdb-data` reste prioritaire. Test : `CLI::test_compare_environment_data_applies_to_all_workspaces` | R |
 
 ### `rest_access_points.yaml`
 
@@ -127,7 +133,7 @@ datasets:
 1. Point (`connections.access_point`), clé (`rest_key`), jeux de données ; aucun appel avant que tout soit résolu.
 2. Pour chaque `SourceTable` : paramètres = fixes + fenêtre (`compiled.window` formatée selon `format`) + périmètre. Périmètre : pour la colonne du jeu, opérateur `equals` ou `in` (formes canoniques du catalogue, `compile/scope.py:101`), autre : `rest_perimeter_unsupported` ; absent alors que `required` : **`rest_scope_required`, avant tout appel**. Les conditions sur d'autres colonnes ne servent pas : le SQL compilé les applique (le chargement est un sur-ensemble).
 3. Clé de cache = SHA-256 de (point, table, chemin, paramètres sans la clé, fenêtre, valeur de périmètre, empreinte du jeu de données). Hors `repo/` : `workspace_dir(id)/rest_cache/<clé>.parquet` + `<clé>.json` (date, `provisional`, appels, octets ; ni URL, ni valeur de réponse), écrits par fichier temporaire puis renommage, le `.json` en dernier.
-4. **Fraîcheur** : fenêtre dont la fin précède le jour UTC courant : **immuable**, resservie sans limite. Fenêtre incluant le jour courant, ou jeu sans fenêtre : **provisoire**, durée de vie 15 minutes. `--refresh` force un appel par clé, une seule fois par comparaison (le second côté lit le cache neuf).
+4. **Fraîcheur** : fenêtre dont la fin précède le jour UTC courant : **immuable**, resservie sans limite seulement si l'entrée a été écrite non provisoire. Une entrée encore provisoire est refaite une fois après cette clôture, même avant les 15 minutes, puis écrite immuable (F1). Fenêtre incluant le jour courant, ou jeu sans fenêtre : **provisoire**, durée de vie 15 minutes. `--refresh` force un appel par clé, une seule fois par comparaison (le second côté lit le cache neuf).
 5. Défaut de cache : appels page par page (`next_url` : même `origin`, au plus `max_pages`, sinon `rest_too_many_pages`), annulation vérifiée avant chaque appel (`query_canceled`). Total de lignes borné à 1 000 000 (`rest_response_too_large`). Lignes extraites par `rows_path` (non-liste : `rest_bad_response`), converties, chargées dans une table DuckDB typée puis `COPY … TO` Parquet.
 6. Chargement : un dossier temporaire reçoit `<table>.parquet` par source (plusieurs valeurs de périmètre réunies par `read_parquet`) puis `LocalRunner(dossier)(plan, compiled, cancel)` (`orchestrate.py:278`) fait le reste : `open_database` (`duckdb_local.py:90`) crée les schémas et bases des noms `a.b[.c]` (`duckdb_local.py:52-61`), convertit selon les types déclarés et exécute le SQL `duckdb`, dont les limites `MAX_ROWS` et l'annulation.
 7. Rapport : `report()` rend, par jeu de données, `{access_point, table, calls, bytes, cache: "none"|"immutable"|"provisional"|"refreshed", key_source}`.

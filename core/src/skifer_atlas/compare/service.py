@@ -49,14 +49,19 @@ def prepare_in(root: Path, request: CompareRequest, workspace_id: str | None,
     points = connections.registry(workspace_id)
 
     def choose(entity: str, platform: str, wanted: str | None) -> str:
+        if platform == "duckdb" and points.diagnostics:
+            raise RepoError("invalid_rest_access_points", "Registre REST invalide.",
+                            points.diagnostics[0]["issues"])
+        target = "rest" if platform == "duckdb" else platform
         if wanted is not None:
             point = connections.access_point(workspace_id, wanted)
-            if point.platform != platform:
+            if point.platform != target or point.platform == "rest" and platform != "duckdb":
                 raise RepoError("access_point_mismatch", f"« {wanted} » est sur "
                                 f"{point.platform}, les sources de « {entity} » sur {platform}.")
             return point.id
         found = [p for p in points.access_points
-                 if p.entity == entity and p.platform == platform]
+                 if p.entity == entity and p.platform == target and
+                 (p.platform != "rest" or platform == "duckdb")]
         if not found:
             raise RepoError("no_access_point", f"Aucun point d'accès {platform} déclaré pour "
                             f"l'entité « {entity} ».")
@@ -67,13 +72,36 @@ def prepare_in(root: Path, request: CompareRequest, workspace_id: str | None,
         return connections.access_point(workspace_id, found[0].id).id
 
     def dialect(platform: str) -> str:
+        if platform == "duckdb":
+            return "duckdb"
         if platform not in connections.SUPPORTED_PLATFORMS:
             raise RepoError("platform_not_supported", f"Pas encore de connecteur pour "
                             f"« {platform} ».")
         return platform
 
-    return orchestrate.prepare(analysis, load_calendars(root / "calendars"), tolerance,
-                               request, choose, dialect)
+    prepared = orchestrate.prepare(analysis, load_calendars(root / "calendars"), tolerance,
+                                    request, choose, dialect)
+    rest_plans = [p for p in prepared.plans
+                  if connections.access_point(workspace_id, p.access_point).platform == "rest"]
+    if rest_plans:
+        from .rebind import compatible
+        from .rest_runner import datasets
+
+        declared = datasets(workspace_id)
+        for plan in rest_plans:
+            for side in (plan.canonical, plan.variant):
+                for source in side.compiled.sources:
+                    if source.perimeter_conflict:
+                        raise RepoError("rest_perimeter_conflict",
+                                        "Périmètres distincts pour une même table REST.")
+                    ds = declared.require(source.table, plan.access_point)
+                    columns = {c.name: c.type for c in ds.columns}
+                    if any(n not in columns or t is not None and not compatible(t, columns[n])
+                           for n, t in source.columns):
+                        raise RepoError("rest_dataset_mismatch", "Colonnes REST incompatibles avec la source.")
+                    if ds.window is not None and side.compiled.window is None:
+                        raise RepoError("rest_period_required", "Une période est requise pour ce jeu REST.")
+    return prepared
 
 
 def missing_access(workspace_id: str, prepared: Prepared) -> list[dict]:
@@ -98,11 +126,28 @@ def check_access(workspace_id: str, prepared: Prepared) -> None:
                         f"{', '.join(m['access_point'] for m in missing)}.", missing)
 
 
-def remote_runner(workspace_id: str) -> Runner:
-    def run(plan: VariantPlan, compiled, cancel: threading.Event) -> QueryResult:
-        return connections.run_aggregate(workspace_id, plan.access_point, compiled.sql,
+class RemoteRunner:
+    def __init__(self, workspace_id: str, refresh: bool = False):
+        self.workspace_id, self.refresh = workspace_id, refresh
+        self.rest = None
+
+    def __call__(self, plan: VariantPlan, compiled, cancel: threading.Event) -> QueryResult:
+        point = connections.access_point(self.workspace_id, plan.access_point)
+        if point.platform == "rest":
+            if self.rest is None:
+                from .rest_runner import RestRunner
+
+                self.rest = RestRunner(self.workspace_id, self.refresh)
+            return self.rest(plan, compiled, cancel)
+        return connections.run_aggregate(self.workspace_id, plan.access_point, compiled.sql,
                                          cancel=cancel)
-    return run
+
+    def report(self):
+        return self.rest.report() if self.rest is not None else []
+
+
+def remote_runner(workspace_id: str, refresh: bool = False) -> RemoteRunner:
+    return RemoteRunner(workspace_id, refresh)
 
 
 def start_comparison(workspace_id: str, request: CompareRequest,

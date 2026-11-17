@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ..compile import Compiled, CompileError, NotCompilable, Scope, compile_document
 from ..compile.scope import apply_granularity, output_aggregate
 from ..connectors.base import MAX_ROWS, QueryResult
+from ..connectors.rest_errors import REST_ERRORS
 from ..diff import DiffContext, diff
 from ..index.build import Analysis
 from ..model.columns import propagate
@@ -43,6 +44,7 @@ from .reconcile import Cell, divergent_node, keyed, reconcile, summarize, target
 
 SIDES = ("canonical", "variant")
 _STORED_ERRORS = {
+    **{code: message for code, (_, message) in REST_ERRORS.items()},
     "query_failed": "Échec de la requête sur la plateforme.",
     "duplicate_dimensions": "Plusieurs lignes correspondent à une même cellule.",
     "query_canceled": "Requête annulée.",

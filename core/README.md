@@ -195,3 +195,100 @@ Elle rend `ok`, `version`, `frozen`, `modules` et `checks`. La présence de git 
 - taille sous 200 Mo.
 
 `tests/test_release.py` couvre la même chose sans binaire : version unique, `_selftest`, lifeline.
+
+## Points d'accès REST
+
+Plan 0036, ADR 0050–0054. Les sources des documents restent en `platform: duckdb` ;
+le point d'accès décide de l'exécution. Déclarer `rest` dans `allowed_platforms` de
+`governance.yaml`, puis écrire et versionner ces deux fichiers dans le dépôt de l'espace.
+Ils ne passent pas par les propositions ni par l'écran Connexions.
+
+`rest_access_points.yaml` (séparé du registre historique, qui reste lisible sans REST) :
+
+```yaml
+schema_version: 1
+access_points:
+  - id: api-exemple
+    platform: rest
+    host: api.exemple.test
+    http_path: /v1
+    owner: exemple.owner
+    entity: exemple
+    key_in: query
+    key_name: apikey
+    calls_per_minute: 60
+    bytes_per_day: 500000000
+```
+
+HTTPS est obligatoire ; seul un faux serveur sur `localhost` ou `127.0.0.1` peut
+utiliser HTTP (port 1024–65535). Aucun suivi de redirection ; une pagination ne quitte
+jamais l'origine et le chemin de base. Pour une clé en en-tête : `key_in: header`,
+`key_name: Authorization`, `key_prefix: "Bearer "`. Aucune valeur de clé dans le YAML.
+
+`rest_datasets.yaml` associe chaque table logique à son appel et à ses colonnes :
+
+```yaml
+schema_version: 1
+datasets:
+  - table: marche.prix.cours_jour
+    access_point: api-exemple
+    path: /historique
+    params: {interval: 1d}
+    window: {from_param: from, to_param: to, format: "%Y-%m-%d"}
+    perimeter: {param: symbol, column: symbol, mode: each, required: true}
+    rows_path: results
+    error_keys: [error, message]
+    pagination: {kind: next_url, next_path: next_url, max_pages: 20}
+    columns:
+      - {name: symbol, from: symbol, type: string}
+      - {name: trade_date, from: t, type: date, format: "%Y-%m-%d"}
+      - {name: close, from: c, type: double}
+```
+
+Sans pagination, omettre `pagination` ; une liste à la racine se déclare avec
+`rows_path: ""`. Les chemins de champs utilisent des points et acceptent les indices de
+liste. `epoch_s`/`epoch_ms` sont admis pour les dates ; les horodatages sans fuseau
+utilisent `timezone` (UTC par défaut), puis sont stockés en UTC. Un périmètre exigé
+mais vide est refusé avant tout appel. Pour passer plusieurs valeurs en un appel,
+utiliser `mode: list` (séparées par des virgules).
+
+`atlas rest-key <espace> <point>` lit uniquement l'entrée standard (invite masquée
+sur un terminal) et range la clé dans le coffre personnel, liée à l'hôte. Aucun
+argument ni route d'API pour sa valeur. Si le trousseau est indisponible seulement,
+Atlas lit `ATLAS_REST_KEY_<ID>` : majuscules, traits d'union remplacés par des
+soulignés (`api-exemple` → `ATLAS_REST_KEY_API_EXEMPLE`). Un coffre disponible sans
+entrée ne déclenche pas ce repli. La variable n'est jamais recopiée ailleurs.
+
+`atlas compare <espace> <kpi> --variants <entités> --scope <scope> [--refresh]`
+charge les tables dans DuckDB. Les deux côtés partagent le chargement. La sortie
+texte indique les appels, octets, cache et source de clé ; JSON ajoute `rest` sans
+modifier le résultat de l'API. Les fichiers locaux (`--duckdb-data` ou
+`ATLAS_COMPARE_DATA`) gardent la priorité et ne déclenchent aucun appel REST.
+
+**Changement de comportement (plan 0036, F3)** : la CLI lit désormais
+`ATLAS_COMPARE_DATA` pour tous les espaces, même sans point REST. Une variable
+restée définie remplace donc aussi une exécution distante historique par les
+fichiers locaux ; la retirer pour revenir aux points d'accès. `--duckdb-data`
+reste prioritaire sur cette variable.
+
+Le cache Parquet et ses métadonnées sont dans les données personnelles de l'espace,
+jamais dans son clone : fenêtres passées immuables, fenêtre courante ou jeu sans
+fenêtre provisoire pendant 15 minutes. Une entrée encore provisoire est relue
+une fois après la clôture UTC de sa fenêtre, même si les 15 minutes ne sont pas
+écoulées ; seule cette réponse finale devient immuable (F1). `--refresh` refait chaque clé une seule fois
+par comparaison. Il n'y a pas de purge automatique dans ce plan.
+
+Deux sources d'une même table portant des périmètres distincts sont refusées
+avant l'exécution REST (`rest_perimeter_conflict`, F2), sans appel ni historique
+de comparaison. Le chargement d'une union de périmètres est hors de ce plan.
+
+Les budgets refusent avant chaque page ou nouvel essai, sans attendre. Le budget
+d'appels glisse sur 60 secondes, par processus ; celui d'octets porte sur le jour UTC.
+L'appel qui dépasse le budget d'octets a lieu, le suivant est refusé. Le registre
+`rest.usage` dans `atlas.duckdb` survit à la reconstruction de l'index et ignore `--db`.
+`atlas rest-usage <espace> [--point <id>] [--day AAAA-MM-JJ] [--format json]` le lit.
+Un 429 peut être retenté une seule fois avec `Retry-After` ≤ 60 secondes ; chaque
+tentative et chaque échec sont comptés. Aucune URL ni réponse fournisseur n'est
+restituée dans les erreurs. Le test réel `pytest -m rest` est ignoré sans
+`ATLAS_REST_TEST_ORIGIN`, `ATLAS_REST_TEST_PATH` et `ATLAS_REST_TEST_KEY` ; les autres
+tests n'utilisent que des serveurs en boucle locale et des clés créées à l'exécution.

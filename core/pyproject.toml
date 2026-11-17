@@ -56,6 +56,7 @@ markers = [
     "github: test réel contre GitHub (ATLAS_GITHUB_TEST_REPO), hors CI",
     "databricks: test réel contre un SQL warehouse Databricks (ATLAS_DATABRICKS_*), hors CI",
     "snowflake: test réel contre un compte Snowflake (ATLAS_SNOWFLAKE_*), hors CI",
+    "rest: test réel contre un point REST (ATLAS_REST_TEST_*), hors CI",
     "sidecar: binaire figé construit par scripts/build-sidecar.sh, hors CI",
     "slow: test lent (préparation de la démo), hors du pytest par défaut",
 ]
