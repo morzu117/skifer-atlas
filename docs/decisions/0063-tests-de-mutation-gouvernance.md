@@ -48,3 +48,13 @@ Les 9 survivants sont équivalents :
 Pour la gouvernance, un survivant nouveau est à traiter comme un test manquant, sauf s'il
 est équivalent. Les modules suivants (droits des propositions, publication) pourront
 rejoindre `paths_to_mutate` de la même façon.
+
+## Extension aux propositions (17 novembre 2026)
+
+`paths_to_mutate` inclut aussi `core/src/skifer_atlas/proposals/`, et la sélection de tests
+s'étend aux tests qui les exercent : éditeur, contrats d'API, routes d'espace et catalogue.
+Le passage compte 3 418 mutants et dure plus de deux heures. Sur les 1 826 premiers, 514
+survivent (28 %). Ils se concentrent dans `revise`, dans la création des propositions de
+gouvernance et de points d'accès, dans `view.graphs` et dans `viewer`. Pour `viewer`, ce sont
+les droits affichés, `can_close` et `can_revise` ; le serveur, lui, refuse bien l'action.
+Comme pour la gouvernance, les survivants significatifs deviendront des tests.
