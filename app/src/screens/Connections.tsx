@@ -32,6 +32,7 @@ export const OAUTH_POLL_MS = 1000;
 export const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
 
 const PLATFORMS: Record<string, string> = {
+  rest: "API REST",
   databricks: "Databricks",
   snowflake: "Snowflake",
   bigquery: "BigQuery",
@@ -39,7 +40,7 @@ const PLATFORMS: Record<string, string> = {
   redshift: "Redshift",
   duckdb: "DuckDB",
 };
-const AUTHS: Record<string, string> = { oauth: "OAuth", pat: "token personnel", sso: "SSO", keypair: "paire de clés" };
+const AUTHS: Record<string, string> = { apikey: "clé d'API", oauth: "OAuth", pat: "token personnel", sso: "SSO", keypair: "paire de clés" };
 const PREFIXES: Record<string, string> = { databricks: "dbx", snowflake: "snow", bigquery: "bq", fabric: "fab", redshift: "rs" };
 
 type Load<T> = { kind: "loading" } | { kind: "ready"; value: T } | { kind: "error"; error: Explained };
@@ -66,12 +67,13 @@ const platformLabel = (id: string) => PLATFORMS[id] ?? id;
 
 /** « Connecté » et son détail (« expire dans 11 j », « session OAuth », « session SSO »),
  * « Token expiré », « Jamais connecté ». */
-export function accessLabel(c: Pick<Connection, "my_access" | "auth" | "expires_in_days">): {
+export function accessLabel(c: Pick<Connection, "my_access" | "auth" | "expires_in_days"> & Partial<Pick<Connection, "platform" | "key_source">>): {
   text: string;
   detail: string | null;
   tone: "ok" | "warn" | "none";
 } {
   if (c.my_access === "connected") {
+    if (c.auth === "apikey") return { text: "Connecté", detail: c.key_source === "vault" ? "clé au coffre" : c.key_source === "env" ? "clé d'environnement" : "clé d'API", tone: "ok" };
     // Une session SSO se renouvelle tant qu'Atlas s'en sert : pas d'échéance à afficher.
     if (c.auth === "sso") return { text: "Connecté", detail: "session SSO", tone: "ok" };
     if (c.expires_in_days !== null) return { text: "Connecté", detail: `expire dans ${c.expires_in_days} j`, tone: "ok" };
@@ -79,7 +81,7 @@ export function accessLabel(c: Pick<Connection, "my_access" | "auth" | "expires_
     return { text: "Connecté", detail, tone: "ok" };
   }
   if (c.my_access === "expired") {
-    const text = c.auth === "oauth" || c.auth === "sso" ? "Session expirée" : c.auth === "keypair" ? "Clé refusée" : "Token expiré";
+    const text = c.platform === "rest" ? "Clé refusée" : c.auth === "oauth" || c.auth === "sso" ? "Session expirée" : c.auth === "keypair" ? "Clé refusée" : "Token expiré";
     return { text, detail: null, tone: "warn" };
   }
   return { text: "Jamais connecté", detail: null, tone: "none" };
@@ -611,7 +613,7 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
     try {
       const done = await api.revokeConnection(ws.id, c.access_point);
       oauth.reset();
-      setMessage({ text: done.remote_revoked ? `Accès révoqué, ici et chez ${name}.` : "Accès retiré du coffre.", tone: "ok" });
+      setMessage({ text: c.platform === "rest" ? "Clé retirée du coffre." : done.remote_revoked ? `Accès révoqué, ici et chez ${name}.` : "Accès retiré du coffre.", tone: "ok" });
       onChanged();
     } catch (reason) {
       setMessage({ text: explain(reason).text, tone: "bad" });
@@ -623,6 +625,15 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
   let actions;
   if (!c.allowed) {
     actions = <span className="muted">Plateforme retirée par le référent</span>;
+  } else if (c.platform === "rest") {
+    const command = `atlas rest-key ${ws.id} ${c.access_point}`;
+    if (c.my_access === "never" || c.my_access === "expired") {
+      actions = <span className="muted">{c.my_access === "never" ? "Clé à enregistrer avec :" : "Clé refusée : la réenregistrer avec :"}<code className="mono connections-command">{command}</code></span>;
+    } else if (c.key_source === "vault") {
+      actions = <button type="button" className="btn btn-danger btn-sm" aria-label={`Retirer la clé ${label}`} disabled={busy} onClick={() => void revoke()}>Retirer la clé</button>;
+    } else if (c.key_source === "env") {
+      actions = <span className="muted">Clé lue dans :<code className="mono connections-command">{`ATLAS_REST_KEY_${c.access_point.toUpperCase().replaceAll("-", "_")}`}</code></span>;
+    }
   } else if (!c.supported) {
     actions = <span className="muted">Bientôt dans Atlas</span>;
   } else if (oauth.flow.kind === "waiting") {
@@ -693,7 +704,7 @@ function Row({ ws, connection: c, onChanged }: { ws: Workspace; connection: Conn
       <td>
         <strong>{name}</strong>
         <span className="connections-sub">
-          {c.entity ?? "Groupe"} · {c.auth ? AUTHS[c.auth] : c.supported ? AUTHS[c.auth_mode ?? "oauth"] : "bientôt"}
+          {c.entity ?? "Groupe"} · {c.platform === "rest" ? AUTHS.apikey : c.auth ? AUTHS[c.auth] : c.supported ? AUTHS[c.auth_mode ?? "oauth"] : "bientôt"}
         </span>
       </td>
       <td className="mono">{c.schema ?? "—"}</td>
