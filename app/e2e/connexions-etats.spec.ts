@@ -119,3 +119,31 @@ test("[S-0016-12] se connecter ou tester avec un identifiant déjà déclaré es
   await form.getByLabel("Identifiant").fill("dbx-libre");
   await expect(refused).toHaveCount(0);
 });
+
+test("les points REST présentent les clés et leurs seules actions disponibles", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, AUTH_API);
+  await relay(page, AUTH_API);
+  await page.route(`${API}/api/workspaces/${ws.id}/connections`, async (route) => {
+    const response = await route.fetch({ url: route.request().url().replace(API, AUTH_API) });
+    const existing = await response.json();
+    const base = { platform: "rest", host: "https://api.example", entity: "nordis-fr", owner: "claire.m", owner_name: "Claire M.", freshness: null, allowed: true, supported: true, auth_mode: null, login: null, private_key_file: null, expires_in_days: null, error: null };
+    await route.fulfill({ response, json: [...existing, { ...base, access_point: "api-sans-cle", schema: "api-sans-cle", auth: null, my_access: "never", key_source: null }, { ...base, access_point: "api-coffre", schema: "api-coffre", auth: "apikey", my_access: "connected", key_source: "vault" }] });
+  });
+  await page.goto(`${ws.root}/connexions`);
+  const never = page.getByRole("row").filter({ hasText: "api-sans-cle" });
+  const vault = page.getByRole("row").filter({ hasText: "api-coffre" });
+  for (const line of [never, vault]) {
+    await expect(line.getByText("API REST")).toBeVisible();
+    await expect(line.getByText("nordis-fr · clé d'API")).toBeVisible();
+    await expect(line.getByRole("button", { name: /Se connecter|Reconnecter|Tester/ })).toHaveCount(0);
+  }
+  await expect(never).toContainText("Jamais connecté");
+  await expect(never.locator("code")).toHaveText(`atlas rest-key ${ws.id} api-sans-cle`);
+  await expect(never.locator("code")).toHaveCSS("display", "block");
+  await expect(never.locator("code")).toHaveCSS("white-space", "nowrap");
+  await expect(never.locator("code")).toHaveCSS("font-size", await never.locator(".muted").evaluate((element) => getComputedStyle(element).fontSize));
+  await expect(vault).toContainText("Connecté");
+  await expect(vault).toContainText("clé au coffre");
+  await expect(vault.getByRole("button", { name: "Retirer la clé API REST · api-coffre" })).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+});

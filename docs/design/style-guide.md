@@ -196,6 +196,7 @@ Tout nœud porte un libellé et une note facultative (« pourquoi ce nœud »).
 
 - Titre « Mes connexions », sous-titre rappelant que les tokens sont locaux.
 - Tableau : Plateforme (nom + entité · mode d'auth), Schéma (mono), Propriétaire, Fraîcheur, Mon accès (pastille + libellé : Connecté · expire dans n j / session SSO ; Token expiré ; Jamais connecté), actions (Tester / Révoquer ; Reconnecter ; Se connecter).
+- Ligne REST : libellé « API REST », aucune action de connexion, renvoi vers `atlas rest-key`, « Retirer la clé » pour une clé au coffre et mention de la variable pour une clé d'environnement ; la saisie de la clé dans l'app vient avec le plan suivant (ADR 0054).
 - Panneau 340 px « Nouveau point d'accès » : plateforme (limitée aux plateformes autorisées), hôte, schéma, entité, « S'authentifier avec OAuth » (primaire, lance le flux natif), « Tester la connexion ».
 - Jamais de champ pour saisir un token à la main.
 

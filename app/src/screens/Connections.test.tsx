@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Connection, Platform, Workspace } from "../api";
+import { api as clientApi, type Connection, type Platform, type Workspace } from "../api";
 import { expectAccessibleLandmarks } from "../test/accessibility";
 import { ALTAVIA, fakeServer, workspace, type Call } from "../test/fakeServer";
 import { accessLabel, Connections, suggestedId, toAccessPoint } from "./Connections";
@@ -101,6 +101,7 @@ describe("libellés", () => {
     expect(accessLabel({ my_access: "expired", auth: "pat", expires_in_days: null })).toEqual({ text: "Token expiré", detail: null, tone: "warn" });
     expect(accessLabel({ my_access: "expired", auth: "oauth", expires_in_days: null }).text).toBe("Session expirée");
     expect(accessLabel({ my_access: "never", auth: null, expires_in_days: null }).text).toBe("Jamais connecté");
+    expect(accessLabel({ my_access: "connected", auth: "apikey", expires_in_days: null }).detail).toBe("clé d'API");
     // Snowflake (plan 0018) : la session SSO se renouvelle, pas d'échéance affichée.
     expect(accessLabel({ my_access: "connected", auth: "sso", expires_in_days: 0 }).detail).toBe("session SSO");
     expect(accessLabel({ my_access: "connected", auth: "keypair", expires_in_days: null }).detail).toBe("paire de clés");
@@ -141,6 +142,50 @@ describe("libellés", () => {
 });
 
 describe("mes connexions", () => {
+  it("présente les clés REST sans proposer les actions des entrepôts", async () => {
+    const rest = (id: string, overrides: Partial<Connection> = {}) => connection({ access_point: id, platform: "rest", schema: id, auth_mode: null, ...overrides });
+    const list = [rest("sans-cle"), rest("refusee", { my_access: "expired" }), rest("au-coffre", { my_access: "connected", auth: "apikey", key_source: "vault" }), rest("mon-api", { my_access: "connected", auth: "apikey", key_source: "env" }), rest("retiree", { allowed: false }) , LIST[0]];
+    const serverApi = server(list, ({ method, path }) => method === "DELETE" && path === `${API}/connections/au-coffre/token` ? { json: { revoked: true, remote_revoked: false } } : undefined);
+    const revoke = vi.spyOn(clientApi, "revokeConnection");
+    render(screenFor());
+    for (const id of ["sans-cle", "refusee", "au-coffre", "mon-api", "retiree"]) {
+      const line = within(await row(new RegExp(`^${id}$`)));
+      expect(line.getByText("API REST")).toBeInTheDocument();
+      expect(line.getByText("nordis-fr · clé d'API")).toBeInTheDocument();
+      expect(line.queryByRole("button", { name: /Se connecter|Reconnecter|Tester/ })).not.toBeInTheDocument();
+    }
+    const never = within(await row(/^sans-cle$/));
+    expect(never.getByText("Jamais connecté")).toBeInTheDocument();
+    expect(never.getByText("atlas rest-key groupe-nordis sans-cle").tagName).toBe("CODE");
+    expect(never.getByText(/Clé à enregistrer avec/)).toHaveTextContent("Clé à enregistrer avec :");
+    expect(never.getByText("atlas rest-key groupe-nordis sans-cle")).toHaveClass("mono", "connections-command");
+    const expired = within(await row(/^refusee$/));
+    expect(expired.getByText("Clé refusée")).toBeInTheDocument();
+    expect(expired.getByText(/Clé refusée : la réenregistrer avec/)).toHaveTextContent("atlas rest-key groupe-nordis refusee");
+    const vault = within(await row(/^au-coffre$/));
+    expect(vault.getByText("Connecté")).toBeInTheDocument();
+    expect(vault.getByText("clé au coffre")).toBeInTheDocument();
+    expect(vault.queryByRole("button", { name: /Révoquer/ })).not.toBeInTheDocument();
+    const env = within(await row(/^mon-api$/));
+    expect(env.getByText("Connecté")).toBeInTheDocument();
+    expect(env.getByText("clé d'environnement")).toBeInTheDocument();
+    expect(env.getByText(/Clé lue dans/)).toHaveTextContent("Clé lue dans :");
+    expect(env.getByText("ATLAS_REST_KEY_MON_API")).toHaveClass("mono", "connections-command");
+    expect(env.queryAllByRole("button")).toHaveLength(0);
+    expect(within(await row(/^retiree$/)).getByText("Plateforme retirée par le référent")).toBeInTheDocument();
+    const dbx = within(await row(/^gold.finance$/));
+    expect(dbx.getByText("Databricks")).toBeInTheDocument();
+    expect(dbx.getByText("nordis-fr · OAuth")).toBeInTheDocument();
+    expect(dbx.getByText("expire dans 11 j")).toBeInTheDocument();
+    expect(dbx.getByRole("button", { name: "Tester Databricks · dbx-fr" })).toBeInTheDocument();
+    expect(dbx.getByRole("button", { name: "Révoquer Databricks · dbx-fr" })).toBeInTheDocument();
+    await userEvent.click(vault.getByRole("button", { name: "Retirer la clé API REST · au-coffre" }));
+    expect(revoke).toHaveBeenCalledWith("groupe-nordis", "au-coffre");
+    expect(await vault.findByText("Clé retirée du coffre.")).toBeInTheDocument();
+    expect(serverApi.calls.some((call) => call.path.endsWith("/authorize"))).toBe(false);
+    revoke.mockRestore();
+  });
+
   it("attend la liste avant de proposer une entité et un identifiant stables", async () => {
     let release!: (reply: { json: Connection[] }) => void;
     const pending = new Promise<{ json: Connection[] }>((resolve) => { release = resolve; });

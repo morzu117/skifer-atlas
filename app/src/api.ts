@@ -330,7 +330,9 @@ export type Connection = {
   allowed: boolean;
   supported: boolean;
   /** Ce que j'ai au coffre : OAuth, token personnel, session SSO, paire de clés (0018). */
-  auth: "oauth" | "pat" | "sso" | "keypair" | null;
+  auth: "oauth" | "pat" | "sso" | "keypair" | "apikey" | null;
+  /** Source de la clé REST (plan 0036, ADR 0053). */
+  key_source?: "vault" | "env" | null;
   /** Mode d'authentification du point d'accès : OAuth (Databricks), SSO ou paire de clés. */
   auth_mode: "oauth" | "sso" | "keypair" | null;
   /** Snowflake : mon identifiant et le chemin de ma clé privée, au registre local. */

@@ -811,6 +811,7 @@ textarea.prop-input { resize: vertical; }
 .connections-table th, .connections-table td { padding-left: var(--atlas-space-3); padding-right: var(--atlas-space-3); }
 .connections-table td { vertical-align: top; }
 .connections-table .convergence, .connections-actions .btn { white-space: nowrap; }
+.connections-command { display: block; white-space: nowrap; font-size: var(--atlas-text-sm); }
 .connections-table td.mono { font-family: var(--atlas-font-mono); font-size: var(--atlas-text-md); }
 .connections-sub { display: block; font-size: var(--atlas-text-sm); color: var(--atlas-muted); }
 .connections-actions { display: flex; flex-direction: column; gap: var(--atlas-space-2); align-items: flex-start; }
