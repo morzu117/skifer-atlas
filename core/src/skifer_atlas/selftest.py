@@ -28,6 +28,7 @@ DYNAMIC_MODULES = (
     "sqlglot.dialects.snowflake",
     "sqlglot.dialects.duckdb",
     "duckdb",
+    "skifer_atlas.compare.rest_runner",
     "snowflake.connector",  # importé à la première connexion (plan 0018)
     "snowflake.connector.constants",
     "cryptography.hazmat.primitives.serialization",

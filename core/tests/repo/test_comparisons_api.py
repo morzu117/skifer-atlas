@@ -64,14 +64,16 @@ def code(response):
     return response.status_code, response.json()["detail"]["code"]
 
 
-def test_compare_then_read_history_matrix_and_catalog(client, joined, local):
+def test_compare_then_read_history_matrix_and_catalog(client, joined, local, monkeypatch):
     catalog = {k["id"]: k for k in client.get(f"{WS}/catalog").json()}
     assert catalog["revenu-net"]["convergence"] == "never_compared"
     created = client.post(COMPARISONS, json=BODY)
     assert created.status_code == 202, created.text
     assert created.json()["id"] == 1
     assert [a["code"] for a in created.json()["alerts"]] == ["undeclared_override"]
+    monkeypatch.delenv("ATLAS_COMPARE_DATA")
     found = finished(client, 1)
+    assert found["data_source"] == "données locales"
     assert (found["status"], found["user_account"], found["tolerance_pct"]) == (
         "done", "julien.h", 1.5)
     assert [(r["entity"], round(r["validation_pct"]), r["divergent_node"])

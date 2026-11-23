@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .. import __version__
+from ..connectors.rest_errors import REST_ERRORS
 from ..repo import RepoError
 from .routes import (
     catalog,
@@ -36,6 +37,7 @@ from .routes import (
 
 # Code d'erreur métier → statut HTTP ; un code absent donne 500.
 ERROR_STATUS = {
+    **{code: status for code, (status, _) in REST_ERRORS.items()},
     "not_found": 404,
     "platform_not_found": 404,
     "forbidden": 403,

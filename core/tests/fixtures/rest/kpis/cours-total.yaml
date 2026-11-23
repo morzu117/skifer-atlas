@@ -1,0 +1,38 @@
+schema_version: 1
+kind: kpi
+data_product:
+  id: cours-total
+  version: 1
+  owner: exemple.owner
+  domain: finance
+label: Total des cours
+scopes:
+  - id: total
+    granularity: [day, symbol]
+semantics:
+  calendar: {key: civil, version: '2026.1'}
+  timezone: UTC
+graph:
+  nodes:
+    - id: n01
+      type: source
+      platform: duckdb
+      table: marche.prix.cours_jour
+      owner: exemple.owner
+      columns:
+        - {name: trade_date, type: date, timezone: UTC, format: yyyy-MM-dd}
+        - {name: symbol, type: string}
+        - {name: close, type: double}
+    - id: n02
+      type: temporal
+      inputs: [n01]
+      operation: period
+      column: trade_date
+      target: day
+      grain: day
+    - id: n03
+      type: aggregate
+      inputs: [n02]
+      group_by: [day, symbol]
+      measures: [[close, total, sum]]
+  output: n03

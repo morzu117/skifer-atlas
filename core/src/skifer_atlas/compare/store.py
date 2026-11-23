@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS results.summaries (
     bypass_nodes VARCHAR[] NOT NULL,
     differences_json VARCHAR NOT NULL
 );
+ALTER TABLE results.comparisons ADD COLUMN IF NOT EXISTS data_source VARCHAR;
 -- Plan 0029 : ajoutée après coup, en dernière colonne ; les bases déjà créées la reçoivent
 -- ici, et leurs anciennes synthèses la laissent à NULL (aucune source commune connue).
 ALTER TABLE results.summaries ADD COLUMN IF NOT EXISTS common_json VARCHAR;
@@ -122,7 +123,7 @@ def _records(cursor: duckdb.DuckDBPyConnection) -> list[dict]:
 
 
 def create(db: Path, account: str | None, kpi_id: str, kpi_version: int, scope: dict,
-           tolerance: float) -> int:
+           tolerance: float, data_source: str | None = None) -> int:
     with _lock:
         connection = connect(db)
         try:
@@ -130,8 +131,8 @@ def create(db: Path, account: str | None, kpi_id: str, kpi_version: int, scope: 
                 "SELECT coalesce(max(id), 0) + 1 FROM results.comparisons").fetchall()
             connection.execute(
                 "INSERT INTO results.comparisons VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 'running', "
-                "NULL, ?)", [number, now(), account, kpi_id, kpi_version,
-                             json.dumps(scope, ensure_ascii=False), tolerance, SCHEMA_VERSION])
+                "NULL, ?, ?)", [number, now(), account, kpi_id, kpi_version,
+                                json.dumps(scope, ensure_ascii=False), tolerance, SCHEMA_VERSION, data_source])
         finally:
             connection.close()
     return number

@@ -641,6 +641,15 @@ def test_local_runner_interrupts_duckdb(db):
 def test_remote_runner_goes_through_the_access_point(monkeypatch):
     from skifer_atlas import connections
     from skifer_atlas.compare import service
+    from skifer_atlas.workspaces import repo_dir
+
+    # Le plan 0036 résout désormais le point avant de choisir REST ou le push-down.
+    root = repo_dir("nordis")
+    root.mkdir(parents=True)
+    shutil.copy(EXAMPLE / "governance.yaml", root / "governance.yaml")
+    (root / "access_points.yaml").write_text(yaml.safe_dump({"access_points": [{
+        "id": "dbx-de", "platform": "databricks", "host": "https://api.exemple.test",
+        "warehouse_id": "abc", "owner": "exemple.owner"}]}), encoding="utf-8")
 
     seen = []
 

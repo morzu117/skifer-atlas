@@ -1,8 +1,9 @@
 """Mes connexions dans un espace : points d'accès, coffre, OAuth, test, requête (plan 0008).
 
 Le registre des points d'accès se lit dans le clone de l'espace ; les identifiants de
-l'utilisateur, dans son coffre, sous `<espace>/<point d'accès>`. Aucune fonction de ce
-module ne rend un jeton : seulement des états (`connected`, `expired`, `never`).
+l'utilisateur, dans son coffre, sous `<espace>/<point d'accès>`. L'API ne rend que des
+états (`connected`, `expired`, `never`) ; `rest_key` est la seule lecture interne de
+clé REST, pour le runner, jamais une route d'API (plan 0036, ADR 0053).
 
 Snowflake (plan 0018) : SSO par le navigateur ou paire de clés, selon le point d'accès.
 L'identifiant Snowflake de l'utilisateur et le chemin de sa clé privée vont dans son
@@ -11,27 +12,31 @@ registre local (`connectors/logins.py`) ; la passphrase et les jetons de session
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from .connectors import drafts, logins, oauth
 from .connectors import snowflake as snowflake_connector
-from .connectors.access_points import FILE, AccessPoint, AccessPoints, parse_access_points
+from .connectors.access_points import FILE, AccessPoint, parse_access_points
 from .connectors.base import MAX_ROWS, QUERY_TIMEOUT, AuthRejected, Connector, QueryResult
 from .connectors.databricks import DatabricksConnector
 from .connectors.logins import Login
+from .connectors.rest_access_points import FILE as REST_FILE
+from .connectors.rest_access_points import RestAccessPoint, parse_rest_access_points
 from .connectors.snowflake import LIVE, SSO_FLOWS, SnowflakeConnector
-from .model.errors import issues_from_validation_error
+from .model.errors import Issue, issues_from_validation_error
 from .repo.git import RepoError
 from .repo.layout import read_governance
 from .vault import Credential, Vault
 from .workspaces import repo_dir
 
-SUPPORTED_PLATFORMS = ("databricks", "snowflake")
+SUPPORTED_PLATFORMS = ("databricks", "snowflake", "rest")
 # Ordre des verrous, toujours : registre des flux (`Flows`/`SsoFlows`), puis verrou du flux, puis
 # `_draft_lock`. On ne prend jamais un verrou de registre en tenant `_draft_lock` : le retour du
 # navigateur tient celui de son flux et attend `_draft_lock` dans `store`.
@@ -56,14 +61,40 @@ def _store_draft(key: tuple[str, str], marker: object, store: Callable[[], None]
         _draft_attempts.pop(key, None)
 
 
-def registry(workspace_id: str) -> AccessPoints:
+@dataclass
+class ConnectionRegistry:
+    access_points: list[AccessPoint | RestAccessPoint]
+    diagnostics: list[dict] = field(default_factory=list)
+
+    def get(self, access_point_id: str) -> AccessPoint | RestAccessPoint | None:
+        return next((p for p in self.access_points if p.id == access_point_id), None)
+
+
+def registry(workspace_id: str) -> ConnectionRegistry:
     path = repo_dir(workspace_id) / FILE
     found, issues = parse_access_points(
         path.read_text(encoding="utf-8") if path.exists() else "", None)
     if found is None:
         raise RepoError("invalid_access_points", f"{FILE} est invalide.",
                         [i.to_dict() for i in issues])
-    return found
+    rest_path = path.with_name(REST_FILE)
+    try:
+        rest, rest_issues = parse_rest_access_points(
+            rest_path.read_text(encoding="utf-8") if rest_path.exists() else "", None)
+    except (OSError, UnicodeError):
+        rest, rest_issues = None, [Issue("", None, "invalid_yaml", "Fichier REST illisible.")]
+    rest_points = rest.access_points if rest else []
+    legacy_ids = {p.id for p in found.access_points}
+    conflicts = [{"path": f"/access_points/{i}/id", "node_id": None,
+                      "code": "duplicate_access_point", "message": "Identifiant commun aux deux registres.",
+                      "file": REST_FILE, "other_file": FILE}
+                 for i, p in enumerate(rest_points) if p.id in legacy_ids]
+    diagnostics = []
+    if rest is None or conflicts:
+        diagnostics.append({"code": "invalid_rest_access_points", "file": REST_FILE,
+                            "issues": conflicts or [i.to_dict() for i in rest_issues]})
+        rest_points = []
+    return ConnectionRegistry([*found.access_points, *rest_points], diagnostics)
 
 
 def _allowed(workspace_id: str) -> set[str]:
@@ -76,8 +107,9 @@ def _names(workspace_id: str) -> dict[str, str]:
     return {m.account: m.name for m in governance.members} if governance else {}
 
 
-def access_point(workspace_id: str, access_point_id: str) -> AccessPoint:
-    point = registry(workspace_id).get(access_point_id)
+def access_point(workspace_id: str, access_point_id: str) -> AccessPoint | RestAccessPoint:
+    registered = registry(workspace_id)
+    point = registered.get(access_point_id)
     if point is None:
         raise RepoError("not_found", f"Point d'accès « {access_point_id} » inconnu.")
     if point.platform not in _allowed(workspace_id):
@@ -105,7 +137,7 @@ def _summary(workspace_id: str, point: AccessPoint, credential: Credential | Non
              allowed: set[str], names: dict[str, str] | None = None) -> dict:
     login = logins.get(workspace_id, point.id) if point.platform == "snowflake" else None
     found = {"access_point": point.id, "platform": point.platform, "host": point.host,
-             "schema": point.schema_, "entity": point.entity, "owner": point.owner,
+             "schema": getattr(point, "schema_", None), "entity": point.entity, "owner": point.owner,
              "owner_name": (names or {}).get(point.owner), "freshness": point.freshness,
              "allowed": point.platform in allowed,
              "supported": point.platform in SUPPORTED_PLATFORMS,
@@ -127,10 +159,14 @@ def _summary(workspace_id: str, point: AccessPoint, credential: Credential | Non
 def list_connections(workspace_id: str, vault: Vault | None = None) -> list[dict]:
     """Points d'accès de l'espace et mon accès à chacun, sans appel réseau."""
     points = registry(workspace_id).access_points
-    vault = vault or Vault()
-    mine = vault.list_my_connections(workspace_id, [p.id for p in points])
+    legacy = [p for p in points if p.platform != "rest"]
+    mine = {}
+    if legacy:
+        vault = vault or Vault()
+        mine = vault.list_my_connections(workspace_id, [p.id for p in legacy])
     allowed, names = _allowed(workspace_id), _names(workspace_id)
-    return [_summary(workspace_id, p, mine.get(p.id), allowed, names) for p in points]
+    return [_status(workspace_id, p, vault) if p.platform == "rest" else
+            _summary(workspace_id, p, mine.get(p.id), allowed, names) for p in points]
 
 
 PLATFORM_LABELS = {"databricks": "Databricks", "snowflake": "Snowflake", "bigquery": "BigQuery",
@@ -178,6 +214,17 @@ def draft_status(workspace_id: str, raw: dict, vault: Vault | None = None) -> di
 
 
 def _status(workspace_id: str, point: AccessPoint, vault: Vault | None) -> dict:
+    if point.platform == "rest":
+        found = _summary(workspace_id, point, None, _allowed(workspace_id), _names(workspace_id))
+        found.update(key_source=None, flow=None, error=None)
+        try:
+            _, source = rest_key(workspace_id, point, vault)
+            found.update(key_source=source, my_access="connected", auth="apikey")
+        except RepoError as error:
+            found["error"] = {"code": error.code, "message": error.message}
+            if error.code in ("access_expired", "access_host_mismatch"):
+                found["my_access"] = "expired"
+        return found
     vault = vault or Vault()
     credential = vault.get(workspace_id, point.id)
     error = None
@@ -440,7 +487,53 @@ def ensure_usable(workspace_id: str, access_point_id: str, vault: Vault | None =
     """Lève `not_connected` ou `access_expired` si mon accès ne permet pas d'exécuter ;
     rafraîchit au passage un jeton OAuth près d'expirer."""
     point = access_point(workspace_id, access_point_id)
+    if point.platform == "rest":
+        rest_key(workspace_id, point, vault)
+        return
     _usable(workspace_id, point, vault or Vault())
+
+
+def rest_key_variable(point_id: str) -> str:
+    return "ATLAS_REST_KEY_" + point_id.upper().replace("-", "_")
+
+
+def _api_key_value(key: str) -> str:
+    key = key.strip()
+    if not key or any(c.isspace() for c in key):
+        raise RepoError("invalid_token", "Clé d'API vide ou mal formée.")
+    return key
+
+
+def rest_key(workspace_id: str, point: RestAccessPoint, vault: Vault | None = None
+             ) -> tuple[str, str]:
+    """Seule lecture de clé REST ; aucune écriture lors du repli environnement."""
+    try:
+        credential = (vault or Vault()).get(workspace_id, point.id)
+    except RepoError as error:
+        if error.code != "vault_unavailable":
+            raise
+        value = os.environ.get(rest_key_variable(point.id), "")
+        if not value.strip():
+            raise
+        return _api_key_value(value), "env"
+    if credential is None or credential.kind != "apikey":
+        raise RepoError("not_connected", f"Pas encore connecté à « {point.id} ».")
+    if not _bound_to(point, credential):
+        raise _host_mismatch(point)
+    if credential.rejected:
+        raise RepoError("access_expired", "Clé d'API refusée : se reconnecter.")
+    return _api_key_value(credential.access_token), "vault"
+
+
+def store_api_key(workspace_id: str, access_point_id: str, key: str,
+                  vault: Vault | None = None) -> dict:
+    point = access_point(workspace_id, access_point_id)
+    if point.platform != "rest":
+        raise RepoError("platform_not_supported", "Une clé d'API exige un point REST.")
+    value = _api_key_value(key)
+    vault = vault or Vault()
+    vault.put(workspace_id, point.id, Credential("apikey", value, host=point.base_url))
+    return _status(workspace_id, point, vault)
 
 
 def _connector(workspace_id: str, point: AccessPoint, credential: Credential) -> Connector:
@@ -482,6 +575,8 @@ def _with_connector(workspace_id: str, access_point_id: str | AccessPoint, vault
     nouvel essai. Un refus persistant marque l'accès expiré."""
     point = (access_point_id if isinstance(access_point_id, AccessPoint)
              else access_point(workspace_id, access_point_id))
+    if point.platform == "rest":
+        raise RepoError("platform_not_supported", "Un point REST n'exécute pas de push-down.")
     vault = vault or Vault()
     credential = _usable(workspace_id, point, vault)
     try:

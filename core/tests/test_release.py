@@ -62,6 +62,7 @@ def test_selftest_route_is_protected_and_checks_dynamic_imports():
     assert found["ok"] is True, found
     assert found["version"] == __version__ and found["frozen"] is False
     assert set(found["modules"]) >= set(selftest.DYNAMIC_MODULES)
+    assert found["modules"]["skifer_atlas.compare.rest_runner"] == "ok"
     assert {k: v for k, v in found["checks"].items() if k != "git"} == {
         "extract.databricks": "ok", "compile.databricks": "ok", "extract.snowflake": "ok",
         "compile.snowflake": "ok", "run.duckdb": "ok", "zoneinfo": "ok"}

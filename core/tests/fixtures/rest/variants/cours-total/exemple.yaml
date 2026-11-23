@@ -1,0 +1,19 @@
+schema_version: 1
+kind: variant
+data_product:
+  id: cours-total--exemple
+  version: 1
+  owner: exemple.owner
+variant_of: {id: cours-total, version: 1}
+entity: exemple
+mode: override
+justification: Déclinaison identique pour vérifier l'accès REST.
+overrides:
+  - node: n03
+    justification: Même somme et granularité.
+    replace:
+      id: n03
+      type: aggregate
+      inputs: [n02]
+      group_by: [day, symbol]
+      measures: [[close, total, sum]]

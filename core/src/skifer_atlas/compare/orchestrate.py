@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ..compile import Compiled, CompileError, NotCompilable, Scope, compile_document
 from ..compile.scope import apply_granularity, output_aggregate
 from ..connectors.base import MAX_ROWS, QueryResult
+from ..connectors.rest_errors import REST_ERRORS
 from ..diff import DiffContext, diff
 from ..index.build import Analysis
 from ..model.columns import propagate
@@ -43,6 +44,7 @@ from .reconcile import Cell, divergent_node, keyed, reconcile, summarize, target
 
 SIDES = ("canonical", "variant")
 _STORED_ERRORS = {
+    **{code: message for code, (_, message) in REST_ERRORS.items()},
     "query_failed": "Échec de la requête sur la plateforme.",
     "duplicate_dimensions": "Plusieurs lignes correspondent à une même cellule.",
     "query_canceled": "Requête annulée.",
@@ -495,7 +497,7 @@ def _guarded(job: Job, runner: Runner) -> None:
 
 
 def start(db: Path, account: str | None, prepared: Prepared, runner: Runner,
-          wait: bool = False) -> Job:
+          wait: bool = False, data_source: str | None = None) -> Job:
     """Enregistre la comparaison (`running`) puis l'exécute, en tâche de fond par défaut."""
     # La ligne et le job ensemble, sous le verrou de création de la base : `get_comparison`
     # relit le registre par `registered` et ne voit jamais la ligne « running » d'un job pas
@@ -508,7 +510,7 @@ def start(db: Path, account: str | None, prepared: Prepared, runner: Runner,
                 raise RepoError("comparison_running", "Cette comparaison est déjà en cours.")
         number = store.create(db, account, prepared.kpi.data_product.id,
                               prepared.kpi.data_product.version, prepared.scope_dict(),
-                              prepared.tolerance)
+                              prepared.tolerance, data_source)
         current = Job(number, db, prepared)
         with _jobs_lock:
             _jobs[(str(db), number)] = current
