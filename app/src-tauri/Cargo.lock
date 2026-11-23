@@ -2880,7 +2880,7 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
 name = "skifer-atlas"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "dispatch2",
  "objc2",
