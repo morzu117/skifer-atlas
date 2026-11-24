@@ -409,8 +409,11 @@ def test_merge_legacy_governance_and_sync_failure(monkeypatch):
 
 
 def test_merge_document_stale_base_exact(monkeypatch):
-    block = {"target": {"kind": "kpi", "path": "kpis/test.yaml", "id": "test"},
-             "base_version": 1, "nature": "new_version"}
+    block = {"schema_version": 1,
+             "target": {"kind": "kpi", "path": "kpis/test.yaml", "id": "test",
+                        "entity": None, "kpi_id": "test"},
+             "base_version": 1, "version": 2, "nature": "new_version", "domain": "finance",
+             "mention": None, "diff": None, "warnings": []}
     pull = SimpleNamespace(state="open", body=common.render_body("Motif", block), head="head",
                            author="alice")
     host = SimpleNamespace(get_pull_request=Mock(return_value=pull), get_reviews=Mock(return_value=[]))
