@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..governance.model import Governance, parse_governance
 from ..paths import WORKSPACE_ID_PATTERN
+from .git import RepoError
 
 META_FILE = "atlas.yaml"
 GOVERNANCE_FILE = "governance.yaml"
@@ -51,8 +52,23 @@ class DocumentFile:
     path: str  # relatif à la racine du dépôt, séparateurs « / »
 
 
+def require_local_repo(root: Path) -> None:
+    """Vérifie la copie d'un espace déjà enregistré, sans exposer son chemin."""
+    if not root.is_dir() or not (root / META_FILE).is_file():
+        raise RepoError(
+            "local_repo_missing",
+            "Le dossier local de l'espace ou son fichier atlas.yaml est introuvable. "
+            "Restaurez-les, puis réessayez.",
+        )
+
+
 def read_meta(root: Path) -> WorkspaceMeta:
-    return WorkspaceMeta.model_validate(_load(root / META_FILE))
+    require_local_repo(root)
+    try:
+        return WorkspaceMeta.model_validate(_load(root / META_FILE))
+    except FileNotFoundError:
+        require_local_repo(root)  # disparition entre le contrôle et l'ouverture
+        raise
 
 
 def read_governance(root: Path) -> Governance | None:

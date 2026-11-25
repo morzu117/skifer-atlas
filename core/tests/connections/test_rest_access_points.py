@@ -10,6 +10,7 @@ from skifer_atlas.connectors.access_points import parse_access_points
 from skifer_atlas.connectors.rest_access_points import RestAccessPoint, parse_rest_access_points
 from skifer_atlas.governance.model import Governance, initial_governance
 from skifer_atlas.repo.git import RepoError
+from skifer_atlas.repo.layout import WorkspaceMeta
 from skifer_atlas.workspaces import Workspace, add_workspace, repo_dir
 
 
@@ -44,6 +45,8 @@ def space(tmp_path, monkeypatch):
     add_workspace(Workspace(id="exemple", name="Exemple"))
     root = repo_dir("exemple")
     root.mkdir(parents=True)
+    meta = WorkspaceMeta(id="exemple", name="Exemple")
+    (root / "atlas.yaml").write_text(yaml.safe_dump(meta.model_dump()), encoding="utf-8")
     governance = initial_governance("exemple.owner", "Exemple")
     governance.allowed_platforms = ["rest", "databricks"]
     (root / "governance.yaml").write_text(yaml.safe_dump(governance.model_dump()),

@@ -660,7 +660,7 @@ def test_auto_sync_removal_between_check_and_lock(client, joined, monkeypatch):
     ("post", "/sync/auto"),
 ])
 @pytest.mark.parametrize("during", [False, True])
-def test_removed_clone_is_not_found(client, joined, monkeypatch, method, path, during):
+def test_removed_clone_reports_local_repo_missing(client, joined, monkeypatch, method, path, during):
     from skifer_atlas.api.routes import catalog, proposals, sheet, workspaces
     from skifer_atlas.files import remove_tree
 
@@ -684,9 +684,11 @@ def test_removed_clone_is_not_found(client, joined, monkeypatch, method, path, d
     if during and path in ("", "/index", "/sync/auto"):
         assert response.status_code == 200
         return
-    assert response.status_code == 404
+    assert response.status_code == 409
     assert response.json()["detail"] == {
-        "code": "not_found", "message": "Espace « groupe-nordis » inconnu."}
+        "code": "local_repo_missing",
+        "message": "Le dossier local de l'espace ou son fichier atlas.yaml est introuvable. "
+                   "Restaurez-les, puis réessayez."}
 
 
 def test_removed_clone_counts_are_unavailable(client, joined):

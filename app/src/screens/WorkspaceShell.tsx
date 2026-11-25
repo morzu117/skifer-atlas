@@ -242,7 +242,7 @@ export function WorkspaceShell({
           </p>
         )}
         {load.kind === "error" && (
-          <Banner tone="bad" title={load.error.title} action={<RetryAction onRetry={() => setLoadRetry((n) => n + 1)} />}>
+          <Banner tone="bad" title={load.error.title} action={<><a className="btn btn-neutral btn-dense" href={href.home()}>Retour à l'accueil</a><RetryAction onRetry={() => setLoadRetry((n) => n + 1)} /></>}>
             {load.error.text}
           </Banner>
         )}

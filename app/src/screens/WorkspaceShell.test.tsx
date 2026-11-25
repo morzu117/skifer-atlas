@@ -11,6 +11,19 @@ vi.mock("./Proposals", () => ({ PROPOSALS_CHANGED: "proposals-changed", Proposal
 
 afterEach(() => vi.unstubAllGlobals());
 
+it.each(["catalogue", "editeur"] as const)("un dépôt local disparu dans %s laisse revenir à l'accueil", async (view) => {
+  fakeServer(({ path }) => path === "/api/workspaces/groupe-nordis"
+    ? { status: 409, json: { detail: { code: "local_repo_missing", message: "détail serveur" } } }
+    : undefined);
+  const onUnknown = vi.fn();
+  render(<WorkspaceShell wsId="groupe-nordis" view={view} onUnknown={onUnknown} />);
+  const alert = await screen.findByRole("alert");
+  expect(within(alert).getByText("Dossier local introuvable")).toBeInTheDocument();
+  expect(within(alert).getByText("Le dossier de cet espace ou son fichier atlas.yaml a disparu de ce poste. Restaurez-les, puis réessayez.")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: view === "editeur" ? "Retour à l'accueil" : /Espace\s*groupe-nordis/ })).toHaveAttribute("href", "#/");
+  expect(onUnknown).not.toHaveBeenCalled();
+});
+
 it("un espace local ne relance pas la recherche de propositions", async () => {
   const server = fakeServer(({ path }) => path === "/api/workspaces/groupe-nordis"
     ? { json: workspace({ git_remote: "", domains: [] }) }

@@ -50,6 +50,10 @@ const KNOWN: Record<string, Explained> = {
     title: "Le dépôt n'a pas pu être cloné",
     text: "Vérifiez l'adresse et vos droits d'accès au dépôt, puis réessayez.",
   },
+  local_repo_missing: {
+    title: "Dossier local introuvable",
+    text: "Le dossier de cet espace ou son fichier atlas.yaml a disparu de ce poste. Restaurez-les, puis réessayez.",
+  },
   invalid_workspace: {
     title: "Ce dépôt n'est pas un espace Atlas",
     text: "Il n'a pas de fichier atlas.yaml valide. Vérifiez l'adresse du dépôt.",

@@ -522,9 +522,11 @@ def test_awaiting_review_when_clone_disappears(client, joined, as_, monkeypatch)
 
     monkeypatch.setattr(status, "_awaiting", remove_before_awaiting)
     response = client.get(PROPOSALS, params={"for_me": 1})
-    assert response.status_code == 404
+    assert response.status_code == 409
     assert response.json()["detail"] == {
-        "code": "not_found", "message": "Espace « groupe-nordis » inconnu."}
+        "code": "local_repo_missing",
+        "message": "Le dossier local de l'espace ou son fichier atlas.yaml est introuvable. "
+                   "Restaurez-les, puis réessayez."}
 
 
 def test_revision_and_close(client, joined, as_):
