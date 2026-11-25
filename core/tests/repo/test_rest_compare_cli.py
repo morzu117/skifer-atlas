@@ -116,7 +116,8 @@ def test_compare_vault_unavailable_prints_rest_key_hint(rest_workspace, monkeypa
 def test_rest_key_unknown_point_never_echoes_argument(rest_workspace, monkeypatch, capsys):
     import secrets
 
-    sentinel = secrets.token_urlsafe(24)
+    # Préfixe : un jeton qui commence par « - » serait lu par argparse comme une option.
+    sentinel = "p" + secrets.token_urlsafe(24)
     monkeypatch.setattr(sys, "stdin", io.StringIO(rest_workspace.key))
     assert main(["rest-key", "exemple", sentinel]) == 1
     output = capsys.readouterr()
