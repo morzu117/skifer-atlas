@@ -502,5 +502,41 @@ scenarios.push(["[S-UI-102-35] définition : légende, variations et sémantique
   await expect(graph.getByText(/variation/i).first()).toBeVisible();
 }]);
 
+scenarios.push(["[S-UI-101-32] recherche tapée pendant le chargement du catalogue : le texte reste et filtre (issue #216)", async ({ page, request }) => {
+  const ws = await isolatedDemo(request, API);
+  // Chaque lecture du catalogue est retenue jusqu'à `release` : la saisie se fait pendant le chargement.
+  const held: (() => void)[] = [];
+  let hold = true;
+  await page.route(/\/api\/workspaces\/[^/]+\/catalog(\?|$)/, async (route) => {
+    if (hold) await new Promise<void>((resolve) => held.push(resolve));
+    await route.continue();
+  });
+  const release = () => { hold = false; held.splice(0).forEach((resolve) => resolve()); };
+  await page.goto(`${ws.root}/catalogue`);
+  const table = page.getByRole("table", { name: "Concepts et KPI" });
+  const search = page.getByRole("searchbox", { name: "Rechercher dans le catalogue" });
+  await expect.poll(() => held.length).toBeGreaterThan(0);
+  await expect(table.getByRole("link")).toHaveCount(0);
+
+  // Frappe dès l'apparition du champ, catalogue non chargé.
+  await search.pressSequentially("reference", { delay: 30 });
+  await expect(search).toHaveValue("reference");
+  release();
+  await expect(table.getByRole("link")).toHaveText(["Date de référence"]);
+  await expect(search).toHaveValue("reference");
+
+  // Frappe en deux temps : « CA » est publié dans l'adresse (lecture retenue), puis la saisie continue.
+  await search.fill("");
+  await expect(table.getByRole("link")).toHaveCount(7);
+  hold = true;
+  await search.pressSequentially("CA", { delay: 30 });
+  await expect(page).toHaveURL(/[?&]q=CA(&|$)/);
+  await search.pressSequentially(" net", { delay: 30 });
+  release();
+  await expect(page).toHaveURL(/[?&]q=CA(\+|%20)net(&|$)/);
+  await expect(table.getByRole("link")).toHaveText(["Revenu net"]);
+  await expect(search).toHaveValue("CA net");
+}]);
+
 return scenarios;
 }
