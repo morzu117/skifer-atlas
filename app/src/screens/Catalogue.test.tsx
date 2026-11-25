@@ -1,6 +1,8 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, UnreachableError, type CatalogRow, type DocumentSummary, type Workspace } from "../api";
 import { useRoute } from "../router";
@@ -126,9 +128,56 @@ const catalogCalls = (calls: Call[]) => calls.filter((c) => c.path.startsWith(`$
 beforeEach(() => {
   window.location.hash = "#/w/groupe-nordis/catalogue";
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("catalogue", () => {
+  it("conserve la saisie immédiatement après le commit du catalogue", async () => {
+    let finish!: (reply: { json: CatalogRow[] }) => void;
+    catalogServer((call) => call.path === `${WS}/catalog`
+      ? new Promise((resolve) => { finish = resolve; }) : undefined);
+    const catalogEffect = vi.spyOn(api, "catalog");
+    const env = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const previous = env.IS_REACT_ACT_ENVIRONMENT;
+    const hadActEnvironment = "IS_REACT_ACT_ENVIRONMENT" in env;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const observations: boolean[] = [];
+    function InputAtCommit() {
+      // flushSync exécute les effets passifs avant de rendre la main : intervenir
+      // pendant la phase de disposition garantit que le DOM existe déjà, avant eux.
+      useLayoutEffect(() => {
+        const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+        observations.push(catalogEffect.mock.calls.length > 0);
+        input.focus();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "CA net");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        observations.push(catalogEffect.mock.calls.length > 0);
+      }, []);
+      return <Harness ws={workspace()} />;
+    }
+    try {
+      env.IS_REACT_ACT_ENVIRONMENT = false;
+      flushSync(() => root.render(<InputAtCommit />));
+      const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+      expect(observations).toEqual([false, false]);
+      env.IS_REACT_ACT_ENVIRONMENT = previous;
+      await act(async () => {});
+      expect(input).toHaveValue("CA net");
+      expect(input).toHaveFocus();
+      await act(async () => { finish({ json: ROWS }); });
+      await waitFor(() => expect(window.location.hash).toContain("q=CA+net"));
+      expect(input).toHaveValue("CA net");
+    } finally {
+      if (finish) finish({ json: ROWS });
+      env.IS_REACT_ACT_ENVIRONMENT = previous;
+      await act(async () => root.unmount());
+      container.remove();
+      if (hadActEnvironment) env.IS_REACT_ACT_ENVIRONMENT = previous;
+      else delete env.IS_REACT_ACT_ENVIRONMENT;
+    }
+  });
+
   it("évite les repères dupliqués et rend les tableaux accessibles", async () => {
     catalogServer();
     catalogue();
@@ -235,6 +284,43 @@ describe("catalogue", () => {
     expect(screen.getByRole("link", { name: "Revenu net" })).toBeInTheDocument();
     // Une seule requête après la frappe, pas une par lettre.
     expect(catalogCalls(server.calls).map((c) => c.path)).toEqual([`${WS}/catalog`, `${WS}/catalog?q=CA+net`]);
+  });
+
+  it("conserve la frappe suivante quand la recherche temporisée est publiée pendant le chargement", async () => {
+    let finish!: (reply: { json: CatalogRow[] }) => void;
+    const server = catalogServer((call) => call.path === `${WS}/catalog`
+      ? new Promise((resolve) => { finish = resolve; }) : undefined);
+    catalogue();
+    await waitFor(() => expect(finish).toBeTypeOf("function"));
+    const input = screen.getByRole("searchbox", { name: "Rechercher dans le catalogue" });
+    vi.useFakeTimers();
+    fireEvent.change(input, { target: { value: "CA" } });
+    act(() => {
+      vi.advanceTimersByTime(200);
+      fireEvent.change(input, { target: { value: "CA net" } });
+    });
+    expect(input).toHaveValue("CA net");
+    await act(async () => { finish({ json: ROWS }); await vi.advanceTimersByTimeAsync(200); });
+    expect(window.location.hash).toContain("q=CA+net");
+    expect(catalogCalls(server.calls).at(-1)?.path).toBe(`${WS}/catalog?q=CA+net`);
+    expect(input).toHaveValue("CA net");
+    vi.useRealTimers();
+    await waitFor(() => expect(screen.getAllByRole("row")).toHaveLength(2));
+  });
+
+  it("restaure la recherche de l'historique même pendant une nouvelle saisie", async () => {
+    catalogServer();
+    window.history.replaceState(null, "", "#/w/groupe-nordis/catalogue?q=ancien");
+    catalogue();
+    const input = screen.getByRole("searchbox");
+    expect(input).toHaveValue("ancien");
+    act(() => { window.location.hash = "#/w/groupe-nordis/catalogue?q=autre"; });
+    await waitFor(() => expect(input).toHaveValue("autre"));
+    fireEvent.change(input, { target: { value: "en cours" } });
+    act(() => window.history.back());
+    await waitFor(() => expect(input).toHaveValue("ancien"));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(window.location.hash).toContain("q=ancien");
   });
 
   it("les filtres se combinent, l'adresse garde leur état, le retour arrière les restaure (critère 3)", async () => {

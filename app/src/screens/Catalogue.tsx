@@ -57,6 +57,8 @@ export function Catalogue({
   const filtered = Object.values(filters).some((value) => value !== "");
 
   const [text, setText] = useState(filters.q);
+  const publishedSearch = useRef<string | null>(null);
+  const previousSearch = useRef(filters.q);
   const [rows, setRows] = useState<CatalogRow[] | null>(null);
   const [retry, setRetry] = useState(0);
   const [error, setError] = useState<Explained | null>(null);
@@ -105,12 +107,21 @@ export function Catalogue({
   }, [drafts, heading]);
 
   // L'adresse a changé (retour arrière) : le champ suit.
-  useEffect(() => setText(filters.q), [filters.q]);
+  useEffect(() => {
+    if (previousSearch.current === filters.q) return;
+    previousSearch.current = filters.q;
+    const ours = publishedSearch.current === filters.q;
+    publishedSearch.current = null;
+    if (!ours) setText(filters.q);
+  }, [filters.q]);
 
   // Recherche à la frappe, temporisée ; elle remplace l'entrée d'historique au lieu d'en ajouter.
   useEffect(() => {
     if (text === filters.q) return;
-    const timer = setTimeout(() => setParams({ q: text }, { push: false }), SEARCH_DELAY_MS);
+    const timer = setTimeout(() => {
+      publishedSearch.current = text;
+      setParams({ q: text }, { push: false });
+    }, SEARCH_DELAY_MS);
     return () => clearTimeout(timer);
   }, [text, filters.q]);
 
