@@ -1,11 +1,10 @@
 """Un espace enregistré reste visible lorsque sa copie locale a disparu."""
 
-import shutil
-
 import pytest
 from test_proposals import client, joined
 from workspace_helpers import atlas_env, commit_all, git, remote
 
+from skifer_atlas.files import remove_tree
 from skifer_atlas.workspaces import repo_dir
 
 __all__ = ["atlas_env", "client", "joined", "remote"]
@@ -22,7 +21,7 @@ def test_missing_repo_is_a_business_error(client, joined, missing):
     assert created.status_code == 201
     repo = repo_dir("groupe-nordis")
     if missing == "repo":
-        shutil.rmtree(repo)
+        remove_tree(repo)
     else:
         (repo / "atlas.yaml").unlink()
     for route in ("/proposals", "/editor/documents/revenu-net", "/admin", "/catalog",
@@ -76,7 +75,7 @@ def test_sync_reports_missing_local_repo_before_fetch(client, joined):
     from skifer_atlas.repo import RepoError
     from skifer_atlas.repo.sync import sync_workspace
 
-    shutil.rmtree(repo_dir("groupe-nordis"))
+    remove_tree(repo_dir("groupe-nordis"))
     with pytest.raises(RepoError) as caught:
         sync_workspace("groupe-nordis")
     assert (caught.value.code, caught.value.message) == ("local_repo_missing", MESSAGE)
