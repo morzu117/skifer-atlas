@@ -146,7 +146,7 @@ jobs:
           if [ -n "${WINDOWS_THUMBPRINT:-}" ]; then
             extra=(--config "{\"bundle\":{\"windows\":{\"certificateThumbprint\":\"$WINDOWS_THUMBPRINT\"}}}")
           fi
-          npx tauri build --config src-tauri/tauri.release.conf.json "${extra[@]}" \
+          bash ../scripts/tauri-build-retry.sh npx tauri build --config src-tauri/tauri.release.conf.json "${extra[@]}" \
             --bundles ${{ matrix.bundles }}
 
       - name: Taille (critère 5)
