@@ -3,6 +3,13 @@ import { ApiError } from "./api";
 import { explain, explainComparisonError } from "./messages";
 
 describe("explain", () => {
+  it("explique comment retrouver un dépôt local disparu", () => {
+    expect(explain(new ApiError(409, "local_repo_missing", "détail serveur"))).toEqual({
+      title: "Dossier local introuvable",
+      text: "Le dossier de cet espace ou son fichier atlas.yaml a disparu de ce poste. Restaurez-les, puis réessayez.",
+    });
+  });
+
   it("base occupée par un autre processus : la cause et quoi faire (ADR 0032)", () => {
     const busy = new ApiError(503, "index_busy", "La base de l'espace est ouverte par un autre processus Atlas.");
     expect(explain(busy)).toEqual({

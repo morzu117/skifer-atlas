@@ -23,7 +23,7 @@ from .governance.model import (
 from .index import ensure_index, index_fresh
 from .proposals import create_governance_proposal, merge_proposal
 from .repo.git import RepoError
-from .repo.layout import GOVERNANCE_FILE, read_meta
+from .repo.layout import GOVERNANCE_FILE, read_meta, require_local_repo
 from .repo.sync import host_account
 from .workspaces import Workspace, get_workspace, index_path, repo_dir
 
@@ -61,6 +61,7 @@ def _current(workspace_id: str) -> tuple[Workspace, Governance, str]:
     if workspace is None:
         raise RepoError("not_found", f"Espace « {workspace_id} » inconnu.")
     repo = repo_dir(workspace.id)
+    require_local_repo(repo)
     path = repo / GOVERNANCE_FILE
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     governance = parse_governance(text)[0]

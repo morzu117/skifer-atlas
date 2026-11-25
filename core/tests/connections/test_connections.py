@@ -21,6 +21,7 @@ from skifer_atlas import connections
 from skifer_atlas.api.app import create_app
 from skifer_atlas.connectors import databricks, oauth
 from skifer_atlas.repo.git import RepoError
+from skifer_atlas.repo.layout import WorkspaceMeta
 from skifer_atlas.vault import SERVICE, Credential, Vault, keyring_vault, system_keyring
 from skifer_atlas.workspaces import Workspace, add_workspace, repo_dir
 
@@ -59,6 +60,9 @@ def space(workspace_id, points):
                             role="referent"))
     repo = repo_dir(workspace_id)
     repo.mkdir(parents=True, exist_ok=True)
+    meta = WorkspaceMeta(id=workspace_id, name=workspace_id,
+                         entities=["nordis-fr", "nordis-de", "nordis-es"])
+    (repo / "atlas.yaml").write_text(yaml.safe_dump(meta.model_dump()), encoding="utf-8")
     shutil.copy(EXAMPLE / "governance.yaml", repo / "governance.yaml")
     (repo / "access_points.yaml").write_text(yaml.safe_dump(
         {"schema_version": 1, "access_points": points}), encoding="utf-8")

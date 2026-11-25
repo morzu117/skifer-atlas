@@ -28,7 +28,7 @@ La CI [tests.yml](../../.github/workflows/tests.yml) lance les trois niveaux (co
 | 0002 | 11 | 8 | 0 | 3 | 0 |
 | 0003 | 10 | 8 | 0 | 2 | 0 |
 | 0004 | 8 | 2 | 0 | 6 | 0 |
-| 0005 | 13 | 10 | 0 | 3 | 0 |
+| 0005 | 14 | 11 | 0 | 3 | 0 |
 | 0006 | 13 | 10 | 0 | 3 | 0 |
 | 0007 | 9 | 4 | 0 | 5 | 0 |
 | 0008 | 10 | 7 | 0 | 3 | 0 |
@@ -63,7 +63,7 @@ La CI [tests.yml](../../.github/workflows/tests.yml) lance les trois niveaux (co
 | ADR 0055 | 1 | 1 | 0 | 0 | 0 |
 | ADR 0056 | 6 | 6 | 0 | 0 | 0 |
 | RAF | 11 | 7 | 0 | 4 | 0 |
-| **Total** | **342** | **271** | **6** | **65** | **0** |
+| **Total** | **343** | **272** | **6** | **65** | **0** |
 
 Lecture : « Test front e2e » compte les vérifications citées par un parcours Playwright, « Vitest seulement » celles qui n'ont qu'un test de composant. « Sans test front » regroupe les deux sections finales ; « dont testables » en est la part qui a une surface à l'écran.
 
@@ -370,6 +370,14 @@ Plan 0005, critère 9 · Test : `app/e2e/ouverture.spec.ts` › `[S-0005-09]`
 - **Alors** l'accueil « Vos espaces de travail » s'affiche, avec le message « L'espace « espace-inconnu » n'est pas dans votre registre local. », sans violation d'accessibilité sérieuse
 - **Et** le message disparaît dès que j'ouvre un espace du registre
 - Limite : le refus 404 du serveur (espace absent, chemin avec `..`) est vérifié par `core/tests/repo/test_catalog_api.py::test_unknown_workspace_or_dot_dot_is_404`.
+
+### S-0005-14 — Un espace dont le dossier local a disparu le dit, sans renvoyer à l'accueil
+Plan 0005, extension (issue #214, ADR 0067) · Test : `app/e2e/depot-local-absent.spec.ts` › `[S-0005-14]`
+- **Étant donné** un espace créé à l'écran, dont le clone local `repo` est ensuite déplacé hors du dossier de données (ou dont seul `atlas.yaml` est retiré)
+- **Quand** je l'ouvre par sa carte de l'accueil, puis clique « Réessayer »
+- **Alors** l'alerte « Dossier local introuvable » dit que le dossier ou son `atlas.yaml` a disparu de ce poste et qu'il faut les restaurer ; l'adresse reste celle de l'espace, aucun chemin local n'est affiché et axe-core ne relève aucune violation sérieuse
+- **Et** le sélecteur « Espace » ramène à l'accueil, qui liste toujours l'espace ; une fois le dossier remis, « Réessayer » (ou le rechargement) ouvre le catalogue
+- Limite : les routes du serveur (409 `local_repo_missing` sur l'espace, les propositions, l'administration, la comparaison et la synchronisation ; adhésion à un dépôt sans `atlas.yaml` toujours `invalid_workspace`) sont vérifiées par `core/tests/repo/test_missing_local_repo.py`.
 
 **Plan 0009**
 
@@ -2534,7 +2542,7 @@ Rien, à l'écran, ne montre ces vérifications : elles portent sur un compte r�
 
 ## Sans test front, testable
 
-Il n'en reste aucune : les 31 vérifications qui figuraient ici ont reçu leur test front avec le lot des vérifications testables (plan 0027, mise en œuvre). Une vérification nouvelle s'y inscrit, au format de la section précédente, tant que son test manque.
+Il n'en reste aucune : les 31 vérifications qui figuraient ici ont reçu leur test front avec le lot des vérifications testables (plan 0027, mise en œuvre), puis S-0005-14 (dossier local introuvable, ADR 0067) a été écrit avec son test. Une vérification nouvelle s'y inscrit, au format de la section précédente, tant que son test manque.
 
 ## Exception à la règle « jamais de champ de token » : S-0008-05
 

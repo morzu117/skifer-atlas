@@ -43,7 +43,14 @@ from .git import (
     normalize_remote_url,
     run_git,
 )
-from .layout import GOVERNANCE_FILE, META_FILE, WorkspaceMeta, read_governance, read_meta
+from .layout import (
+    GOVERNANCE_FILE,
+    META_FILE,
+    WorkspaceMeta,
+    read_governance,
+    read_meta,
+    require_local_repo,
+)
 from .versions import missing_tags
 
 logger = logging.getLogger(__name__)
@@ -156,7 +163,9 @@ def join_workspace(remote_url: str, github_flow: str | None = None) -> Workspace
             try:
                 meta = read_meta(clone)
                 governance = read_governance(clone)
-            except (OSError, ValueError, ValidationError) as error:
+            except (OSError, ValueError, ValidationError, RepoError) as error:
+                if isinstance(error, RepoError) and error.code != "local_repo_missing":
+                    raise
                 raise RepoError("invalid_workspace", "Ce dépôt n'est pas un espace Atlas : "
                                 f"« {META_FILE} » absent ou invalide.") from error
             target = repo_dir(meta.id)
@@ -583,13 +592,16 @@ def _workspace(workspace_id: str) -> Workspace:
     workspace = get_workspace(workspace_id)
     if workspace is None:
         raise RepoError("not_found", f"Espace « {workspace_id} » inconnu.")
+    require_local_repo(repo_dir(workspace.id))
     return workspace
 
 
 def _valid_meta(repo: Path) -> WorkspaceMeta:
     try:
         return read_meta(repo)
-    except (OSError, ValueError, ValidationError) as error:
+    except (OSError, ValueError, ValidationError, RepoError) as error:
+        if isinstance(error, RepoError) and error.code != "local_repo_missing":
+            raise
         raise RepoError("invalid_workspace", "« atlas.yaml » absent ou invalide dans "
                         "le dépôt de cet espace.") from error
 

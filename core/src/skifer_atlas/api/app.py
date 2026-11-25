@@ -42,6 +42,7 @@ ERROR_STATUS = {
     "platform_not_found": 404,
     "forbidden": 403,
     "workspace_exists": 409,
+    "local_repo_missing": 409,
     "remote_exists": 409,
     "origin_conflict": 409,
     "remote_partial": 409,

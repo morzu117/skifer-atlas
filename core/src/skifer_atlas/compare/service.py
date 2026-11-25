@@ -19,7 +19,7 @@ from ..index import ensure_index
 from ..index.build import Analysis, analyze
 from ..model.resolve import resolve
 from ..repo.git import RepoError
-from ..repo.layout import read_governance
+from ..repo.layout import read_governance, require_local_repo
 from ..workspaces import get_workspace, index_path, repo_dir
 from . import orchestrate, store
 from .orchestrate import CompareRequest, LocalRunner, Prepared, Runner, VariantPlan
@@ -29,6 +29,7 @@ def _workspace(workspace_id: str):
     workspace = get_workspace(workspace_id)
     if workspace is None:
         raise RepoError("not_found", f"Espace « {workspace_id} » inconnu.")
+    require_local_repo(repo_dir(workspace.id))
     return workspace
 
 

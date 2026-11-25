@@ -10,7 +10,7 @@ from fastapi import HTTPException, Request
 from fastapi.routing import APIRoute
 
 from ...repo.git import RepoError
-from ...repo.layout import SLUG
+from ...repo.layout import SLUG, require_local_repo
 from ...workspaces import Workspace, get_workspace, repo_dir
 
 
@@ -22,10 +22,7 @@ def workspace_or_404(ws: str) -> Workspace:
     workspace = get_workspace(ws)
     if workspace is None:
         raise not_found(f"Espace « {ws} » inconnu.")
-    try:
-        repo_dir(workspace.id).stat()
-    except FileNotFoundError as error:
-        raise not_found(f"Espace « {ws} » inconnu.") from error
+    require_local_repo(repo_dir(workspace.id))
     return workspace
 
 
@@ -51,6 +48,10 @@ class WorkspaceRoute(APIRoute):
             except (OSError, RepoError, duckdb.Error) as original:
                 try:
                     workspace_or_404(ws)
+                except RepoError as check_error:
+                    if check_error.code == "local_repo_missing":
+                        raise
+                    raise original from None
                 except HTTPException as check_error:
                     if check_error.status_code == 404:
                         raise
