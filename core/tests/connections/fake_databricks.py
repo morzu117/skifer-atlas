@@ -77,9 +77,15 @@ def _handler(state: State, base: list[str]):
             return {k: v[0] for k, v in parse_qs(raw).items()}
 
         def _authorized(self):
-            token = (self.headers.get("Authorization") or "").removeprefix("Bearer ")
+            authorization = self.headers.get("Authorization")
+            if authorization is None:
+                self._send(401, {"error_code": 401, "message": "Credential was not sent or was "
+                                 "of an unsupported type for this API. [ReqId: faux]"})
+                return False
+            token = authorization.removeprefix("Bearer ")
             if token not in state.valid:
-                self._send(401, {"error_code": "UNAUTHENTICATED", "message": "jeton refusé"})
+                self._send(403, {"error_code": 403,
+                                 "message": "Invalid access token. [ReqId: faux]"})
                 return False
             return True
 

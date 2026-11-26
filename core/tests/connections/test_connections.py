@@ -19,7 +19,8 @@ from fastapi.testclient import TestClient
 
 from skifer_atlas import connections
 from skifer_atlas.api.app import create_app
-from skifer_atlas.connectors import databricks, oauth
+from skifer_atlas.connectors import databricks, http, oauth
+from skifer_atlas.connectors.access_points import AccessPoint
 from skifer_atlas.repo.git import RepoError
 from skifer_atlas.repo.layout import WorkspaceMeta
 from skifer_atlas.vault import SERVICE, Credential, Vault, keyring_vault, system_keyring
@@ -615,6 +616,43 @@ def test_rejected_access_token_is_refreshed_once(client, fake):
     fake.state.valid.clear()  # le jeton d'accès est révoqué côté Databricks
     assert client.post("/api/workspaces/nordis/connections/dbx-fr/test").json()["ok"]
     assert fake.state.token_requests[-1]["grant_type"] == "refresh_token"
+
+
+@pytest.mark.parametrize("persistent", [False, True])
+def test_403_token_rejection_refreshes_and_marks_persistent_refusal(env, monkeypatch, persistent):
+    location = AccessPoint.model_validate({"id": "dbx", "platform": "databricks",
+                                           "host": "https://adb.example.com",
+                                           "warehouse_id": "abc", "owner": "claire.m"})
+    vault = Vault()
+    vault.put("nordis", "dbx", Credential("oauth", "ancien", "refresh", host=location.base_url))
+    calls = []
+    refreshes = []
+
+    def request(*args, token, **kwargs):
+        calls.append(token)
+        if token == "ancien" or persistent:
+            return http.Response(403, {"message": "Invalid access token. [ReqId: faux]"})
+        return http.Response(200, {"ok": True})
+
+    def refresh(endpoints, credential):
+        refreshes.append(credential.access_token)
+        return Credential("oauth", "nouveau", "refresh")
+
+    monkeypatch.setattr(databricks, "request", request)
+    monkeypatch.setattr(oauth, "discover", lambda point: None)
+    monkeypatch.setattr(oauth, "refresh", refresh)
+
+    def action(connector):
+        return connector._call("POST", "/sql")
+
+    if persistent:
+        with pytest.raises(RepoError) as refused:
+            connections._with_connector("nordis", location, vault, action)
+        assert refused.value.code == "access_expired"
+    else:
+        assert connections._with_connector("nordis", location, vault, action) == {"ok": True}
+    assert calls == ["ancien", "nouveau"] and refreshes == ["ancien"]
+    assert vault.get("nordis", "dbx").rejected is persistent
 
 
 # --- critère 5 : token personnel en repli ---------------------------------------------------

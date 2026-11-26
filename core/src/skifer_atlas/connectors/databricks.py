@@ -57,7 +57,9 @@ class DatabricksConnector:
     def _call(self, method: str, path: str, body: Any = None, timeout: float = 60):
         reply = request(method, f"{self.point.base_url}{path}", token=self._token,
                         json_body=body, timeout=timeout)
-        if reply.status == 401:
+        message = reply.body.get("message") if isinstance(reply.body, dict) else None
+        if (reply.status == 401 or (reply.status == 403 and isinstance(message, str)
+                                    and message.lstrip().lower().startswith("invalid access token"))):
             raise AuthRejected
         if reply.status >= 300:
             # Le jeton envoyé est masqué dans ce que Databricks renvoie, avant de le restituer.

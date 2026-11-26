@@ -69,7 +69,7 @@ Proposé seulement si l'OAuth échoue ou est indisponible pour ce point d'accès
     - `databricks.py` : l'API *Statement Execution* ;
     - `base.py` : l'interface `Connector` et `QueryResult` ;
     - `http.py` : le client HTTP.
-  - `connections.py` : le service. Il rend les états, rafraîchit, retente une fois sur un 401, teste, révoque et exécute.
+  - `connections.py` : le service. Il rend les états, rafraîchit, retente une fois sur un 401 ou un 403 « Invalid access token », teste, révoque et exécute.
   - `proposals/create.py` : `create_access_point_proposal`, de nature `access_points`. La gouvernance et le registre partagent le contrôle de base (`base_digest`) ; `base_governance` reste lu pour les propositions déjà ouvertes.
   - CODEOWNERS attribue `/access_points.yaml` aux référents d'espace.
 
@@ -94,7 +94,7 @@ Proposé seulement si l'OAuth échoue ou est indisponible pour ce point d'accès
     - les critères 1 à 8 ;
     - un rappel à `state` étranger, un port occupé, l'expiration du flux ;
     - le délai, l'annulation, l'échec d'une requête ;
-    - un 401 suivi d'un rafraîchissement ;
+    - un 401 ou un 403 « Invalid access token » suivi d'un rafraîchissement ;
     - un coffre absent.
   - Le critère 3 sur un warehouse réel est marqué `databricks` : `ATLAS_DATABRICKS_HOST`, `ATLAS_DATABRICKS_WAREHOUSE`, `ATLAS_DATABRICKS_TOKEN`, puis `uv run pytest -m databricks`.
   - `tests/repo/test_proposals.py` couvre la déclaration par proposition et le critère 7.
