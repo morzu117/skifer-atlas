@@ -31,3 +31,5 @@ comparaison sous Tauri reste une recette manuelle (#31).
 Premier passage, 26 novembre 2026, Free Edition, warehouse serverless : 26 tests sur 27 réussis
 en 88 s, nettoyage du schéma vérifié. Le seul échec, `test_jeton_invalide`, a révélé un défaut :
 Databricks refuse un jeton en 403 « Invalid access token », et non en 401 (#223, ADR 0073).
+Après le correctif (#224), second passage le même jour : 27 tests sur 27 réussis, avec la sonde
+de connexion de `test_connections.py`.
