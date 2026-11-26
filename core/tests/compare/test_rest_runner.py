@@ -405,6 +405,28 @@ def test_next_url_control_refused_without_secret(space, setup_rest, capsys, bad)
     assert usage["calls"] == 1 and usage["errors"] == 1 and len(server.requests) == 1
 
 
+@pytest.mark.parametrize("bad", ["%00", "%20"])
+def test_next_url_encoded_path_control_refused_without_secret(space, setup_rest, capsys, bad):
+    import traceback
+
+    from skifer_atlas.connectors.rest_budget import read_usage
+
+    server, ds, compiled, plan = setup_rest
+    ds.update(rows_path="results", pagination={"kind": "next_url"})
+    save_dataset(space, ds)
+    next_url = server.url + "/v1/data" + bad + "page2"
+    server.replies = [(200, {"results": server.rows, "next_url": next_url}, {})]
+    with pytest.raises(RepoError) as caught:
+        RestRunner("exemple")(plan, compiled, threading.Event())
+    assert caught.value.code == "rest_next_url_refused"
+    assert len(server.requests) == 1
+    assert server.key not in str(caught.value) + "".join(traceback.format_exception(caught.value))
+    output = capsys.readouterr()
+    assert server.key not in output.out + output.err
+    [usage] = read_usage("exemple", point_id="api-exemple")
+    assert usage["calls"] == 1 and usage["errors"] == 1
+
+
 def test_rebound_perimeter_uses_physical_column(space, real_rest_workspace):
     from skifer_atlas.compare import service
     from skifer_atlas.compare.orchestrate import CompareRequest

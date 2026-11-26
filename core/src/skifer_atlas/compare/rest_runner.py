@@ -281,6 +281,7 @@ class RestRunner:
             base = point.http_path.rstrip("/")
             if ((parsed.scheme, parsed.netloc) != (allowed.scheme, allowed.netloc)
                     or not (path == base or path.startswith(base + "/"))
+                    or re.search(r"[\x00-\x20\x7f]", path)
                     or "\\" in path or any(part in (".", "..") for part in path.split("/"))):
                 budget.record(ds.table, errors=1)
                 raise RepoError("rest_next_url_refused", "Adresse de pagination REST refusée.")
