@@ -7,6 +7,7 @@ import pytest
 
 from skifer_atlas.connectors import http, oauth
 from skifer_atlas.connectors.access_points import AccessPoint
+from skifer_atlas.connectors.base import AuthRejected
 from skifer_atlas.connectors.databricks import DatabricksConnector, _value
 from skifer_atlas.repo.git import RepoError
 
@@ -205,3 +206,25 @@ def test_a_secret_returned_as_a_json_key_is_masked():
     assert "dapi-secret-key" not in str(mask_body(body, "dapi-secret-key"))
     assert "dapi-secret-key" not in message_of(body, "dapi-secret-key")
     assert "***" in message_of(body, "dapi-secret-key")
+
+
+@pytest.mark.parametrize("message", ["Invalid access token. [ReqId: faux]",
+                                     "  iNvAlId AcCeSs ToKeN expiré"])
+def test_databricks_auth_rejection_and_forbidden(monkeypatch, message):
+    point = AccessPoint.model_validate({"id": "dbx", "platform": "databricks",
+                                        "host": "https://adb.example.com",
+                                        "warehouse_id": "abc", "owner": "claire.m"})
+    connector = DatabricksConnector(point, "secret")
+    replies = iter([http.Response(403, {"message": message}),
+                    http.Response(401, {}),
+                    http.Response(403, {"message": "sans droit sur ce warehouse"}),
+                    http.Response(403, {"error": "Invalid access token"})])
+    monkeypatch.setattr("skifer_atlas.connectors.databricks.request",
+                        lambda *args, **kwargs: next(replies))
+    for _ in range(2):
+        with pytest.raises(AuthRejected):
+            connector._call("POST", "/sql")
+    for _ in range(2):
+        with pytest.raises(RepoError) as refused:
+            connector._call("POST", "/sql")
+        assert refused.value.code == "platform_forbidden"

@@ -571,8 +571,8 @@ def _attempt(workspace_id: str, point: AccessPoint, credential: Credential, vaul
 
 def _with_connector(workspace_id: str, access_point_id: str | AccessPoint, vault: Vault | None,
                     action):
-    """Exécute `action(connector)` ; un 401 déclenche un rafraîchissement, puis un seul
-    nouvel essai. Un refus persistant marque l'accès expiré."""
+    """Exécute `action(connector)` ; un refus d'authentification déclenche un
+    rafraîchissement, puis un seul nouvel essai. Un refus persistant marque l'accès expiré."""
     point = (access_point_id if isinstance(access_point_id, AccessPoint)
              else access_point(workspace_id, access_point_id))
     if point.platform == "rest":
