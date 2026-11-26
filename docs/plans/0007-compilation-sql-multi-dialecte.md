@@ -44,8 +44,8 @@ Même entrée, même SQL (testé par empreinte du SQL). Une fonction ou un type 
 ## Tests
 - Unitaires : un test par type de nœud et par dialecte (golden SQL).
 - Intégration : exécution DuckDB sur jeux de données de test ; propriétés (hypothesis) sur l'ordre des filtres → même résultat.
-- À la main : coller le SQL Databricks généré dans un éditeur SQL Databricks et l'exécuter.
-- À la main : vérifier sur les entrepôts réels l'échec de la garde Snowflake (`CAST(message AS INT)`) et le SQL Databricks ; recette regroupée dans l'issue #112.
+- Databricks réel : sonde automatisée `core/tests/test_databricks_real.py`, hors CI (ADR 0072).
+- À la main : vérifier sur un entrepôt Snowflake réel l'échec de la garde (`CAST(message AS INT)`) ; recette regroupée dans l'issue #112.
 
 ## Dépendances
 0001, 0002 (0004 pour le critère 9).
