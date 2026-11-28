@@ -113,7 +113,6 @@ Brief 7.2, 8.3, 8.4, 10.5 ; guide 3.7, 5 (10.5), 7 (historique complet) ; `scree
 
     axe-core passe à chaque étape.
 - **Reste à faire** :
-  - premier passage réel de `e2e/comparaison-databricks-reelle.spec.ts` (voir plus bas) ;
   - vérification à la main sous Tauri, notamment l'ouverture du navigateur ;
   - valider les seuils 99 / 90 ;
   - export et comparaisons planifiées (hors périmètre).
@@ -142,3 +141,5 @@ npx playwright test --project=chromium --reporter=line --workers=1 e2e/comparais
 ```
 
 Si le passage est interrompu avant son nettoyage, relancer `uv run python tests/databricks_recette.py drop <état.json>` depuis `core/`, avec les mêmes variables. Le chemin de l'état (`atlas-recette-dbx-*/etat.json`, dans le dossier temporaire) est affiché au début du passage.
+
+**Premier passage réel, le 28 novembre 2026** : 1 passé sur 1 en 55,2 s, sur Free Edition, sans écart avec l'oracle ; le catalogue `gold` a été créé puis supprimé (ADR 0075).

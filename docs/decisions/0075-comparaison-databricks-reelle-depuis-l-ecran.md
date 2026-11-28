@@ -76,4 +76,19 @@ Limites :
 - Une trace Playwright (`--trace on`) enregistrerait le jeton saisi : ne pas l'activer pour ce
   passage.
 
-Premier passage réel : à faire.
+## Premier passage réel (28 novembre 2026)
+
+**1 passé sur 1, en 55,2 s**, sur la tête de #228 (`dd79b7e`).
+
+- Environnement : Ubuntu 26.04 sous WSL2, Chromium de Playwright, un seul worker, sans trace.
+  Workspace Databricks Free Edition, « Serverless Starter Warehouse », à l'arrêt au lancement.
+  Jeton OAuth court obtenu par `databricks auth token --profile <profil>`, passé par
+  l'environnement et saisi par le geste du jeton personnel.
+- Résultat : la comparaison de nordis-fr lancée depuis l'écran rend les mêmes valeurs que
+  l'oracle DuckDB. Le détail, l'historique et l'accessibilité passent aussi.
+- Le catalogue `gold` était absent : le passage l'a créé puis supprimé. Après le passage,
+  `databricks catalogs list` rend la même liste qu'avant.
+- Points surveillés, sans défaut constaté : `CREATE CATALOG`, `information_schema.tables` et le
+  `COMMENT` de `CREATE OR REPLACE TABLE … AS` fonctionnent sur un vrai warehouse ; aucun écart
+  d'arrondi entre le canonique (DECIMAL) et la déclinaison (DOUBLE) ; le démarrage à froid du
+  warehouse tient largement dans les délais.
