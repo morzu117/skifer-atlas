@@ -27,6 +27,13 @@ access_points:
     account: nordis-de                    # facultatif : déduit de l'hôte *.snowflakecomputing.com
     entity: nordis-de
     owner: anna.k
+  - id: bq-fr
+    platform: bigquery
+    host: https://bigquery.googleapis.com
+    project: finance-prod
+    location: EU
+    schema: finance
+    owner: claire.m
 ```
 
 L'identifiant Snowflake de chacun et le chemin de sa clé privée ne sont pas ici : ils
@@ -52,6 +59,7 @@ _WAREHOUSE_PATH = re.compile(r"^/sql/1\.0/warehouses/([0-9a-zA-Z]+)$")
 _LOOPBACK = ("127.0.0.1", "localhost")
 _SNOWFLAKE_DOMAIN = ".snowflakecomputing.com"
 _DATABRICKS_ONLY = ("http_path", "warehouse_id", "oauth_client_id", "oauth_redirect_port")
+_BIGQUERY_ONLY = ("project", "location")
 _SNOWFLAKE_ONLY = ("warehouse_name", "role", "auth", "account")
 _SNOWFLAKE_NAME = r"^[A-Za-z0-9_$.\-]+$"
 
@@ -64,6 +72,8 @@ class AccessPoint(_Model):
     id: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9-]{1,63}$")]
     platform: Literal[PLATFORMS]
     host: str = Field(min_length=1)
+    project: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")] | None = None
+    location: Annotated[str, Field(min_length=1)] | None = None
     http_path: str | None = None
     warehouse_id: Annotated[str, Field(pattern=r"^[0-9a-zA-Z]+$")] | None = None
     schema_: str | None = Field(default=None, alias="schema")
@@ -94,8 +104,8 @@ class AccessPoint(_Model):
             if self.warehouse() is None:
                 raise ValueError("Un point d'accès Databricks désigne son SQL warehouse "
                                  "(« warehouse_id » ou « http_path »).")
-        foreign = {"databricks": _SNOWFLAKE_ONLY, "snowflake": _DATABRICKS_ONLY}.get(
-            self.platform, ())
+        foreign = {"databricks": _SNOWFLAKE_ONLY + _BIGQUERY_ONLY,
+                   "snowflake": _DATABRICKS_ONLY + _BIGQUERY_ONLY}.get(self.platform, ())
         for name in foreign:
             if getattr(self, name) is not None:
                 key = "warehouse" if name == "warehouse_name" else name
@@ -105,6 +115,18 @@ class AccessPoint(_Model):
             raise ValueError("« account » est requis quand l'hôte n'est pas "
                              f"<compte>{_SNOWFLAKE_DOMAIN}.")
         return self
+
+    def bigquery_issue(self) -> str | None:
+        """Contraintes d'utilisation, sans rendre illisibles les anciens registres."""
+        if self.project is None:
+            return "« project » est requis pour un point d'accès BigQuery."
+        if urlparse(self.host).hostname not in _LOOPBACK and self.base_url != "https://bigquery.googleapis.com":
+            return "« host » BigQuery doit désigner https://bigquery.googleapis.com ou une adresse en boucle locale."
+        for name in _DATABRICKS_ONLY + _SNOWFLAKE_ONLY:
+            if getattr(self, name) is not None:
+                key = "warehouse" if name == "warehouse_name" else name
+                return f"« {key} » ne s'applique pas à un point d'accès bigquery."
+        return None
 
     @property
     def base_url(self) -> str:
