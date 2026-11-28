@@ -9,6 +9,7 @@ lit la garde seule, pour qu'elle soit évaluée même sur une sortie vide (`guar
 |------------|-----------------------------------------|
 | databricks | `RAISE_ERROR(message)`                  |
 | snowflake  | `CAST(message AS INT)`, qui échoue      |
+| bigquery   | `ERROR(message)`                        |
 | duckdb     | `error(message)`                        |
 
 Une requête de contrôle séparée, exécutée avant, aurait demandé deux allers-retours et

@@ -14,11 +14,11 @@ from sqlglot import exp
 from ..model.functions import infer_type
 from .errors import NotCompilable
 
-DIALECTS = ("databricks", "snowflake", "duckdb")
+DIALECTS = ("databricks", "snowflake", "bigquery", "duckdb")
 DISTINCT_FUNCTIONS = frozenset({"count_distinct", "sum_distinct"})
 # Horodatage sans fuseau (heure murale) : TIMESTAMP_NTZ en Databricks, TIMESTAMPNTZ en
-# Snowflake, TIMESTAMP en DuckDB. `TIMESTAMP` seul suit en Databricks le fuseau de session,
-# en Snowflake `TIMESTAMP_TYPE_MAPPING`.
+# Snowflake, DATETIME en BigQuery, TIMESTAMP en DuckDB. `TIMESTAMP` seul suit en Databricks
+# le fuseau de session, en Snowflake `TIMESTAMP_TYPE_MAPPING`.
 WALL_CLOCK = "timestampntz"
 
 
@@ -43,14 +43,19 @@ def aggregate(function: str, source: str) -> exp.Expression:
 def wall_clock(column: exp.Expression, zone: str, dialect: str) -> exp.Expression:
     """Colonne `timestamp` d'une source, lue en heure murale de son fuseau déclaré.
 
-    La colonne peut être un instant ou une heure murale : le type de la valeur le dit à
-    l'exécution, sans métadonnées. Un instant est ramené au fuseau déclaré sans passer par
-    le fuseau de session ; une heure murale reste telle quelle.
+    Un instant est ramené au fuseau déclaré sans passer par le fuseau de session ; pour
+    Databricks et Snowflake, une heure murale reste telle quelle.
     - Databricks (plan 0030) : un instant (`TIMESTAMP`, type par défaut) passe par ses
       microsecondes depuis l'époque, puis par l'heure UTC, puis par le fuseau déclaré.
     - Snowflake (plan 0031) : un `TIMESTAMP_LTZ` ou `TIMESTAMP_TZ` passe en `TIMESTAMP_TZ`
       (même instant), puis dans le fuseau déclaré, et perd son décalage.
+    - BigQuery (plan 0037) : seul un TIMESTAMP physique est accepté par cette forme à deux
+      arguments ; une colonne DATETIME ou texte produit une erreur de type (ADR 0076).
     DuckDB lit la colonne telle quelle."""
+    if dialect == "bigquery":
+        # DATETIME(instant, fuseau) ne distingue pas une colonne DATETIME ou texte.
+        return exp.Anonymous(this="DATETIME", expressions=[column.copy(),
+                                                           exp.Literal.string(zone)])
     if dialect == "snowflake":
         # Les deux branches du CASE sont typées avant l'exécution : le cast explicite garde
         # `CONVERT_TIMEZONE` valide pour une colonne sans fuseau ou texte.
@@ -91,6 +96,8 @@ def fail(dialect: str, message: exp.Expression) -> exp.Expression:
         return exp.Anonymous(this="RAISE_ERROR", expressions=[message])
     if dialect == "duckdb":
         return exp.Anonymous(this="error", expressions=[message])
+    if dialect == "bigquery":
+        return exp.Anonymous(this="ERROR", expressions=[message])
     # Snowflake n'a pas de fonction d'erreur en SQL : un cast de texte en nombre échoue
     # en citant le texte. Le message dépend des données, il n'est pas plié à la compilation.
     return exp.Cast(this=message, to=exp.DataType.build("int"))
@@ -133,6 +140,9 @@ def week_start(day: exp.Expression, dialect: str) -> exp.Expression:
     paramètre de session `WEEK_START` ; `DAYOFWEEKISO` (lundi = 1) n'en dépend pas, ni de
     `WEEK_OF_YEAR_POLICY`. Databricks et DuckDB commencent toujours au lundi. Le cast en
     DATE, superflu en Snowflake, garde le type si le SQL est traduit ailleurs."""
+    if dialect == "bigquery":
+        return exp.cast(exp.Anonymous(this="DATE_TRUNC", expressions=[day, exp.Anonymous(
+            this="WEEK", expressions=[exp.var("MONDAY")])]), "date")
     if dialect == "snowflake":
         return exp.cast(exp.DateAdd(this=day, expression=exp.Sub(
             this=exp.Literal.number(1), expression=exp.DayOfWeekIso(this=day.copy())),
@@ -147,25 +157,47 @@ def check_window(function: str, node_id: str, dialect: str) -> None:
     if function in DISTINCT_FUNCTIONS and dialect == "snowflake":
         raise NotCompilable(dialect, node_id, f"« {function} » n'est admis en fenêtre par "
                             "Snowflake que sans ORDER BY ; une fenêtre temporelle est ordonnée.")
+    if function in DISTINCT_FUNCTIONS and dialect == "bigquery":
+        raise NotCompilable(dialect, node_id, f"« {function} » n'est admis en fenêtre par "
+                            "BigQuery que sans ORDER BY ni cadre ; une fenêtre temporelle "
+                            "est ordonnée.")
 
 
 def check_expression(tree: exp.Expression, types: dict[str, str | None], node_id: str,
-                     dialect: str) -> None:
+                     dialect: str) -> exp.Expression:
     """Fonctions dont la traduction ne serait pas fidèle dans ce dialecte."""
-    for cast in tree.find_all(exp.Cast, exp.TryCast):
+    for cast in reversed(list(tree.find_all(exp.Cast, exp.TryCast))):
         target = cast.to
         if target.is_type("decimal") and not target.expressions:
             raise NotCompilable(dialect, node_id, "DECIMAL sans précision : chaque moteur "
                                 "applique sa propre échelle (Snowflake arrondit à l'entier). "
                                 "Écrire DECIMAL(p, s).")
+        if dialect == "bigquery" and target.is_type("decimal") and target.expressions:
+            params = [int(p.this.this) for p in target.expressions]
+            precision, scale = params[0], params[1] if len(params) > 1 else 0
+            if scale > 38 or precision - scale > 38:
+                raise NotCompilable(dialect, node_id, "DECIMAL(p, s) dépasse la précision "
+                                    "ou l'échelle de BIGNUMERIC en BigQuery.")
+            if scale > 9 or precision - scale > 29:
+                cast.set("to", exp.DataType.build("bigdecimal"))
+            else:
+                # SQLGlot conserve sinon les paramètres dans SAFE_CAST, contrairement à
+                # CAST ; les types paramétrés ne sont pas des types d'expression GoogleSQL.
+                cast.set("to", exp.DataType.build("decimal"))
+            rounded = exp.Round(this=cast.copy(), decimals=exp.Literal.number(scale))
+            if cast is tree:
+                tree = rounded
+            else:
+                cast.replace(rounded)
     if dialect != "snowflake":
-        return
+        return tree
     for cast in tree.find_all(exp.TryCast):
         argument = cast.this
         known = types.get(argument.name) if isinstance(argument, exp.Column) else None
         if not (isinstance(argument, exp.Literal) and argument.is_string) and known != "string":
             raise NotCompilable(dialect, node_id, "TRY_CAST n'accepte en Snowflake qu'une "
                                 "chaîne : l'argument n'en est pas une.")
+    return tree
 
 
 def mark_strings(tree: exp.Expression, types: dict[str, str | None]) -> exp.Expression:
