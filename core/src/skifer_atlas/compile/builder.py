@@ -152,7 +152,7 @@ class _Unit:
             tree = parse_sql(text)
         except (sqlglot.errors.SqlglotError, RecursionError):
             raise compile_error("invalid_value", "Expression SQL illisible.", node_id) from None
-        check_expression(tree, types, node_id, self.dialect)
+        tree = check_expression(tree, types, node_id, self.dialect)
         tree = safe_division(mark_strings(tree, types), types)
         if substitutions:
             def replace(node: exp.Expression) -> exp.Expression:
@@ -544,9 +544,22 @@ class _Unit:
         if spec is None:
             raise compile_error("invalid_value", f"Cadre de fenêtre « {node.frame} » "
                                 "illisible.", node.id)
+        order = [ordered(c, d) for c, d in node.order_by]
+        if self.dialect == "bigquery":
+            if str(spec.args.get("kind", "")).upper() != "ROWS":
+                raise NotCompilable(self.dialect, node.id, "Le tri des valeurs NULL dans "
+                                    "une fenêtre BigQuery à cadre RANGE ne peut être conservé.")
+            # SQLGlot retire NULLS FIRST/LAST des fenêtres agrégées BigQuery. Une clé
+            # booléenne non nulle rétablit le même ordre pour chaque colonne.
+            order = []
+            for column, direction in node.order_by:
+                descending = direction == "desc"
+                order.append(exp.Ordered(this=exp.column(column).is_(exp.null()),
+                                         desc=descending, nulls_first=descending))
+                order.append(ordered(column, direction))
         window = exp.Window(this=aggregate(node.function, node.column),
                             partition_by=[exp.column(c) for c in node.partition_by or []],
-                            order=exp.Order(expressions=[ordered(c, d) for c, d in node.order_by]),
+                            order=exp.Order(expressions=order),
                             spec=spec)
         return self._with(node, window)
 

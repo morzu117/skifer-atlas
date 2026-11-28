@@ -26,6 +26,7 @@ DYNAMIC_MODULES = (
     "sqlglot.dialects.databricks",  # SQLGlot charge ses dialectes par leur nom
     "sqlglot.dialects.spark",
     "sqlglot.dialects.snowflake",
+    "sqlglot.dialects.bigquery",
     "sqlglot.dialects.duckdb",
     "duckdb",
     "skifer_atlas.compare.rest_runner",

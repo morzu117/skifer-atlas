@@ -7,6 +7,7 @@ et relu par SQLGlot, faute de compte réel."""
 import copy
 import datetime
 import re
+from decimal import Decimal
 
 import duckdb
 import pytest
@@ -86,7 +87,8 @@ def test_division_by_zero_is_null_on_duckdb(mesures):
 def test_integer_division_is_a_double_everywhere(dialect):
     text = sql(computed(q="a / b"), dialect)
     # En Snowflake, `1 / 3` rendrait 0,333333 (NUMBER à 6 décimales) sans le cast.
-    assert "CAST(a AS DOUBLE) / NULLIF(b, 0) AS q" in text
+    kind = "FLOAT64" if dialect == "bigquery" else "DOUBLE"
+    assert f"CAST(a AS {kind}) / NULLIF(b, 0) AS q" in text
     assert isinstance(reparse(text, dialect), exp.Query)
 
 
@@ -355,7 +357,8 @@ def test_no_timestamp_cast_depends_on_the_session():
         {"id": "n08", "type": "aggregate", "inputs": ["n07"], "group_by": ["passee_le_utc"],
          "measures": [["*", "commandes", "count"]]},
     ])
-    for dialect, ntz in (("databricks", "AS TIMESTAMP_NTZ)"), ("snowflake", "AS TIMESTAMPNTZ)")):
+    for dialect, ntz in (("databricks", "AS TIMESTAMP_NTZ)"), ("snowflake", "AS TIMESTAMPNTZ)"),
+                         ("bigquery", "AS DATETIME)")):
         text = sql(document, dialect)
         assert "AS TIMESTAMP)" not in without_instant_casts(text), dialect
         assert f"CAST('2025-01-01 00:00:00' {ntz}" in text
@@ -364,7 +367,7 @@ def test_no_timestamp_cast_depends_on_the_session():
         reparse(text, dialect)
 
 
-@pytest.mark.parametrize("dialect", DIALECTS)
+@pytest.mark.parametrize("dialect", ["databricks", "snowflake", "duckdb"])
 def test_the_paris_day_does_not_depend_on_the_session_zone(dialect):
     """Critère 3 : chaque dialecte, traduit en DuckDB, rend les mois du jour de Paris,
     session de DuckDB à New York. C2 (23 h UTC le 30 septembre) tombe le 1er octobre à
@@ -388,3 +391,71 @@ def test_no_reference_sql_casts_to_a_session_timestamp(name, dialect):
     de la branche instant (par exemple `horodatage` dans ventes.databricks.sql)."""
     text = (FIXTURES / "golden" / f"{name}.{dialect}.sql").read_text()
     assert "AS TIMESTAMP)" not in without_instant_casts(text)
+
+# --- plan 0037 : GoogleSQL ---------------------------------------------------------------
+
+
+def test_bigquery_division_modulo_and_null_order(mesures):
+    document = computed(q="a / b", e="a DIV b", r="a % b")
+    text = sql(document, "bigquery")
+    assert "CAST(a AS FLOAT64) / NULLIF(b, 0)" in text
+    assert "DIV(a, NULLIF(b, 0))" in text
+    assert "MOD(a, NULLIF(b, 0))" in text
+    reparse(text, "bigquery")
+    connection = open_database(compile_document(document, "bigquery").sources, mesures)
+    try:
+        rows = connection.execute(sqlglot.transpile(text, read="bigquery", write="duckdb")[0])
+        found = {row[0]: row[1:4] for row in rows.fetchall()}
+    finally:
+        connection.close()
+    assert found["L2"] == (None, None, None)
+    assert found["L3"] == (3.5, 3, 1)
+
+
+def test_bigquery_week_is_monday(mesures):
+    text = sql(weekly(), "bigquery")
+    assert "CAST(DATE_TRUNC(i.jour, WEEK(MONDAY)) AS DATE)" in text
+    reparse(text, "bigquery")
+    connection = open_database(compile_document(weekly(), "bigquery").sources, mesures)
+    try:
+        found = connection.execute(sqlglot.transpile(text, read="bigquery", write="duckdb")[0])
+        assert sorted(found.fetchall()) == [(datetime.date(2026, 10, 26), 2),
+                                           (datetime.date(2026, 11, 2), 1)]
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize("dialect", DIALECTS)
+def test_decimal_rounding_matches_native_cast(dialect, mesures):
+    document = computed(positif="CAST(1.125 AS DECIMAL(5, 2))",
+                        negatif="CAST(-1.125 AS DECIMAL(5, 2))")
+    text = sql(document, dialect)
+    reparse(text, dialect)
+    translated = sqlglot.transpile(text, read=dialect, write="duckdb")[0]
+    connection = open_database(compile_document(document, dialect).sources, mesures)
+    try:
+        row = connection.execute(translated).fetchone()
+    finally:
+        connection.close()
+    assert row[1:3] == (Decimal("1.13"), Decimal("-1.13"))
+
+
+def test_bigquery_guard_and_wall_clock():
+    text = sql(cardinality_kpi(), "bigquery")
+    assert "ERROR(" in text
+    reparse(text, "bigquery")
+    text = sql(orders("Europe/Paris"), "bigquery")
+    assert "DATETIME(passee_le, 'Europe/Paris') AS passee_le" in flat(text)
+    reparse(text, "bigquery")
+
+
+def test_bigquery_instant_across_session_zones():
+    expression = wall_clock(exp.column("t"), "Europe/Paris", "bigquery")
+    query = sqlglot.transpile(exp.select(expression).from_("x").sql("bigquery"),
+                              read="bigquery", write="duckdb")[0]
+    for zone in ("UTC", "America/New_York", "Europe/Paris"):
+        with duckdb.connect() as connection:
+            connection.execute(f"SET TimeZone = '{zone}'")
+            connection.execute("CREATE TABLE x (t TIMESTAMPTZ)")
+            connection.execute("INSERT INTO x VALUES ('2025-10-26 01:30:00+00')")
+            assert connection.execute(query).fetchone()[0] == datetime.datetime(2025, 10, 26, 2, 30)

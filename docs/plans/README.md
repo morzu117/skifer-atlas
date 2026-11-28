@@ -40,6 +40,7 @@ Statut : plans validés le 30 octobre 2026, développement lancé par le plan 00
 | 0034 | Réinitialiser le rattachement | remise à zéro locale d'un rattachement interrompu (`origin`, références, commit d'identité), le dépôt distant intact | 0005, 0017, 0033 | S |
 | 0035 | Parcours de bout en bout | dix histoires Playwright à plusieurs comptes et plusieurs écrans (équipe, relecture, évolution, déclinaison, comparaison, session expirée, fusion refusée, hors ligne, deux espaces, suivi après fusion), contrôlées à l'écran et dans le dépôt | 0005–0034 | M |
 | 0036 | Points d'accès REST | `atlas compare`, `atlas rest-key` et `atlas rest-usage` : sources `duckdb` servies par un point `rest`, clé au coffre ou en environnement, budgets et cache Parquet (`--refresh`), ADR 0050–0054 | 0007, 0008, 0009, 0018 | L |
+| 0037 | Connecteur BigQuery | dialecte `bigquery` de la compilation, connecteur REST `jobs.query`, OAuth Google, écrans, recette réelle hors CI ; livré point par point, ADR 0076 | 0007, 0008, 0009, 0016, 0018 | L |
 
 **Chemin critique** : 0001 → 0002 → 0003 → 0005 → 0006 → 0010 → 0011 → 0012 → 0013 → 0014. La branche « chiffrée » 0007 → 0008 → 0009 → 0018 peut avancer en parallèle dès 0002, et l'extraction 0004 dès 0003.
 

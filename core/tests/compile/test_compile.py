@@ -26,7 +26,7 @@ from skifer_atlas.compile import (
     parse_calendar,
     reparse,
 )
-from skifer_atlas.compile.dialects import check_window
+from skifer_atlas.compile.dialects import check_window, ordered
 from skifer_atlas.model import validate_data
 from skifer_atlas.run import DataLoadError, MissingData, open_database
 
@@ -480,3 +480,67 @@ def test_bad_csv_value_names_file_table_and_column(tmp_path):
     assert str(path) in str(found.value)
     assert "ventes.clients" in str(found.value)
     assert "id_client" in str(found.value)
+
+
+def test_bigquery_decimal_safe_cast_and_limits():
+    def document(expression):
+        return kpi([
+            {"id": "n02", "type": "compute", "inputs": ["n01"], "column": "valeur",
+             "expr": expression},
+            {"id": "n03", "type": "aggregate", "inputs": ["n02"], "group_by": [],
+             "measures": [["valeur", "total", "sum"]]},
+        ], "n03")
+
+    for expression, fragment in [
+        ("TRY_CAST(pays AS DECIMAL(10, 2))", "ROUND(SAFE_CAST(pays AS NUMERIC), 2)"),
+        ("TRY_CAST(pays AS DECIMAL(38, 10))", "ROUND(SAFE_CAST(pays AS BIGNUMERIC), 10)"),
+        ("CAST(age AS DECIMAL(38, 9))", "ROUND(CAST(age AS NUMERIC), 9)"),
+        ("CAST(age AS DECIMAL(38, 0))", "ROUND(CAST(age AS BIGNUMERIC), 0)"),
+        ("CAST(CAST(age AS DECIMAL(5, 3)) AS DECIMAL(5, 2))",
+         "ROUND(CAST(ROUND(CAST(age AS NUMERIC), 3) AS NUMERIC), 2)"),
+    ]:
+        text = compiled(document(expression), "bigquery")
+        assert fragment in text
+        reparse(text, "bigquery")
+    for expression in ("CAST(age AS DECIMAL(77, 38))", "CAST(age AS DECIMAL(77, 39))"):
+        with pytest.raises(NotCompilable, match="BIGNUMERIC"):
+            compiled(document(expression), "bigquery")
+
+
+def test_bigquery_distinct_window_is_rejected():
+    for function in ("count_distinct", "sum_distinct"):
+        with pytest.raises(NotCompilable, match="ORDER BY ni cadre"):
+            check_window(function, "n02", "bigquery")
+
+
+def test_bigquery_window_preserves_null_order():
+    document, library = catalogue()
+    text = compiled(document, "bigquery", library=library)
+    assert "jour IS NULL ASC" in text
+    assert "commande_id IS NULL ASC" in text
+    assert "NULLS LAST" in text  # ROW_NUMBER de dédoublonnage
+    reparse(text, "bigquery")
+
+
+def test_bigquery_ordered_nulls_are_explicit():
+    assert ordered("a", "asc").sql("bigquery") == "a ASC NULLS LAST"
+    assert ordered("a", "desc").sql("bigquery") == "a DESC NULLS FIRST"
+
+
+def test_bigquery_range_window_is_rejected():
+    document, library = catalogue()
+    nodes = [node.model_copy(update={"frame": "RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"})
+             if node.id == "n11" else node for node in document.graph.nodes]
+    document = document.model_copy(update={"graph": document.graph.model_copy(
+        update={"nodes": nodes})})
+    with pytest.raises(NotCompilable, match="cadre RANGE"):
+        compiled(document, "bigquery", library=library)
+
+
+def test_bigquery_is_offered_by_cli_and_compilability():
+    assert DIALECTS == ("databricks", "snowflake", "bigquery", "duckdb")
+    document = load(FIXTURES / "nulls" / "kpi.yaml")
+    assert compilability(document)["bigquery"] == {"status": "ok"}
+    result = atlas("compile", FIXTURES / "nulls" / "kpi.yaml", "--dialect", "bigquery")
+    assert result.returncode == 0, result.stderr
+    reparse(result.stdout, "bigquery")
