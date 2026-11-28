@@ -87,3 +87,19 @@ Connecteur REST, contrôle des champs à son initialisation, faux serveur et tes
 Les hypothèses d'encodage des cellules et les limites des types sont consignées dans
 l'ADR 0077 ; elles restent à vérifier sur BigQuery au point 4. Le connecteur reçoit un
 jeton déjà obtenu et n'est pas encore proposé par les écrans.
+
+### Point 4 — recette réelle (28 novembre 2026)
+La sonde et son chargeur sont décrits dans l'ADR 0078. Depuis `core/`, avec un projet de test et les droits nécessaires :
+
+```sh
+export ATLAS_BIGQUERY_PROJECT='<projet>'
+export ATLAS_BIGQUERY_TOKEN="$(gcloud auth print-access-token)"
+# Facultatifs : ATLAS_BIGQUERY_LOCATION et ATLAS_BIGQUERY_DATASET (défaut : atlas_recette).
+uv run --offline pytest -s -m bigquery
+```
+
+Le chemin de l'état est affiché avec `-s`. En cas d'interruption, `uv run --offline python tests/bigquery_recette.py drop <état.json>` reprend le nettoyage avec le projet et le jeton
+de l'environnement. Le jeu créé est supprimé sans `deleteContents` : des tables étrangères
+empêchent sa suppression et l'état est conservé. La pagination, l'annulation et le délai ne
+sont pas forcés sur le service réel ; leurs limites et la couverture par le faux serveur
+sont précisées dans l'ADR 0078. Premier passage réel encore à faire.

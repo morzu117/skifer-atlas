@@ -54,6 +54,7 @@ extend-exclude = ["tests/fixtures"]  # scripts et notebooks d'entrée de l'extra
 [tool.pytest.ini_options]
 markers = [
     "github: test réel contre GitHub (ATLAS_GITHUB_TEST_REPO), hors CI",
+    "bigquery: test réel contre BigQuery (ATLAS_BIGQUERY_*), hors CI",
     "databricks: test réel contre un SQL warehouse Databricks (ATLAS_DATABRICKS_*), hors CI",
     "snowflake: test réel contre un compte Snowflake (ATLAS_SNOWFLAKE_*), hors CI",
     "rest: test réel contre un point REST (ATLAS_REST_TEST_*), hors CI",

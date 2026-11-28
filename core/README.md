@@ -297,3 +297,5 @@ tentative et chaque échec sont comptés. Aucune URL ni réponse fournisseur n'e
 restituée dans les erreurs. Le test réel `pytest -m rest` est ignoré sans
 `ATLAS_REST_TEST_ORIGIN`, `ATLAS_REST_TEST_PATH` et `ATLAS_REST_TEST_KEY` ; les autres
 tests n'utilisent que des serveurs en boucle locale et des clés créées à l'exécution.
+
+La recette BigQuery réelle, hors CI et compatible avec un bac à sable, se trouve dans `tests/test_bigquery_real.py` (ADR 0078). Elle demande `ATLAS_BIGQUERY_PROJECT` et `ATLAS_BIGQUERY_TOKEN` ; `ATLAS_BIGQUERY_LOCATION` et `ATLAS_BIGQUERY_DATASET` sont facultatifs (défaut : `atlas_recette`). Obtenir un jeton avec `gcloud auth print-access-token`, puis lancer `uv run pytest -m bigquery`.
