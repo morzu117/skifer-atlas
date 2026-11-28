@@ -21,15 +21,14 @@ import { openExternal } from "../external";
 import { amount, dimension, gap, percent, tolerance } from "../format";
 import { explain, explainComparisonError, type Explained } from "../messages";
 import { href, setParams, type Params } from "../router";
+import { tone } from "../thresholds";
 
 // Comparaison (guide 10.5, plan 0015) : le panneau de lancement à gauche ; à droite le
 // bandeau d'historique, la matrice des dernières comparaisons et le détail d'une cellule.
 // Ce qui est ouvert vit dans l'adresse : `?kpi=…` (lancement), `?id=…&variant=…` (détail),
 // `?domain=…` (matrice), `?vue=historique` (liste complète).
 
-/** Seuils de couleur de la matrice, en % de cellules dans la tolérance (plan 0015, à valider). */
-export const PASS_THRESHOLD = 99;
-export const WARN_THRESHOLD = 90;
+export { PASS_THRESHOLD, WARN_THRESHOLD, tone } from "../thresholds";
 
 const PLATFORMS: Record<string, string> = { databricks: "Databricks", snowflake: "Snowflake", duckdb: "DuckDB" };
 const DIMENSIONS: Record<string, string> = { mois_fiscal: "Mois fiscal", entite: "Entité", semaine: "Semaine", pays: "Pays" };
@@ -86,13 +85,6 @@ function useLoad<T>(load: () => Promise<T>, deps: unknown[], keep = false): Load
 
 const dimensionLabel = (name: string) => DIMENSIONS[name] ?? name;
 const platformLabel = (name: string | null) => (name ? (PLATFORMS[name] ?? name) : "plateforme inconnue");
-
-/** Teinte d'une cellule de la matrice d'après son % de validation. */
-export function tone(validation: number | null | undefined): "pass" | "warn" | "bad" {
-  if (validation === null || validation === undefined) return "bad";
-  if (validation >= PASS_THRESHOLD) return "pass";
-  return validation >= WARN_THRESHOLD ? "warn" : "bad";
-}
 
 /** « n06 · Jours comptables (gold.finance.dim_date) », comme la CLI. */
 function commonLabel(source: CommonSource): string {
