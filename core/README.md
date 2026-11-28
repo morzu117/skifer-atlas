@@ -30,7 +30,7 @@ uv run atlas compare ../examples/espace-nordis revenu-net --variants nordis-es -
 uv run atlas compare groupe-nordis revenu-net --variants nordis-de --period FY2026_Q4 --by mois_fiscal,entite --format json   # espace du registre, sur ses points d'accès
 ```
 
-`--with` fournit les KPI référencés par `kpi_ref` et le canonique d'une variante. `check` sort en 1 s'il reste une erreur ; avertissements et infos n'empêchent rien.
+`--with` fournit les KPI référencés par `kpi_ref` et le canonique d'une variante. `check` sort en 1 s'il reste une erreur ; avertissements et infos n'empêchent rien. Un champ d'expression SQL (calcul, métrique, condition `{expr: …}`) doit contenir une expression, et non une instruction ou une requête complète : sinon `invalid_value` (ADR 0074).
 
 Le modèle des documents (dix types de nœuds, concept, KPI, déclinaison) est dans `src/skifer_atlas/model/` ; spécification : `docs/plans/0001-*.md` (modèle), `docs/plans/0002-*.md` (contrôles, résolution, empreinte), `docs/plans/0003-*.md` (diff, dans `src/skifer_atlas/diff/`) et `docs/plans/0004-*.md` (extraction, dans `src/skifer_atlas/extract/` ; brouillons : ADR 0006). Exemples dans `tests/fixtures/documents/`, contre-exemples dans `tests/fixtures/documents-invalid/`.
 

@@ -118,12 +118,17 @@ def _sorted_keys(value: dict) -> dict:
 
 def _parse_sql(text: str) -> exp.Expression:
     try:
-        return parse_sql(text)
+        tree = parse_sql(text)
     except (sqlglot.errors.SqlglotError, RecursionError) as error:
         detail = str(error).splitlines()[0] if str(error) else type(error).__name__
         raise PydanticCustomError(
             "invalid_value", "Expression SQL illisible : {detail}", {"detail": detail}
         ) from None
+    if not isinstance(tree, exp.Condition):
+        raise PydanticCustomError(
+            "invalid_value", "Cette expression n'est pas une expression SQL."
+        )
+    return tree
 
 
 def _check_sql(text: str) -> str:

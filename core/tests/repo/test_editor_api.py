@@ -101,6 +101,18 @@ def test_filter_without_nulls_blocks_submission(client):
     assert ["mois_fiscal", "date"] in result["columns"]["n04"]
 
 
+def test_non_expression_sql_is_reported_by_editor(client):
+    document = opened(client)["document"]
+    node(document, "n03")["expr"] = "DROP TABLE ventes"
+    result = check(client, document)
+    errors = [issue for issue in result["issues"] if issue["severity"] == "error"]
+    assert not result["submittable"]
+    assert [(i["path"], i["node_id"], i["code"], i["message"]) for i in errors] == [
+        ("/graph/nodes/2/expr", "n03", "invalid_value",
+         "Cette expression n'est pas une expression SQL.")
+    ]
+
+
 def test_concept_without_graph_is_not_applicable_and_can_be_proposed(client):
     document = opened(client, "commande")["document"]
     result = check(client, document)
