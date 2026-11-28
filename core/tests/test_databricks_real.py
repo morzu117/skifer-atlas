@@ -12,14 +12,14 @@ import sqlglot
 from sqlglot import exp
 
 from skifer_atlas.compile import Scope, compile_document, load_calendars
-from skifer_atlas.connectors.access_points import AccessPoint
 from skifer_atlas.connectors.base import AuthRejected
-from skifer_atlas.connectors.databricks import DatabricksConnector
 from skifer_atlas.repo.git import RepoError
-from skifer_atlas.run import open_database
 
+sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "compile"))
+import databricks_recette
 from compile_support import FIXTURES, catalogue, expected, load, nordis_revenue, rows, run
+from databricks_recette import load_sources, quote
 from test_compile import FILTERS, kpi
 
 pytestmark = pytest.mark.databricks
@@ -32,13 +32,7 @@ if not all((HOST, WAREHOUSE, TOKEN)):
 
 
 def connector(warehouse=WAREHOUSE, token=TOKEN):
-    point = AccessPoint(id="recette", platform="databricks", host=HOST,
-                        warehouse_id=warehouse, owner="recette")
-    return DatabricksConnector(point, token)
-
-
-def quote(name):
-    return "`" + name.replace("`", "``") + "`"
+    return databricks_recette.connector(HOST, warehouse, token)
 
 
 def target(catalog, schema, table):
@@ -62,36 +56,10 @@ def namespace(warehouse, request):
     return catalog, schema
 
 
-def literal(value):
-    if value is None:
-        return "NULL"
-    if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    if isinstance(value, (int, float, Decimal)):
-        return str(value)
-    # Les valeurs temporelles ISO sont converties par CAST, comme les autres chaînes.
-    return "'" + str(value).replace("\\", "\\\\").replace("'", "''") + "'"
-
-
 def load_tables(warehouse, namespace, compiled, folder):
     catalog, schema = namespace
-    with open_database(compiled.sources, folder) as db:
-        for source in compiled.sources:
-            source_name = ".".join('"' + p.replace('"', '""') + '"'
-                                   for p in source.table.split("."))
-            cursor = db.execute(f"SELECT * FROM {source_name}")
-            description = cursor.description
-            data = cursor.fetchall()
-            assert data, f"Fixture vide non prise en charge : {source.table}"
-            types = [exp.DataType.build(str(col[1]), dialect="duckdb").sql(dialect="databricks")
-                     for col in description]
-            selects = []
-            for row in data:
-                columns = [f"CAST({literal(value)} AS {kind}) AS {quote(col[0])}"
-                           for value, kind, col in zip(row, types, description, strict=True)]
-                selects.append("SELECT " + ", ".join(columns))
-            warehouse.run_aggregate(f"CREATE OR REPLACE TABLE {target(catalog, schema, source.table)} "
-                                    "AS " + " UNION ALL ".join(selects))
+    load_sources(warehouse, compiled.sources, folder,
+                 lambda table: target(catalog, schema, table))
 
 
 def renamed_sql(compiled, namespace):

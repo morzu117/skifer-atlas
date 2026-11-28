@@ -75,7 +75,9 @@ export function python(script: string, ...args: string[]) {
   return execFileSync("uv", ["run", "--project", CORE, "python", "-c", script, ...args], { encoding: "utf8" });
 }
 type Demo = { id: string; remote: string; work: string; api: string; root: string };
-async function createDemo(request: APIRequestContext, server: string, track: (id: string, ...paths: string[]) => void): Promise<Demo> {
+/** Retouche du clone avant sa publication (points d'accès d'une recette réelle, par exemple). */
+type Edit = (work: string) => void;
+async function createDemo(request: APIRequestContext, server: string, track: (id: string, ...paths: string[]) => void, edit?: Edit): Promise<Demo> {
   const remote = demoRemote();
   const work = mkdtempSync(join(tmpdir(), "atlas-scenario-"));
   const id = `scenario-${crypto.randomUUID()}`;
@@ -83,6 +85,10 @@ async function createDemo(request: APIRequestContext, server: string, track: (id
   git(work, "clone", remote, ".");
   python("import sys,yaml; from pathlib import Path; p=Path(sys.argv[1])/'atlas.yaml'; d=yaml.safe_load(p.read_text()); d['id']=sys.argv[2]; p.write_text(yaml.safe_dump(d,allow_unicode=True,sort_keys=False))", work, id);
   git(work, "add", "atlas.yaml");
+  if (edit) {
+    edit(work);
+    git(work, "add", "-A");
+  }
   git(work, "commit", "-qm", "Espace isolé pour le scénario");
   git(work, "push", "origin", "main");
   const response = await request.post(`${server}/api/workspaces/join`, { data: { remote_url: remote } });
@@ -90,12 +96,12 @@ async function createDemo(request: APIRequestContext, server: string, track: (id
   return { id, remote, work, api: `${server}/api/workspaces/${id}`, root: `/#/w/${id}` };
 }
 /** Chaque manipulation de dépôt possède un distant et un identifiant propres, oubliés à la
- * fin du test. */
-export async function isolatedDemo(request: APIRequestContext, server: string) {
+ * fin du test. `edit` retouche le clone avant que l'espace soit publié puis rejoint. */
+export async function isolatedDemo(request: APIRequestContext, server: string, edit?: Edit) {
   return createDemo(request, server, (id, ...paths) => {
     joined.add(id);
     for (const path of paths) temporary.add(path);
-  });
+  }, edit);
 }
 /** Un espace créé par le scénario lui-même (formulaire « Créer un espace ») : retiré du
  * registre de chaque serveur à la fin du test, avec les dossiers `paths`. */

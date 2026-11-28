@@ -35,7 +35,7 @@ Brief 7.2, 8.3, 8.4, 10.5 ; guide 3.7, 5 (10.5), 7 (historique complet) ; `scree
 ## Tests
 - Composants : matrice (seuils et couleurs), détail, panneau de lancement.
 - Bout en bout : comparaison entièrement locale.
-- À la main : une comparaison réelle sur Databricks (une fois 0008 livré).
+- Réelle, hors CI : une comparaison sur un vrai SQL warehouse Databricks depuis l'écran, automatisée (voir « Comparaison Databricks réelle » plus bas, ADR 0075).
 
 ## Suivi de la revue globale (#149)
 
@@ -113,7 +113,32 @@ Brief 7.2, 8.3, 8.4, 10.5 ; guide 3.7, 5 (10.5), 7 (historique complet) ; `scree
 
     axe-core passe à chaque étape.
 - **Reste à faire** :
-  - une comparaison réelle sur Databricks depuis l'écran, à la main ;
+  - premier passage réel de `e2e/comparaison-databricks-reelle.spec.ts` (voir plus bas) ;
   - vérification à la main sous Tauri, notamment l'ouverture du navigateur ;
   - valider les seuils 99 / 90 ;
   - export et comparaisons planifiées (hors périmètre).
+
+## Comparaison Databricks réelle (28 novembre 2026, #31, #112)
+
+La comparaison réelle depuis l'écran, jusque-là à faire à la main, est automatisée par `app/e2e/comparaison-databricks-reelle.spec.ts`, hors CI (ADR 0075). Sans `ATLAS_DATABRICKS_HOST`, `ATLAS_DATABRICKS_WAREHOUSE` et `ATLAS_DATABRICKS_TOKEN`, le fichier est sauté.
+
+- **Avant le parcours** : `core/tests/databricks_recette.py load` charge les fichiers de nordis-fr dans `gold.finance.fact_facturation` et `gold.finance.dim_date`, les tables exactes des documents.
+  - Le catalogue `gold` n'est créé, puis supprimé en fin de passage, que s'il était absent.
+  - Sinon, seules les tables chargées sont retirées, et une table existante qui n'est pas une table de recette n'est jamais remplacée.
+- **Le parcours**, sur le serveur 8793, qui n'a pas de données locales :
+  - une copie isolée de la démonstration, dont `dbx-fr` pointe sur l'hôte et le warehouse de l'environnement ;
+  - dans Mes connexions, l'autorisation refusée, puis « Utiliser un token personnel », « Ranger dans le coffre » et « Tester » ;
+  - Comparaison, avec nordis-fr seule : lancement, progression, puis le résultat.
+- **L'oracle** est la même comparaison en DuckDB local (8 cellules, 100 %, écart max 0,0 %). Les cellules réelles doivent lui être identiques, dans l'API comme dans la matrice (teinte selon les seuils 99 / 90), le détail et l'historique. Axe-core ne doit relever aucune violation sérieuse.
+- **Après le parcours** : `drop` retire ce que `load` a créé, même en échec.
+
+Lancer depuis `app/`, ports de la suite libres, avec le jeton personnel ou un jeton OAuth court :
+
+```sh
+ATLAS_DATABRICKS_HOST=https://<espace>.cloud.databricks.com \
+ATLAS_DATABRICKS_WAREHOUSE=<identifiant du warehouse> \
+ATLAS_DATABRICKS_TOKEN="$(databricks auth token --profile <profil> | jq -r .access_token)" \
+npx playwright test --project=chromium --reporter=line --workers=1 e2e/comparaison-databricks-reelle.spec.ts
+```
+
+Si le passage est interrompu avant son nettoyage, relancer `uv run python tests/databricks_recette.py drop <état.json>` depuis `core/`, avec les mêmes variables. Le chemin de l'état (`atlas-recette-dbx-*/etat.json`, dans le dossier temporaire) est affiché au début du passage.
