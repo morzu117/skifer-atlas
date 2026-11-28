@@ -30,7 +30,7 @@ Un point = une PR, fusionnée sur une CI verte avant d'ouvrir la suivante.
 
 ### Point 2 — connecteur
 - `POST /bigquery/v2/projects/{projet}/queries` (`useLegacySql: false`, `maxResults: max_rows + 1`, `timeoutMs` court), puis `getQueryResults` jusqu'à `jobComplete` ; annulation et délai par `jobs.cancel`. `location` transmis s'il est déclaré.
-- Point d'accès : `project` (projet de facturation des requêtes), `location` facultatif, `schema` = `projet.dataset` ou `dataset`. `host` vaut `https://bigquery.googleapis.com` par défaut ; une adresse en boucle locale reste admise pour le faux serveur. Les champs Databricks et Snowflake y sont refusés, comme l'inverse (motif de 0018).
+- Point d'accès : `project` (projet de facturation des requêtes), `location` facultatif, `schema` = `projet.dataset` ou `dataset`. Le connecteur exige `project`, un `host` Google (`https://bigquery.googleapis.com`) ou en boucle locale pour le faux serveur, et l'absence des champs Databricks et Snowflake. Le registre conserve la lecture des déclarations BigQuery anciennes ; Databricks et Snowflake refusent les nouveaux champs BigQuery. Les champs requis du panneau de déclaration relèvent du point 3.
 - Types rendus en minuscules ; `INT64`, `NUMERIC`/`BIGNUMERIC` (Decimal), `FLOAT64`, `BOOL`, `DATE`, `DATETIME`, `TIMESTAMP` (instant UTC) convertis ; `RECORD` et `REPEATED` refusés (`query_failed`) : un résultat agrégé n'en porte pas.
 - 401 : `AuthRejected`. 403 : `platform_forbidden`. 404 : `platform_not_found`. Le jeton est masqué dans tout message restitué.
 - `bigquery` n'entre pas encore dans `SUPPORTED_PLATFORMS` : sans authentification (point 3), l'écran ne doit pas le proposer.
@@ -81,3 +81,9 @@ formes GoogleSQL, leurs refus, la CLI, le selftest et les formules portables sur
 dix tests ajoutés, un test de selftest complété et quatre cas de test d'arrondi décimal.
 Après les corrections de l'échelle décimale et du type du début de semaine, la suite
 `tests/compile` compte 146 succès. Les deux contrôles Ruff passent.
+
+### Point 2 — connecteur (28 novembre 2026)
+Connecteur REST, contrôle des champs à son initialisation, faux serveur et tests du contrat. Les anciens points BigQuery restent lisibles ; les champs requis à la déclaration dans le panneau relèvent du point 3.
+Les hypothèses d'encodage des cellules et les limites des types sont consignées dans
+l'ADR 0077 ; elles restent à vérifier sur BigQuery au point 4. Le connecteur reçoit un
+jeton déjà obtenu et n'est pas encore proposé par les écrans.

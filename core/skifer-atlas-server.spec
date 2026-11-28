@@ -28,6 +28,7 @@ for distribution in ("keyring", "snowflake-connector-python", "skifer", "skifer-
 hiddenimports += [
     "skifer_atlas.server",
     "skifer_atlas.selftest",
+    "skifer_atlas.connectors.bigquery",
     *collect_submodules("keyring.backends"),  # backend choisi selon le système
     "skifer.core.op_catalog",
     "skifer.analyzer.frontends",

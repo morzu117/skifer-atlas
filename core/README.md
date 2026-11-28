@@ -132,6 +132,7 @@ Les compteurs de la liste des espaces se calculent sans réseau : l'index du clo
 Une erreur métier répond `{"detail": {"code", "message"}}`, plus `issues` quand il y a des diagnostics (`workspace_exists`, `sync_conflict`, `credentials_in_url`, `stale_base`, `not_ready`, `invalid_document`, `branch_protected`, `git_missing`…). Le dépôt d'un espace (`src/skifer_atlas/repo/`) et son index (`src/skifer_atlas/index/`) suivent `docs/plans/0005-*.md` et l'ADR 0007 ; la gouvernance, les hébergeurs et les propositions (`governance/`, `githost/`, `proposals/`) suivent `docs/plans/0006-*.md` et les ADR 0008 et 0009. Le test réel contre GitHub ne tourne qu'avec `ATLAS_GITHUB_TEST_REPO=owner/repo` et `ATLAS_GITHUB_TOKEN` : `uv run pytest -m github`. Démonstration : `examples/espace-nordis/`.
 
 Connexions aux plateformes (plan 0008). Les points d'accès, sans secret, sont dans `access_points.yaml` à la racine du dépôt de l'espace ; les identifiants de l'utilisateur sont dans le trousseau de l'OS, service `skifer-atlas`, compte `<espace>/<point d'accès>`. Aucune route ne renvoie de jeton :
+Le connecteur BigQuery REST accepte un jeton déjà obtenu ; son authentification et son exposition dans les connexions viendront au point 3 du plan 0037.
 
 ```sh
 curl -H "$H" $API/acme/connections                                    # points d'accès, my_access: connected|expired|never
