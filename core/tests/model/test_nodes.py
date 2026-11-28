@@ -196,3 +196,43 @@ def test_metric_op_rows_first_needs_aggregate():
 def test_union_needs_two_inputs():
     node = dict(MINIMAL_NODES["union"], inputs=["n10"])
     assert codes(validate_data(kpi_with(node))) == [("/graph/nodes/0/inputs", "n01", "invalid_value")]
+
+
+REJECTED_SQL_ROOTS = [
+    "if total > 100:\n    palier = 1\nelse:\n    palier = 0",
+    "DROP TABLE ventes", "DELETE FROM ventes", "INSERT INTO ventes VALUES (1)",
+    "UPDATE ventes SET total = 1", "COMMIT", "USE ventes", "VALUES (1)",
+    "GRANT SELECT ON ventes TO lecteur", "SELECT total FROM ventes",
+]
+
+
+def expression_node(field, expr):
+    if field == "compute":
+        return dict(MINIMAL_NODES[field], expr=expr), "/expr"
+    if field == "metric_op":
+        return dict(MINIMAL_NODES[field], metrics=[{"name": "m", "expr": expr}]), "/metrics/0/expr"
+    if field == "filter":
+        return dict(MINIMAL_NODES[field], condition={"expr": expr}), "/condition/expr"
+    return dict(MINIMAL_NODES["aggregate"], having=[{"expr": expr}]), "/having/0/expr"
+
+
+@pytest.mark.parametrize("field", ["compute", "metric_op", "filter", "having"])
+@pytest.mark.parametrize("expr", REJECTED_SQL_ROOTS)
+def test_non_expression_sql_root_is_refused(field, expr):
+    node, path = expression_node(field, expr)
+    result = validate_data(kpi_with(node))
+    assert codes(result) == [(f"/graph/nodes/0{path}", "n01", "invalid_value")]
+    assert result.issues[0].message == "Cette expression n'est pas une expression SQL."
+
+
+@pytest.mark.parametrize("expr", [
+    "a", "1", "'texte'", "NULL", "TRUE", "a + 1", "(a)",
+    "CASE WHEN a > 0 THEN 1 ELSE 0 END", "COALESCE(a, 0)", "CAST(a AS INT)",
+    "TRY_CAST(a AS INT)", "a IN (1, 2)", "a BETWEEN 1 AND 2", "a LIKE 'x'",
+    "a IS NULL", "NOT a", "IF(a > 0, 1, 0)", "SUM(a)",
+    "ROW_NUMBER() OVER (ORDER BY a)", "DATE '2020-01-01'", "d + INTERVAL 1 DAY",
+])
+def test_sql_expression_roots_are_accepted(expr):
+    node, _ = expression_node("compute", expr)
+    result = validate_data(kpi_with(node))
+    assert result.valid, result.issues

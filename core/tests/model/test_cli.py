@@ -215,3 +215,32 @@ def test_cli_emits_utf8_when_environment_requests_ascii(tmp_path):
                             env=os.environ | {"PYTHONIOENCODING": "ascii"})
     assert result.returncode == 0, result.stderr.decode("utf-8")
     assert "→" in result.stdout.decode("utf-8")
+
+
+@pytest.mark.parametrize(("expr", "validate_code", "check_code", "issue"), [
+    ("if total > 100:\n    palier = 1\nelse:\n    palier = 0", 1, 1, "invalid_value"),
+    ("DROP TABLE ventes", 1, 1, "invalid_value"),
+    ("CASE WHEN total > 100 THEN 1 ELSE 0 END", 0, 0, None),
+    ("palier_inconnu", 0, 1, "unknown_column"),
+])
+def test_expression_validation_and_check(tmp_path, expr, validate_code, check_code, issue):
+    import yaml
+
+    document = yaml.safe_load(CANONICAL.read_text(encoding="utf-8"))
+    document["variation_points"] = []
+    document["graph"] = {"nodes": [
+        {"id": "n01", "type": "source", "platform": "databricks", "table": "demo.ventes",
+         "owner": "claire.m", "columns": [{"name": "client", "type": "string"},
+                                          {"name": "montant", "type": "decimal"}]},
+        {"id": "n02", "type": "aggregate", "inputs": ["n01"], "group_by": ["client"],
+         "measures": [["montant", "total", "sum"]]},
+        {"id": "n03", "type": "compute", "inputs": ["n02"], "column": "palier",
+         "column_type": "decimal", "expr": expr},
+    ], "output": "n03"}
+    path = tmp_path / "kpi.yaml"
+    path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+    for command, expected in [("validate", validate_code), ("check", check_code)]:
+        result = run(command, path)
+        assert result.returncode == expected, result.stdout + result.stderr
+        if expected:
+            assert f"[{issue}]" in result.stdout + result.stderr
